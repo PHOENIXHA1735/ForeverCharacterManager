@@ -1,0 +1,17 @@
+# Private WoW characters, settings and generated reference data
+**/ExternalData.generated.lua
+**/SavedVariables/
+**/WTF/
+**/Cache/
+**/cache/
+**/*.bak
+**/*.backup
+**/*.log
+**/.env
+**/.env.*
+**/secrets.*
+# Editor/OS temporary files
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+FOREVER CHARACTER MANAGER v0.8.8 - INSTALLATION
+
+1. EXIT WoW Forever and close the Windows FCM Data Companion.
+2. BACK UP your existing Interface\AddOns\ForeverCharacterManager folder and WoW WTF SavedVariables.
+3. Extract ZIP contents into the WoW Forever Interface\AddOns directory; merge/replace addon files.
+4. KEEP existing ExternalData.generated.lua and SavedVariables. They are NOT included in this ZIP.
+5. Open WoW Forever and type /fcm. Verify v0.8.8 in header.
+6. Select an equipment item in Gear, Global Search, Item Explorer, or Dungeon Explorer.
+7. Review green up/red down stat changes, per-stat percentages, weighted score change, and reason.
+8. To favor Spell Power more on current character/activity: /fcm gearweight spell 5
+   To reset selected character/activity: /fcm gearweight reset
+   To inspect custom weights: /fcm gearweight list
+
+Missing item stats or unscanned equipment intentionally display 'comparison unavailable'.
+Scores are weighted estimates, not measured DPS.
+The v0.8.8 ZIP is published on GitHub. Live game testing remains required.

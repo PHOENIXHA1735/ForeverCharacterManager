@@ -1,0 +1,260 @@
+FCM v0.8.7 — Shared selected-item preview across item-related tabs. See FCM_087_RELEASE_NOTES.md.
+
+v0.8.6 — Global automatic search and Back, AH-style Category/Type/Slot filters, in-panel menus, profession classifier corrections. Offline tests passed; game testing pending.
+v0.8.5 — Per-character Leveling, PvP and Endgame PvE gear scoring activities; independent secondary styles; all-three comparison views; expanded specialization handling. Offline regression tests passed; live game testing pending.
+
+v0.8.4 — Per-character profession tabs and submit-to-search UI
+- Account-wide Crafting preserves learned recipes from all characters, with incompatible-faction recipes visible but non-requestable.
+- Contextual Tailoring, Enchanting, Alchemy, etc. tabs appear based on the selected character; no gathering/Cooking/First Aid/Fishing recipe tabs.
+- Cooking and First Aid remain within Crafting. Fishing Lure Box reads known lure/bait items from scanned inventory.
+- Search applies only on Search-button click or Enter, matches token substrings and one-character typos, with item-catalog fallback.
+
+v0.8.3 — Dungeon Explorer selected-item details
+- Left-click an item to show name, icon, slot, levels, binding, cached stats and equipment comparison at the top of the panel.
+- Right-click for the optional full game tooltip; automatic on-hover tooltips disabled to prevent overlapping Zygor/Blizzard popups.
+- Dungeon and boss associations remain labeled according to data provenance; no invented drops or gear scores.
+- All v0.8.2 features and the Enchants recipe filter preserved.
+
+v0.8.2 — Readable Dungeon Explorer: clickable item icons, slot/type/stats/quality details, native hover tooltip, clearer boss vs unverified dungeon loot; Enchants equipment-formula filter.
+v0.8.1 — Dungeon boss-name parser, separate dungeon-associated loot, compact coverage, accurate counter
+v0.8.0 — Dungeon Explorer upgrade assessment and reference-coverage reporting
+v0.7.7 - Dungeon directory and Overview item-search repair
+- Added 35 sourced WoW Forever dungeon guide records (separate from raids).
+- Added Dungeons / Raids / All and All levels / At my level selectors.
+- On Overview, item search shows cached item matches and a specific uncached warning.
+- Companion imports full dungeon listing and rotates through 5 detail records per scan.
+- Added tolerant boss-label fields and instance kind preservation.
+- Corrected FCM addon version label from 0.7.5 to 0.7.7.
+- Existing v0.7.6 features, faction tracking, emblem, character data preserved.
+
+v0.7.6 - ForeverDB import data integrity and dungeon recovery
+FCM v0.7.6 - ForeverDB item-catalog and dungeon-import recovery
+==================================================================
+
+Observed user scan (Nov 10 2026): ForeverDB authenticated and returned 1,000
+catalog rows, yet only 59 items were cached at the catalog stage. The sync
+ended with 677 items after other sources, 2,222 recipes, 62 price records,
+0 dungeon records.
+
+Corrections:
+- Save item IDs and names from common alternate/nested response shapes.
+- Import ID-only catalog entries as explicitly unverified placeholders rather
+  than silently losing their IDs; later item detail calls can enrich them.
+- Log recognized versus returned records; stop advancing pagination cursor
+  if no returned items can be saved.
+- Reset the catalog and dungeon offsets to zero ONCE, recovering
+  previously skipped pages.
+- Recognize nested dungeon lists, instances, and alternate numeric ID fields.
+- Store dungeon summary records even when a detail endpoint fails.
+- Reserve request budget for dungeons before item detail/recipe loops.
+- Log safe field names (not values/credentials) if an API response cannot be read.
+- Preserve all settings, cached data, FCM emblem, Horde/Alliance support and
+  the Stop Scan button. No change to WoW character SavedVariables.
+
+Validation:
+- ZIP integrity and static source checks completed.
+- Live ForeverDB authenticated response schema and Windows PowerShell 5.1
+  runtime still require verification on the user's PC.
+- Source records should not be labeled confirmed Forever drops merely because
+  they are present in an external catalog.
+- Legacy Point automation remains deferred.
+
+INSTALL
+1. Close WoW Forever and companion.
+2. Back up WTF and the ForeverCharacterManager folder.
+3. Extract ZIP; merge ForeverCharacterManager folder into
+   ...\World of Warcraft\_forever_\Interface\AddOns\
+   Choose Replace; do not delete original folder first.
+4. Open ForeverCharacterManager\FCM-Companion\OPEN-FCM-DATA-UPDATER.cmd
+5. Click Scan + Update Data, then inspect the catalog and dungeon totals.
+
+NEVER share the API key, settings.json, or DPAPI credential file.
+
+--- previous changes ---
+FOREVER CHARACTER MANAGER v0.7.4 — FACTION-AWARE ROSTER AND ECONOMY
+================================================================
+- Adds All / Alliance / Horde faction selector in the in-game interface.
+- Displays individual faction and a scoped roster and gold summary.
+- Retains Horde and Alliance characters together with unique character IDs.
+- Keeps talent, reputation, gear, and profession scans faction-independent.
+- Filters crafting candidates to same-faction/same-realm characters.
+- Prevents cross-faction/realm crafting requests and invalid auto-assignments.
+- Materials remain visible account-wide but never count as transferable stock
+  for a crafter from the other faction or a different realm/ruleset.
+- Fixes shared reservation accounting so Horde requests cannot reserve Alliance
+  stock and vice versa.
+- Scopes crafting, enchant, upgrade, inventory, requests and shopping views.
+- Retains separate Horde and Alliance AHledger snapshots in companion cache;
+  the in-game auction tab will not apply wrong-faction data to characters.
+- Adds RP-PvP market choices and an empty-faction view that fails safely.
+- Adds 84-tab simulated faction tests and keeps existing 27-spec/86-profile
+  talent framework, item database, emblem, and other current features.
+- No cross-faction transfer or mailing automation; no Legacy Point automation.
+- Guild/quest/vendor/class item restrictions still require verification.
+
+PREVIOUS CHANGELOG
+==================
+FOREVER CHARACTER MANAGER v0.7.3 — ITEM DATABASE / ITEM EXPLORER
+==========================================================
+- New ItemCatalog.lua module with source-aware browsing for all item types.
+- New in-game Item Explorer filters for category, source status, and quality.
+- Search by name or exact item ID, including unimported IDs with explicit uncertainty.
+- Displays account ownership using last recorded bag, bank and equipped-item snapshots.
+- Shows item level, required level, binding, source notes, vendor listings,
+  reported effects and previously implemented recipe / crafting relationships.
+- ForeverDB importer advances 10 paginated item catalog pages per sync (up to
+  1,000 items), preserving cached pages across repeated updates.
+- Removes the former 2,500 exported-item cap; up to 100,000 cached IDs can
+  be emitted into a generated Lua data file, subject to a 24 MB safety limit.
+- Adds source-aware item attributes from official ForeverDB item responses,
+  including beta-event and speculative-availability flags.
+- Imports small batches of vendor inventories when accessible and labels
+  whether the vendor reference was seen in Forever or is historical.
+- Increases optional reference recipe and historical price export limits.
+- Existing 86 talent profiles, custom plan migration, FCM emblem, crafting
+  requests, item relationships, diagnostics and all 21 tabs are preserved.
+- Existing SavedVariables and private Windows-companion files are untouched.
+- Legacy Point automation remains deferred.
+
+IMPORTANT: This does NOT bundle an exhaustive or redistributed ForeverDB item
+feed. Complete coverage requires an approved key and repeated catalog syncs.
+Item records in the client are not necessarily obtainable in live play.
+Windows PowerShell GUI and API network calls require live testing on Windows.
+
+PREVIOUS CHANGELOG
+==================
+FCM v0.7.2 - Additional verified Icy Veins talent build profiles
+- Talent profile choices now vary per specialization; no fixed three-profile cap.
+- Feral Druid: Hybrid Bear/Cat fourth selectable build.
+- Frost Mage: Deep Frost 9/0/42 fourth selectable build.
+- Survival Hunter: three documented PvE playstyles: melee, melee-weaving and ranged-only, plus leveling.
+- Marksmanship Hunter: Pet, Lone Wolf, World/PvP alternative, plus leveling.
+- Elemental Shaman: Raid Support, Maximum Throughput and World/PvP alternative, plus leveling.
+- Preserves the original leveling/sustain/output IDs and custom talent overrides.
+- Clarifies that named builds and allocation totals are NOT verified individual ranks.
+- No changes to game character saves, FCM emblem, or Windows companion.
+
+v0.7.1 — Talent profile section
+FCM v0.7.1 TALENT PROFILE SYSTEM — BUILD NOTES
+Date: 2026-11-10
+
+Implemented:
+- Three independently selectable profiles for each of 27 specs (9 classes):
+  LEVELING, ENDGAME SUSTAIN, ENDGAME OUTPUT. Labels change for healer and tank roles.
+- Links to Icy Veins leveling guides and PvE talent pages for every spec.
+- Frost Mage: Leveling (first two Precision ranks explicitly verified),
+  Endgame Arcane Meditation (18/0/33) and Endgame Incineration (10/5/36).
+  Deep Frost 9/0/42 kept as an additional reference, not a fourth primary profile.
+- Balance Druid: verified Reflection vs Genesis optional PvE variants as examples.
+- Existing six specs' milestones and previously curated steps preserved where applicable.
+- Character/spec/profile-specific custom steps; v0.7.0 custom data is migrated once.
+- Level-60 spec choices do not automatically spend points or recommend a paid respec.
+- Exact rank comparisons only where target rank data exists for the SELECTED profile.
+- Talent reminders will not leap over unknown earlier points as though the route were complete.
+- New slash command: /fcm talentbuild leveling|sustain|output ("pve" remains alias to sustain).
+
+NOT YET VERIFIED / NOT CLAIMED:
+- Complete exact level 10-60 rank-by-rank point sequences for 27 specs.
+- Complete exact level-60 talent ranks for all 54 endgame profile slots.
+- That every IV guide provides both sustain and maximum-output variants.
+- Live WoW Forever UI compatibility and Windows companion API behavior.
+
+The external IV page's interactive calculator may contain more exact ranks
+than its readable text. FCM deliberately shows "Reference only" or
+"Partial verified sequence" instead of inventing a skill/rank.
+
+Icy Veins is an external reference; FCM is not affiliated with it.
+Legacy Points remain deferred. Character SavedVariables have not been erased.
+
+
+FCM v0.7.0 (2026-11-09) - Intelligent Character Management TEST BUILD
+
+SMART UPGRADES / GEAR
+- Rank up to three distinct crafted item recommendations per character.
+- Check availability after materials allocated to other queued crafts.
+- Identify source character and amount to transfer when the inventory record
+  indicates it can be moved to the crafter.
+- Preserve per-character DPS/Leveling, Balanced, and Survivability scoring.
+- Clearly label scores as estimates rather than calculated actual DPS.
+
+CRAFTING / PROFESSIONS
+- Show stock after queued-request reservations, and prevent misleading
+  "materials ready" claims when available stock is already allocated.
+- Show intermediate crafting dependencies and missing base materials.
+- Provide available learned-craft suggestions under each profession, with
+  material shortages, skill requirements where imported, and conservative
+  warnings about uncertain skill-up values.
+- Preserve requests, reassignment, statuses, shopping and character deletion.
+
+ITEM EXPLORER
+- Add reverse recipe lookup (which recipes consume this item).
+- Add output recipe lookup (which recipes create this item).
+- Combine imported reference recipes with locally observed character recipes.
+- Display recorded bag and bank holdings and related active craft requests.
+- Support direct /fcm item <item id or search terms>.
+- Retain ForeverDB / AHledger / TheWoWDB attribution and confidence notes.
+
+TALENTS
+- Read unspent talent points when the client exposes the API, without deriving
+  them from level or Legacy bonuses.
+- Make unscanned talent records visibly unverified.
+- Keep sourced, incomplete point sequences separate from leveling milestones.
+- Preserve custom point overrides and Leveling/PvE selectors.
+
+INTERFACE / DIAGNOSTICS
+- Add availability Filter (all/ready/missing) and Sort (recommended/name).
+- Add generated-reference import counts and edition to the Diagnostics view.
+- Keep all 21 original tabs, round FCM emblem, movable minimap button,
+  resizable window and current SavedVariables schema compatibility.
+
+WINDOWS DATA COMPANION
+- Correct external installations to include the Media folder (FCM emblem)
+  and companion program without overwriting private settings or cached data.
+- Prefer richer ForeverDB recipe records rather than overwriting with AHledger.
+- Validate generated JSON and keep backups before replacing cached data.
+- Write last-sync-report.json with counts, timestamp, and market, no API key.
+- Limit automatic updates to once per 24 hours; manual update stays available.
+- Keep read-only HTTPS APIs, rate caps, encrypted optional key storage, and
+  strict game-closed checks.
+
+KNOWN LIMITATIONS
+- Windows companion is not Windows-live-tested in this release.
+- Imported item/vendor/dungeon records depend on approved API response coverage.
+- Icy Veins full talent sequences and true DPS simulation are not supplied.
+- Reputation vendor gates require verified rank requirements.
+- Automatic Legacy Point tracking is intentionally deferred.
+
+No credentials or user character SavedVariables are included in this ZIP.
+
+FCM v0.7.5 Companion: Stop Scan button and responsive cancellation
+- Press Stop Scan during any reference synchronization to request immediate cancel.
+- The active HTTP request is interrupted and the UI remains responsive.
+- Aborted scans preserve the last successful exported reference cache and generated Lua.
+- Previous ForeverDB catalog offsets are restored if the scan is interrupted.
+- The companion is the only changed code; WoW addon logic and FCM emblem are unchanged.
+- Running-game character saves in the WTF folder are never altered.
+
+v0.7.8 — GitHub distribution, dungeon boss/loot and Esc close
+- GitHub Releases checker, prompt, SHA-256 verification, backup, rollback.
+- Class-focused boss loot detail and All boss loot toggle (where imported).
+- Improved ForeverDB boss/loot normalization and structured Lua export.
+- Closing FCM with Escape, including while item search has focus.
+- Private settings, encrypted credential, saved characters and reference cache preserved.
+- Release publication and Windows/live-client testing remain necessary.
+
+
+v0.7.9 - GitHub Update Readiness
+- GitHub release check reads the real installed TOC version.
+- Code-only update backups exclude encrypted credentials and reference caches.
+- Startup logs show update readiness and backup count.
+- Rollback resets detected installed version.
+- FCM emblem, faction support and character SavedVariables preserved.
+
+v0.8.8 - Smart Gear Comparison
+- Red/green arrow stat deltas and percentage changes for client-verified stats.
+- Selected-activity weighted score gain/loss and plain-language explanation.
+- Shared comparison on selected equipment throughout FCM, including dungeon loot.
+- Compare rings/trinkets against best actual replacement slot; 2H includes removed offhand.
+- Unknown/unscanned stats show explicit unavailability, not fabricated zeros.
+- Per-character/per-activity optional custom stat weight commands.
+- All prior v0.8.7 shared item previews and companion functionality retained.

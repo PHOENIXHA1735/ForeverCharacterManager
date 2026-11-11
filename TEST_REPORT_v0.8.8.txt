@@ -1,0 +1,17 @@
+FCM v0.8.8 - OFFLINE TEST REPORT
+
+PASS - Syntax: all 16 addon Lua files parsed in texlua.
+PASS - Shared comparison: green/red arrows, stat deltas, percentage calculation, NEW, -100%.
+PASS - Weighted score delta, percentage and explanation based on selected profile.
+PASS - Character/activity specific custom weight setting, listing and reset.
+PASS - Proper two-ring replacement and mainhand+offhand vs two-hand comparison.
+PASS - Unknown or missing client stats do not result in zero-score upgrades.
+PASS - Gear UI, shared item details and Dungeon Explorer regression tests.
+PASS - Global Search, nested item filters, profession classification, and Back behavior.
+PASS - Dungeon directory and source data UI; scan-dependent upgrades verified.
+PASS - Existing faction isolation, character profile, diagnostics and updater UI tests.
+NOT TESTED - Live World of Warcraft client, game-font arrows and tooltip-stat cache.
+NOT TESTED - Windows companion GUI, live ForeverDB sync or GitHub publication.
+
+Change to old test fixture: It now supplies a gearStamp, because v0.8.8 does not infer an empty equipped slot unless the selected character has been scanned.
+These weighted scores are advisory, not simulated DPS.
