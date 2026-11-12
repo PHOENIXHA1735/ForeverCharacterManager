@@ -3,7 +3,7 @@
 local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
-FCM.version = "0.8.8"
+FCM.version = "0.8.9"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}

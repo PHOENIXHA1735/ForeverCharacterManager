@@ -9,7 +9,10 @@ local stats = {
     str = {"ITEM_MOD_STRENGTH_SHORT"}, agi = {"ITEM_MOD_AGILITY_SHORT"},
     int = {"ITEM_MOD_INTELLECT_SHORT"}, stam = {"ITEM_MOD_STAMINA_SHORT"},
     spi = {"ITEM_MOD_SPIRIT_SHORT"}, armor = {"RESISTANCE0_NAME", "ITEM_MOD_ARMOR_SHORT", "ITEM_MOD_BONUS_ARMOR_SHORT"},
-    spell = {"ITEM_MOD_SPELL_POWER_SHORT", "ITEM_MOD_SPELL_DAMAGE_DONE_SHORT", "ITEM_MOD_SPELL_DAMAGE_DONE", "ITEM_MOD_SPELL_HEALING_DONE_SHORT"},
+    -- These client keys can describe the SAME spell-damage bonus.  Do not
+    -- sum them: some Forever clients report both generic and spell-specific
+    -- aliases for one bonus. Healing-only bonuses are not DPS spell power.
+    spell = {"ITEM_MOD_SPELL_POWER_SHORT", "ITEM_MOD_SPELL_DAMAGE_DONE_SHORT", "ITEM_MOD_SPELL_DAMAGE_DONE"},
     ap = {"ITEM_MOD_ATTACK_POWER_SHORT", "ITEM_MOD_RANGED_ATTACK_POWER_SHORT"},
     crit = {"ITEM_MOD_CRIT_RATING_SHORT", "ITEM_MOD_SPELL_CRIT_RATING_SHORT"},
     hit = {"ITEM_MOD_HIT_RATING_SHORT", "ITEM_MOD_SPELL_HIT_RATING_SHORT"},
@@ -107,9 +110,23 @@ function G:StatValues(item)
     if type(raw)~="table" then raw=getStats(GetItemStats) end
     if type(raw)~="table" then return nil end
     local result={}
+    -- Fields in these groups are alternate client representations for the
+    -- same bonus, not independent stats.  Taking the greatest magnitude
+    -- prevents inflated scores when GetItemStats returns both representations.
+    -- Distinct armor and school resistances remain additive.
+    local aliasGroups={spell=true,ap=true,crit=true,hit=true,haste=true}
     for category,keys in pairs(stats) do
         local value=0
-        for _,key in ipairs(keys) do value=value+(tonumber(raw[key]) or 0) end
+        if aliasGroups[category] then
+            local chosen=0
+            for _,key in ipairs(keys) do
+                local amount=tonumber(raw[key]) or 0
+                if math.abs(amount)>math.abs(chosen) then chosen=amount end
+            end
+            value=chosen
+        else
+            for _,key in ipairs(keys) do value=value+(tonumber(raw[key]) or 0) end
+        end
         if value~=0 then result[category]=value end
     end
     -- Empty or unrecognized API data does NOT establish a real zero-stat item.
@@ -339,8 +356,26 @@ end
 
 local function signed(n) return string.format("%+.1f",n) end
 local function tint(s,hex) return "|cff"..hex..s.."|r" end
--- Color-coded arrows, per-stat absolute and percentage changes, and a short
--- narrative. These strings work both in the standard pane and Dungeon Explorer.
+-- Client fonts on Forever may not include Unicode triangles. Use familiar
+-- built-in scroll-arrow textures, plus ASCII GAIN/LOSS as a visible fallback.
+local upTexture="|TInterface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up:12:12|t"
+local downTexture="|TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:12:12|t"
+local function scoreStatsLine(statsMap)
+    local parts={}
+    for key,value in pairs(statsMap or {}) do
+        if value~=0 then
+            parts[#parts+1]={name=G.statLabels[key] or key,value=value}
+        end
+    end
+    table.sort(parts,function(a,b)return a.name<b.name end)
+    if #parts==0 then return "None recorded" end
+    local names={}
+    for _,p in ipairs(parts) do names[#names+1]=p.name.." "..signed(p.value) end
+    return table.concat(names,", ")
+end
+-- Layout is shared by the standard item pane and Dungeon Explorer.
+-- Keep each change short enough to fit the narrow right column; calculations
+-- are sourced from the same normalized client stat table as item scoring.
 function G:ComparisonLines(comparison)
     if not comparison or comparison.status=="not-equipment" then return {} end
     local lines={tint("SMART GEAR COMPARISON","ffd76d")}
@@ -348,23 +383,30 @@ function G:ComparisonLines(comparison)
         lines[#lines+1]=tint(comparison.reason or "Comparison not available.","f0d27b")
         return lines
     end
-    lines[#lines+1]="Compared with: "..comparison.oldName
+    lines[#lines+1]="Equipped: "..comparison.oldName
+    local delta=comparison.delta
+    local outcome=delta>0.01 and "GAIN" or (delta< -0.01 and "LOSS" or "TIE")
+    local shade=delta>0.01 and "76e59a" or (delta< -0.01 and "ff8888" or "c9d1de")
+    local marker=delta>0.01 and upTexture or (delta< -0.01 and downTexture or "=")
+    lines[#lines+1]=tint(marker.." "..outcome..": "..signed(delta).." weighted pts"..
+        (comparison.scorePct and string.format(" (%+.1f%%)",comparison.scorePct) or " (no old baseline)"),shade)
+    lines[#lines+1]=tint("STAT DIFFERENCES (equipped -> new)","ffd76d")
     for _,c in ipairs(comparison.changes) do
         local up=c.change>0
         local hex=up and "76e59a" or "ff8888"
-        local arrow=up and "▲" or "▼"
+        local arrow=up and upTexture or downTexture
         local pct=c.percent and string.format(" (%+.0f%%)",c.percent) or (up and " (NEW)" or "")
         lines[#lines+1]=tint(arrow.." "..c.label.." "..signed(c.change)..pct,hex)
-            .."  "..string.format("%g",c.before).." > "..string.format("%g",c.after)
+        lines[#lines+1]=tint("  "..string.format("%g",c.before).."  ->  "..string.format("%g",c.after).." (equipped -> new)","afc3d7")
     end
     if #comparison.changes==0 then lines[#lines+1]="Known stats match." end
-    local delta=comparison.delta
-    local outcome=delta>0.01 and "▲ Upgrade" or (delta< -0.01 and "▼ Downgrade" or "— Equal score")
-    local hex=delta>0.01 and "76e59a" or (delta< -0.01 and "ff8888" or "c9d1de")
-    lines[#lines+1]=tint(outcome..": "..signed(delta).." weighted points"..(comparison.scorePct and string.format(" (%+.1f%%)",comparison.scorePct) or " (new slot)"),hex)
+    lines[#lines+1]=tint("EQUIPPED KNOWN STATS","ffd76d")
+    lines[#lines+1]=scoreStatsLine(comparison.oldStats)
+    lines[#lines+1]=tint("CANDIDATE KNOWN STATS","ffd76d")
+    lines[#lines+1]=scoreStatsLine(comparison.newStats)
     lines[#lines+1]="Why: "..comparison.reason
-    lines[#lines+1]=tint("Estimated weights for "..(FCM.gearActivityLabels[comparison.activity] or comparison.activity)..
-        " / "..(FCM.modeLabels[comparison.style] or comparison.style).."; not actual DPS.","aab8ca")
+    lines[#lines+1]=tint("Estimated: "..(FCM.gearActivityLabels[comparison.activity] or comparison.activity)..
+        " / "..(FCM.modeLabels[comparison.style] or comparison.style).."; not DPS.","aab8ca")
     lines[#lines+1]=tint("Not modeled: caps, procs, sets, PvP effects, unique restrictions.","aab8ca")
     return lines
 end

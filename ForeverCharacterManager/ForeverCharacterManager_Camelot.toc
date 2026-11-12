@@ -2,7 +2,7 @@
 ## Title: Forever Character Manager
 ## Notes: Account-wide gear, crafting requests, shopping, talents, reputation, and upgrade planning for WoW Forever.
 ## Author: Custom build
-## Version: 0.8.8
+## Version: 0.8.9
 ## SavedVariables: FCM_DB
 ## IconTexture: Interface\AddOns\ForeverCharacterManager\Media\FCM_Emblem
 

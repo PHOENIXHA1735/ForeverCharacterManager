@@ -227,6 +227,24 @@ local function itemStats(id,stored,game)
     if type(stats)~="table" and type(GetItemStats)=="function" then
         stats=FCM:Try(GetItemStats,lookup)
     end
+    -- Present the same de-duplicated client stats that Gear Advisor scores.
+    -- Previously this preview used raw aliases while the comparison summed
+    -- them, making displayed Spell Damage and calculated Spell Power disagree.
+    if FCM.Gear and FCM.Gear.StatValues then
+        local normalized=FCM.Gear:StatValues(lookup)
+        if normalized then
+            local keys={}
+            for key,value in pairs(normalized) do
+                if type(value)=="number" and value~=0 then keys[#keys+1]=key end
+            end
+            table.sort(keys,function(a,b)return (FCM.Gear.statLabels[a] or a)<(FCM.Gear.statLabels[b] or b) end)
+            for _,key in ipairs(keys) do
+                local value=normalized[key]
+                lines[#lines+1]=((value>0) and "+" or "")..tostring(value).." "..(FCM.Gear.statLabels[key] or key)
+            end
+            return lines
+        end
+    end
     if type(stats)=="table" then
         local keys={}
         for key,value in pairs(stats) do
@@ -334,7 +352,7 @@ function UI:RenderItemPreview(row)
         if #stats>1 and #subtitle+#stats[2]<51 then subtitle=subtitle.."  |  "..stats[2] end
         preview.stats:SetText(short(subtitle,58))
     else
-        preview.stats:SetText("Stats: not cached")
+        preview.stats:SetText("Stats unavailable: see details")
     end
     preview:Show()
     self.detailText:ClearAllPoints()
@@ -493,9 +511,10 @@ function UI:RenderDungeonDetail(r,ch)
             if #comparisonLines>0 then
                 gap(6)
                 for index,entry in ipairs(comparisonLines) do
-                    local h=entry:find("Why:",1,true) and 54 or
-                        (entry:find("Compared with:",1,true) and 36 or
-                        (entry:find("Not modeled:",1,true) and 34 or 34))
+                    local h=entry:find("Why:",1,true) and 74 or
+                        (entry:find("Equipped:",1,true) and 38 or
+                        (entry:find("Not modeled:",1,true) and 54 or
+                        (entry:find("KNOWN STATS",1,true) and 28 or 44)))
                     line(entry,h,nil,8)
                 end
                 gap(5)
@@ -1962,8 +1981,12 @@ local function buildRows(ui)
                 local candidate=r
                 local crafter=candidate.crafters and candidate.crafters[1]
                 local samplePlan=FCM:CraftAvailability(candidate.recipe,crafter)
+                local slotNames={ [1]="Head",[2]="Neck",[3]="Shoulders",[5]="Chest",[6]="Waist",
+                    [7]="Legs",[8]="Feet",[9]="Wrist",[10]="Hands",[11]="Ring 1",
+                    [12]="Ring 2",[13]="Trinket 1",[14]="Trinket 2",[15]="Back",
+                    [16]="Main hand",[17]="Off-hand",[18]="Ranged" }
                 add("gear:"..i, r.info.name,
-                    "+"..FCM.Gear:ScoreLabel(r.delta).." points | "..(samplePlan.ready and "Materials ready" or ("Missing "..samplePlan.missing)).." | slot "..r.slot,
+                    "+"..FCM.Gear:ScoreLabel(r.delta).." points | "..(samplePlan.ready and "Materials ready" or ("Missing "..samplePlan.missing)).." | "..(slotNames[r.slot] or ("slot "..tostring(r.slot))),
                     function()
                         local crafter=candidate.crafters[1]
                         local plan=FCM:CraftAvailability(candidate.recipe,crafter)
@@ -2384,7 +2407,7 @@ local function buildRows(ui)
         add("manual-reputation","Recipe reputation requirements","Register verified gates by recipe ID and faction ID.",
             "/fcm repgate <recipeID> <factionID> <standing 1-8>\n/fcm clearrepgate <recipeID>\n\nStanding IDs: 1 Hated through 8 Exalted. Unregistered vendors are not automatically inferred.")
     elseif tab=="Help" then
-        add("advanced","What's new in v0.8.8","Smart gear comparison with colored stat changes, weighted percent and explanation across item tabs",
+        add("advanced","What's new in v0.8.9","Normalized spell stats, readable comparison arrows, equipped/new stat summaries",
             "Version 0.7 adds an account-wide Smart Upgrade Center with reservation-aware readiness, item-to-recipe lookup, professional craft suggestions, filter/sort controls, and improved updater validation. It retains the FCM emblem, requests, gear and talent guidance.\n\nNo live Icy Veins sync, guaranteed vendor stock, automatic Legacy totals, precise DPS simulation, mailing or crafting automation is claimed.")
         add("requests", "Cross-character crafting requests", "Open Requests to see work assigned to the crafter.",
             "From Gear or Crafting choose a recipient in the top dropdown, select a recipe or suggested upgrade, and click Request Craft. If multiple characters know it, choose the crafter.\n\nLog into that crafter: FCM announces pending assignments and Requests lists the item, recipient, and materials. Assign/Reassign changes the crafter. Set Status moves it through requested, gathering, ready, and crafted; Delivered or Cancelled archives it. Nothing is crafted or mailed automatically.")
