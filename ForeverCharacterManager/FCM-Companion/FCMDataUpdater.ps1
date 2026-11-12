@@ -1,4 +1,4 @@
-﻿# Forever Character Manager - Windows Data Companion v0.8.8
+﻿# Forever Character Manager - Windows Data Companion v0.8.9
 # Open-source PowerShell 5.1 Windows Forms tool; no installation, modules, or
 # administrator privileges required. Internet requests are GET only.
 # Reads FCM's SavedVariables locally for item IDs. Never uploads them.
@@ -243,7 +243,7 @@ function Get-Remote([string]$uri) {
     for ($attempt = 1; $attempt -le 2; $attempt++) {
         Check-FcmCancel
         try {
-            return Invoke-FcmHttpJson $uri @{'User-Agent'='FCMDataCompanion/0.8.8';'Accept'='application/json'}
+            return Invoke-FcmHttpJson $uri @{'User-Agent'='FCMDataCompanion/0.8.9';'Accept'='application/json'}
         } catch {
             Check-FcmCancel
             $httpStatus = Get-FcmHttpStatus $_
@@ -635,7 +635,7 @@ function Sync-All {
     Save-Config
     # Local-only progress report; NEVER include the ForeverDB key or player data.
     $summary = [ordered]@{
-        version = '0.8.8'
+        version = '0.8.9'
         lastSync = $script:Config.lastSync
         items = $script:ItemCache.Count
         nextForeverDBItemOffset = $script:Config.fdbItemOffset
@@ -718,7 +718,7 @@ function Action($operation,[bool]$isScan=$false) {
 
 Get-Config
 $form=New-Object System.Windows.Forms.Form
-$form.Text='Forever Character Manager - Data Companion v0.8.8'
+$form.Text='Forever Character Manager - Data Companion v0.8.9'
 $form.Size=New-Object System.Drawing.Size(800,850)
 $form.StartPosition='CenterScreen'
 $form.MinimumSize=New-Object System.Drawing.Size(800,850)

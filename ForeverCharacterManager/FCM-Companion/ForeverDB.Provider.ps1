@@ -49,7 +49,7 @@ function Fetch-ForeverDB([string]$relative) {
         return Invoke-FcmHttpJson $url @{
             'X-API-Key'=$key;
             'Accept'='application/json';
-            'User-Agent'='FCMDataCompanion/0.8.8'
+            'User-Agent'='FCMDataCompanion/0.8.9'
         }
     } catch {
         # Include status only. Exceptions may contain sensitive request headers.

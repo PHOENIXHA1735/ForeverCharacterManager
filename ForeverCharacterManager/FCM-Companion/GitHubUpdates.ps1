@@ -1,9 +1,9 @@
-﻿# FCM GitHub releases updater v0.8.8. Public repo only; no user credentials
+﻿# FCM GitHub releases updater v0.8.9. Public repo only; no user credentials
 # and no client data are sent to GitHub. Updates require explicit confirmation.
 $script:FCMRepo='PHOENIXHA1735/ForeverCharacterManager'
 $script:FCMRepoUrl='https://github.com/PHOENIXHA1735/ForeverCharacterManager'
 $script:FCMGitHubApi='https://api.github.com/repos/PHOENIXHA1735/ForeverCharacterManager/releases/latest'
-$script:FCMInstalledVersion=[version]'0.8.8'
+$script:FCMInstalledVersion=[version]'0.8.9'
 $script:LatestFCMRelease=$null
 $script:LatestFCMAsset=$null
 
@@ -41,7 +41,7 @@ function Get-FCMLatestGitHubRelease {
     $script:LatestFCMRelease=$null
     $script:LatestFCMAsset=$null
     if ($script:githubUpdateButton) {$script:githubUpdateButton.Enabled=$false}
-    $headers=@{'Accept'='application/vnd.github+json';'User-Agent'='ForeverCharacterManagerCompanion/0.8.8'}
+    $headers=@{'Accept'='application/vnd.github+json';'User-Agent'='ForeverCharacterManagerCompanion/0.8.9'}
     try { $release=Invoke-FcmHttpJson $script:FCMGitHubApi $headers }
     catch {
         $status=Get-FcmHttpStatus $_
@@ -100,7 +100,7 @@ function Get-FCMTrustedAssetBytes([string]$url,[int]$maximumBytes) {
         throw 'Release asset URL is not from the approved FCM repository.'
     }
     $req=[System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get,[Uri]$url)
-    [void]$req.Headers.TryAddWithoutValidation('User-Agent','ForeverCharacterManagerCompanion/0.8.8')
+    [void]$req.Headers.TryAddWithoutValidation('User-Agent','ForeverCharacterManagerCompanion/0.8.9')
     $cts=[System.Threading.CancellationTokenSource]::new()
     $cts.CancelAfter(28000)
     $res=$null
