@@ -1,0 +1,11 @@
+FOREVER CHARACTER MANAGER v0.8.9 — INSTALLATION
+
+1. Fully exit WoW Forever and the FCM Data Companion.
+2. Back up your addon directory and account WTF SavedVariables.
+3. Extract the ForeverCharacterManager folder under Interface\AddOns, replacing existing addon files.
+4. KEEP ExternalData.generated.lua and SavedVariables; they are not included in this package.
+5. Restart WoW and confirm FCM v0.8.9 in the title header.
+6. Open Frosty > Gear > Novice Ardent's Sash. Verify stats, textures, explanation, score, and material requirements.
+
+This is a local test build, not yet published to GitHub.
+Weighted scores are NOT actual DPS.

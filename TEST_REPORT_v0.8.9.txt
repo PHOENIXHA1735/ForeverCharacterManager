@@ -1,0 +1,13 @@
+FCM v0.8.9 - OFFLINE TEST REPORT
+
+PASS - All 16 addon Lua modules compiled under texlua.
+PASS - When overlapping Spell Power and Spell Damage fields both report 4, normalized spell score is 4, not 8.
+PASS - Spell-only healing bonus is not included in the DPS spell category.
+PASS - Generic and spell-specific Critical Strike aliases are not added together.
+PASS - A comparison uses old and new normalized stats, shows equipped/new values, and includes full known stat summaries.
+PASS - Built-in WoW scroll arrow texture strings replace unsupported Unicode triangle glyphs.
+PASS - Version strings in Core.lua, both TOCs and companion scripts match v0.8.9.
+NOT TESTED - In-game Forever client textures, actual API field shapes, and live comparison presentation.
+NOT TESTED - Windows companion GUI or live reference synchronization.
+
+Weighted scores are advisory and not simulated DPS.

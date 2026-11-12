@@ -1,3 +1,11 @@
+v0.8.9 — Gear comparison readability and client stat alias normalization
+- Replaced unsupported triangle glyphs with WoW texture arrows and GAIN/LOSS fallback labels.
+- Show equipped -> candidate values and full known normalized stats.
+- Avoid duplicate scoring for overlapping client spell/crit/hit/haste/attack-power aliases; skip healing-only bonuses in DPS spell score.
+- Align item preview stats with comparison calculation.
+- Show human-readable gear slot labels in the Gear list.
+- Offline syntax/regression tests passed; live WoW testing pending.
+
 FCM v0.8.7 — Shared selected-item preview across item-related tabs. See FCM_087_RELEASE_NOTES.md.
 
 v0.8.6 — Global automatic search and Back, AH-style Category/Type/Slot filters, in-panel menus, profession classifier corrections. Offline tests passed; game testing pending.
