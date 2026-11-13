@@ -911,7 +911,7 @@ $script:logBox.Font=New-Object System.Drawing.Font('Consolas',9)
 $form.Controls.Add($script:logBox)
 # ForeverDB requires a visible, clickable link in the Windows companion.
 $script:fdbCreditLink=New-Object System.Windows.Forms.LinkLabel
-$script:fdbCreditLink.Text='Data from ForeverDB.net — https://foreverdb.net'
+$script:fdbCreditLink.Text='Data from ForeverDB.net - https://foreverdb.net'
 $script:fdbCreditLink.Location=New-Object System.Drawing.Point(20,713)
 $script:fdbCreditLink.Size=New-Object System.Drawing.Size(460,20)
 $script:fdbCreditLink.LinkColor=[System.Drawing.Color]::FromArgb(93,170,245)

@@ -5,6 +5,7 @@ on:
     paths:
       - FCM_v090_RELEASE_NOTES.md
       - .github/workflows/publish-v090-release.yml
+      - ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1
   workflow_dispatch:
 permissions:
   contents: write
@@ -34,6 +35,8 @@ jobs:
           cp docs-current/ForeverCharacterManager/FCM-Companion/ABOUT_DATA_SOURCES.txt release-source/ForeverCharacterManager/FCM-Companion/ABOUT_DATA_SOURCES.txt
           # Apply the tested companion updater hotfix without moving the v0.9.0 tag.
           cp docs-current/ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1 release-source/ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1
+          # Keep the Windows companion UI text encoding-safe as well.
+          cp docs-current/ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1 release-source/ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1
           cp docs-current/SOURCE_MANIFEST_SHA256.txt release-source/SOURCE_MANIFEST_SHA256.txt
           mkdir -p release-source/docs
           cp docs-current/docs/FOREVERDB_API_KEY_SETUP.md release-source/docs/FOREVERDB_API_KEY_SETUP.md
@@ -76,6 +79,8 @@ jobs:
                   updater = archive.read('ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1')
                   assert b'-Addon-and-Companion.zip' in updater
                   assert b'docs/FOREVERDB_API_KEY_SETUP.md' in updater
+                  companion = archive.read('ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1')
+                  assert b'Data from ForeverDB.net - https://foreverdb.net' in companion
                   for name in names:
                       assert '..' not in name and ':' not in name and not name.startswith(('/', './')), name
                       if name.startswith('ForeverCharacterManager/'):
