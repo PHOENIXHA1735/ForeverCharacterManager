@@ -26,7 +26,7 @@ jobs:
               for line in toc.read_text(encoding='utf-8').splitlines():
                   line=line.strip()
                   if not line or line.startswith('##'): continue
-                  if line.lower()=='externaldata.generated.lua': continue
+                  if line.lower() in ('externaldata.generated.lua', 'ahprices.generated.lua'): continue
                   assert (root / line).is_file(), f'{toc.name} refers to missing file: {line}'
-          for pattern in ('**/ExternalData.generated.lua','**/SavedVariables/**','**/.env'):
+          for pattern in ('**/ExternalData.generated.lua','**/AHPrices.generated.lua','**/SavedVariables/**','**/.env'):
               assert not list(Path('.').glob(pattern)), f'Sensitive/generated path matched {pattern}'
