@@ -73,9 +73,18 @@ function Get-FCMLatestGitHubRelease {
         }
     }
     if (-not $selected) {
-        # Exact short-name fallback, still subject to SHA-256 and archive verification.
+        # Exact short-name compatibility package for older clients, still
+        # subject to SHA-256 and archive verification.
         foreach ($a in @($release.assets)) {
             if ($a.state -eq 'uploaded' -and [string]$a.name -eq ('FCM-v'+$remote.ToString()+'.zip')) {
+                $selected=$a;break
+            }
+        }
+    }
+    if (-not $selected) {
+        # Official consolidated release name. Never accept an arbitrary ZIP.
+        foreach ($a in @($release.assets)) {
+            if ($a.state -eq 'uploaded' -and [string]$a.name -eq ('FCM-v'+$remote.ToString()+'-Addon-and-Companion.zip')) {
                 $selected=$a;break
             }
         }
@@ -166,6 +175,9 @@ function Expand-FCMTrustedRelease([string]$zipFile,[string]$root,[version]$expec
             }
             if ($name -match '^[A-Za-z0-9_.-]+$') {continue}
             if ($name -match '^tests/[A-Za-z0-9_.-]+\.lua$') {continue}
+            # Published v0.9.0 includes one public API setup document. It is
+            # reference-only; never extract docs into the WoW AddOns folder.
+            if ($name -eq 'docs/FOREVERDB_API_KEY_SETUP.md') {continue}
             if ($name -notmatch '^ForeverCharacterManager/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+$') {
                 throw ("Unexpected archive entry path: " + $name)
             }

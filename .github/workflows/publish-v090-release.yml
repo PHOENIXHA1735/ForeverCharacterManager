@@ -32,6 +32,8 @@ jobs:
           cp docs-current/README.md release-source/README.md
           cp docs-current/FCM_v090_RELEASE_NOTES.md release-source/FCM_v090_RELEASE_NOTES.md
           cp docs-current/ForeverCharacterManager/FCM-Companion/ABOUT_DATA_SOURCES.txt release-source/ForeverCharacterManager/FCM-Companion/ABOUT_DATA_SOURCES.txt
+          # Apply the tested companion updater hotfix without moving the v0.9.0 tag.
+          cp docs-current/ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1 release-source/ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1
           cp docs-current/SOURCE_MANIFEST_SHA256.txt release-source/SOURCE_MANIFEST_SHA256.txt
           mkdir -p release-source/docs
           cp docs-current/docs/FOREVERDB_API_KEY_SETUP.md release-source/docs/FOREVERDB_API_KEY_SETUP.md
@@ -43,8 +45,48 @@ jobs:
           fi
           mkdir -p ../dist
           zip -q -r ../dist/FCM-v0.9.0-Addon-and-Companion.zip ForeverCharacterManager README.md INSTALL_v0.9.0.txt FCM_v090_RELEASE_NOTES.md TEST_REPORT_v0.9.0.txt docs/FOREVERDB_API_KEY_SETUP.md
+          # Existing 0.8.x/0.9.0 companions require this exact short asset name.
+          # They also reject documentation nested outside ForeverCharacterManager.
+          zip -q -r ../dist/FCM-v0.9.0.zip ForeverCharacterManager
           cd ../dist
           sha256sum FCM-v0.9.0-Addon-and-Companion.zip > FCM-v0.9.0-Addon-and-Companion.zip.sha256
+          sha256sum FCM-v0.9.0.zip > FCM-v0.9.0.zip.sha256
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          for filename in ('FCM-v0.9.0.zip', 'FCM-v0.9.0-Addon-and-Companion.zip'):
+              file = Path(filename)
+              assert file.stat().st_size < 15_000_000, filename
+              expected = Path(filename + '.sha256').read_text().split()[0]
+              assert hashlib.sha256(file.read_bytes()).hexdigest() == expected
+              with zipfile.ZipFile(file) as archive:
+                  names = [name for name in archive.namelist() if not name.endswith('/')]
+                  required = {
+                      'ForeverCharacterManager/ForeverCharacterManager.toc',
+                      'ForeverCharacterManager/Core.lua',
+                      'ForeverCharacterManager/UI.lua',
+                      'ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1',
+                      'ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1',
+                      'ForeverCharacterManager/Media/FCM_Emblem.tga',
+                  }
+                  assert required.issubset(names), filename
+                  assert b'## Version: 0.9.0' in archive.read('ForeverCharacterManager/ForeverCharacterManager.toc')
+                  updater = archive.read('ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1')
+                  assert b'-Addon-and-Companion.zip' in updater
+                  assert b'docs/FOREVERDB_API_KEY_SETUP.md' in updater
+                  for name in names:
+                      assert '..' not in name and ':' not in name and not name.startswith(('/', './')), name
+                      if name.startswith('ForeverCharacterManager/'):
+                          assert all(part.replace('.', '').replace('-', '').replace('_', '').isalnum() for part in name.split('/')), name
+                      elif name == 'docs/FOREVERDB_API_KEY_SETUP.md':
+                          assert filename.endswith('-Addon-and-Companion.zip'), name
+                      else:
+                          assert '/' not in name, name
+                  if filename == 'FCM-v0.9.0.zip':
+                      assert all(name.startswith('ForeverCharacterManager/') for name in names)
+          PY
       - name: Create or update public GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,7 +95,7 @@ jobs:
           set -euo pipefail
           if gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit v0.9.0 --repo "$GITHUB_REPOSITORY" --title "Forever Character Manager v0.9.0 - Consolidated Release" --notes-file docs-current/FCM_v090_RELEASE_NOTES.md
-            gh release upload v0.9.0 dist/FCM-v0.9.0-Addon-and-Companion.zip dist/FCM-v0.9.0-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload v0.9.0 dist/FCM-v0.9.0-Addon-and-Companion.zip dist/FCM-v0.9.0-Addon-and-Companion.zip.sha256 dist/FCM-v0.9.0.zip dist/FCM-v0.9.0.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create v0.9.0 dist/FCM-v0.9.0-Addon-and-Companion.zip dist/FCM-v0.9.0-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --title "Forever Character Manager v0.9.0 - Consolidated Release" --notes-file docs-current/FCM_v090_RELEASE_NOTES.md --verify-tag
+            gh release create v0.9.0 dist/FCM-v0.9.0-Addon-and-Companion.zip dist/FCM-v0.9.0-Addon-and-Companion.zip.sha256 dist/FCM-v0.9.0.zip dist/FCM-v0.9.0.zip.sha256 --repo "$GITHUB_REPOSITORY" --title "Forever Character Manager v0.9.0 - Consolidated Release" --notes-file docs-current/FCM_v090_RELEASE_NOTES.md --verify-tag
           fi
