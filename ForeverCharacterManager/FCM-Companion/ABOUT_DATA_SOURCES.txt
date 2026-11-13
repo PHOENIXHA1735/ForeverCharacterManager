@@ -20,11 +20,18 @@ reference-audit.json with counts only (no paths, credentials or player data).
 A source-reported 'seen in Forever' flag is not independent live verification.
 Source timestamps record companion import time, not server data freshness.
 
-ForeverDB policy clarified 2026-11-12:
-- For FCM as a local, no-website Windows app, request an exemption for the
-  developer's personal API key (90-day renewal); the key is NOT for distribution.
-- Ship only appropriately attributed selected reference records; never mirror the
-  whole database. Preserve Classic/Seen in Forever/provenance labels.
-- Check build metadata before full imports and prefer paged list endpoints.
-- The scheduled metadata checker does not itself download a whole catalog.
-- AHledger uses a separate API and separate limits. Its data are not ForeverDB calls.
+ForeverDB API access and key privacy (updated November 12, 2026):
+- FCM does not include any developer's or player's ForeverDB API key.
+- To get your own key: https://foreverdb.net/developers, log in via Battle.net,
+  request developer access for a local Windows app/plugin, provide a contact
+  email, accept attribution terms, and create a key after approval.
+- Use a key appropriate for a personal app/plugin; not a website key.
+- Paste your own key into the Windows companion's ForeverDB API key box.
+- If Remember is selected, the key is encrypted via Windows DPAPI for that
+  Windows user. Do not publish a DPAPI credential file.
+- Without a key, ForeverDB imports are skipped; AHledger/TheWoWDB public
+  refresh may still work. Never share keys or put them in source or logs.
+- Free allowance advertised: 5,000 requests/day and 30/minute per account;
+  review ForeverDB's current terms for changes and proper attribution.
+- Preserve source/provenance labels and avoid mirroring whole catalogs.
+- AHledger has a separate API and quotas and is not a ForeverDB call.

@@ -1,0 +1,59 @@
+name: Publish FCM v0.9.0 GitHub Release
+on:
+  push:
+    branches: [main]
+    paths:
+      - FCM_v090_RELEASE_NOTES.md
+      - .github/workflows/publish-v090-release.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'PHOENIXHA1735/ForeverCharacterManager'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout updated documentation
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: docs-current
+          persist-credentials: false
+      - name: Checkout existing v0.9.0 source tag
+        uses: actions/checkout@v4
+        with:
+          ref: v0.9.0
+          path: release-source
+          persist-credentials: false
+      - name: Package only public addon and companion files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp docs-current/README.md release-source/README.md
+          cp docs-current/FCM_v090_RELEASE_NOTES.md release-source/FCM_v090_RELEASE_NOTES.md
+          cp docs-current/ForeverCharacterManager/FCM-Companion/ABOUT_DATA_SOURCES.txt release-source/ForeverCharacterManager/FCM-Companion/ABOUT_DATA_SOURCES.txt
+          cp docs-current/SOURCE_MANIFEST_SHA256.txt release-source/SOURCE_MANIFEST_SHA256.txt
+          mkdir -p release-source/docs
+          cp docs-current/docs/FOREVERDB_API_KEY_SETUP.md release-source/docs/FOREVERDB_API_KEY_SETUP.md
+          cd release-source
+          sha256sum -c SOURCE_MANIFEST_SHA256.txt
+          if find ForeverCharacterManager -type f \( -iname '*.dpapi' -o -name 'settings.json' -o -name 'reference-cache.json' -o -name 'AHPrices.generated.lua' -o -name 'ExternalData.generated.lua' -o -name 'FCM_DB.lua' \) | grep -q .; then
+            echo 'Unsafe personal or generated file found' >&2
+            exit 1
+          fi
+          mkdir -p ../dist
+          zip -q -r ../dist/FCM-v0.9.0-Addon-and-Companion.zip ForeverCharacterManager README.md INSTALL_v0.9.0.txt FCM_v090_RELEASE_NOTES.md TEST_REPORT_v0.9.0.txt docs/FOREVERDB_API_KEY_SETUP.md
+          cd ../dist
+          sha256sum FCM-v0.9.0-Addon-and-Companion.zip > FCM-v0.9.0-Addon-and-Companion.zip.sha256
+      - name: Create or update public GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.9.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit v0.9.0 --repo "$GITHUB_REPOSITORY" --title "Forever Character Manager v0.9.0 - Consolidated Release" --notes-file docs-current/FCM_v090_RELEASE_NOTES.md
+            gh release upload v0.9.0 dist/FCM-v0.9.0-Addon-and-Companion.zip dist/FCM-v0.9.0-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create v0.9.0 dist/FCM-v0.9.0-Addon-and-Companion.zip dist/FCM-v0.9.0-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --title "Forever Character Manager v0.9.0 - Consolidated Release" --notes-file docs-current/FCM_v090_RELEASE_NOTES.md --verify-tag
+          fi
