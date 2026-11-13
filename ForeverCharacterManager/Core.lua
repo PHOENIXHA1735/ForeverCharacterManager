@@ -423,6 +423,7 @@ f:SetScript("OnEvent", function(_, event, ...)
         FCM.sessionStartedAt = FCM:Now()
         FCM._boeBagBaselineReady=false
         local active=FCM:Current()
+        if FCM.RepairRecipeProfessions then FCM:RepairRecipeProfessions() end
         -- Start a new leveling session without carrying elapsed time over logout.
         active.sessionAnchor=FCM:Now()
         active.sessionXP=active.xp or 0

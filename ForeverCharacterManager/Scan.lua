@@ -173,7 +173,7 @@ function FCM:ScanProfessions()
             local index = positions[slot]
             if index then
                 local name, _, level, maximum, _, _, line = safe(GetProfessionInfo, index)
-                if name and level then
+                if type(name)=="string" and name:match("%S") and tonumber(level) and tonumber(level)>0 then
                     captured=true
                     ch.professions[name] = { name = name, skill = level, maxSkill = maximum, line = line, scan = self:Now() }
                 end

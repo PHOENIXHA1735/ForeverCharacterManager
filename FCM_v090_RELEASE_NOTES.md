@@ -47,3 +47,11 @@ This source package deliberately excludes personal SavedVariables, account recor
 ## GitHub policy
 
 Publish to the existing repository as a **new forward commit**, preserving prior v0.8.x history, tags and releases. Tag v0.9.0 only if that tag does not already exist; never force-push.
+
+## QA3 - November 13, 2026
+
+- Crafting recipes now identify their actual profession, even when Cooking and Tailoring were scanned from the same character. Previously saved recipe categories are repaired without deleting character or recipe records.
+- Character profession summaries no longer display blank or invalid 0/0 skill entries. Genuine Cooking, Fishing, Tailoring and Enchanting skills remain visible.
+- Five additional offline tests passed. The existing 16 regression scenarios and 17 identity checks also passed; 23 addon Lua modules parsed.
+- The fixes were visually verified in-game on both the Crafting and Characters tabs. Existing character records were retained.
+- The original v0.9.0 tag remains unchanged; this release is assembled from the tagged baseline plus reviewed fixes on main.

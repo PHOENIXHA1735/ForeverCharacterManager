@@ -6,6 +6,13 @@ on:
       - FCM_v090_RELEASE_NOTES.md
       - .github/workflows/publish-v090-release.yml
       - ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1
+      - ForeverCharacterManager/Core.lua
+      - ForeverCharacterManager/Crafting.lua
+      - ForeverCharacterManager/Scan.lua
+      - ForeverCharacterManager/UI.lua
+      - tests/README.md
+      - tests/qa_crafting_professions_v090.lua
+      - SOURCE_MANIFEST_SHA256.txt
   workflow_dispatch:
 permissions:
   contents: write
@@ -37,6 +44,14 @@ jobs:
           cp docs-current/ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1 release-source/ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1
           # Keep the Windows companion UI text encoding-safe as well.
           cp docs-current/ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1 release-source/ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1
+          # QA3: overlay the validated recipe-profession and blank-skill fixes
+          # from main without moving or replacing the original v0.9.0 tag.
+          cp docs-current/ForeverCharacterManager/Core.lua release-source/ForeverCharacterManager/Core.lua
+          cp docs-current/ForeverCharacterManager/Crafting.lua release-source/ForeverCharacterManager/Crafting.lua
+          cp docs-current/ForeverCharacterManager/Scan.lua release-source/ForeverCharacterManager/Scan.lua
+          cp docs-current/ForeverCharacterManager/UI.lua release-source/ForeverCharacterManager/UI.lua
+          cp docs-current/tests/README.md release-source/tests/README.md
+          cp docs-current/tests/qa_crafting_professions_v090.lua release-source/tests/qa_crafting_professions_v090.lua
           cp docs-current/SOURCE_MANIFEST_SHA256.txt release-source/SOURCE_MANIFEST_SHA256.txt
           mkdir -p release-source/docs
           cp docs-current/docs/FOREVERDB_API_KEY_SETUP.md release-source/docs/FOREVERDB_API_KEY_SETUP.md

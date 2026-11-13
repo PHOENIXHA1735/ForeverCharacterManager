@@ -1611,9 +1611,15 @@ local function buildRows(ui)
             "Last login: "..FCM:Age(c.lastSeen),"",
             "Professions:"}
         local has=false
-        for _,prof in pairs(c.professions or {}) do
-            p[#p+1]="  "..(prof.name or "?")..": "..tostring(prof.skill or 0).."/"..tostring(prof.maxSkill or "?")
-            has=true
+        for key,prof in pairs(c.professions or {}) do
+            if type(prof)=="table" then
+                local name=type(prof.name)=="string" and prof.name or key
+                if type(name)=="string" and name:match("%S") and
+                        tonumber(prof.skill) and tonumber(prof.skill)>0 then
+                    p[#p+1]="  "..name..": "..tostring(prof.skill).."/"..tostring(prof.maxSkill or "?")
+                    has=true
+                end
+            end
         end
         if not has then p[#p+1]="  Open your profession pane to scan" end
         p[#p+1]=""

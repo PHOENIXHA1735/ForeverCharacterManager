@@ -9,6 +9,59 @@ local function itemName(id)
 end
 FCM.ItemName = itemName
 
+local function validProfession(name)
+    if type(name) ~= "string" then return nil end
+    name = name:match("^%s*(.-)%s*$")
+    local lower = string.lower(name)
+    if name == "" or lower == "unknown" or lower == "unknown profession" then return nil end
+    return name
+end
+
+-- Forever's trade skill API can expose recipes from several professions while
+-- the open pane still reports one base profession. Attribute each spell to its
+-- own skill line instead of applying the pane name to every returned recipe.
+-- The companion's recipe reference is a fallback when that API is unavailable.
+-- An unverified fallback is never used to rewrite existing saved records.
+function FCM:RecipeProfession(recipeID, fallback)
+    local id = tonumber(recipeID)
+    local trade = C_TradeSkillUI
+    if id and trade and type(trade.GetProfessionInfoByRecipeID) == "function" then
+        -- Some client builds throw for unavailable recipe IDs; leave the
+        -- existing record intact instead of emitting one error per recipe.
+        local ok, info = pcall(trade.GetProfessionInfoByRecipeID, id)
+        local name = ok and type(info) == "table" and validProfession(info.professionName)
+        if name then return name, true end
+    end
+    local refs = self.externalData and self.externalData.recipes
+    local ref = refs and id and (refs[id] or refs[tostring(id)])
+    local name = ref and validProfession(ref.profession)
+    if name then return name, true end
+    return validProfession(fallback) or "Unknown profession", false
+end
+
+-- SavedVariables survive upgrades. Heal known bad classifications in place,
+-- including offline characters and unlearned recipe discoveries. Never erase
+-- recipes or infer a new profession from another open profession window.
+function FCM:RepairRecipeProfessions()
+    if not self.db then return 0 end
+    local corrected = 0
+    for _, ch in ipairs(self:Characters()) do
+        for _, collection in ipairs({ch.recipes or {}, ch.unlearnedRecipes or {}}) do
+            for key, recipe in pairs(collection) do
+                if type(recipe) == "table" then
+                    local name, verified = self:RecipeProfession(recipe.id or key)
+                    if verified and name ~= recipe.profession then
+                        recipe.profession = name
+                        corrected = corrected + 1
+                    end
+                end
+            end
+        end
+    end
+    if corrected > 0 then self.allRecipesCache = nil end
+    return corrected
+end
+
 function FCM:ScanRecipes()
     local trade = C_TradeSkillUI
     if not trade or not trade.GetAllRecipeIDs or not trade.GetRecipeInfo then return end
@@ -16,7 +69,8 @@ function FCM:ScanRecipes()
     if type(ids) ~= "table" or #ids == 0 then return end
     local professionInfo = safe(trade.GetBaseProfessionInfo) or {}
     local child = safe(trade.GetChildProfessionInfo) or {}
-    local profession = professionInfo.professionName or child.professionName or "Unknown profession"
+    local profession = validProfession(professionInfo.professionName) or
+        validProfession(child.professionName) or "Unknown profession"
     local skill = child.skillLevel or professionInfo.skillLevel
     local ch = self:Current()
     if not ch then return end
@@ -30,6 +84,7 @@ function FCM:ScanRecipes()
     ch.unlearnedRecipes=ch.unlearnedRecipes or {}
     for _, recipeID in ipairs(ids) do
         local info = safe(trade.GetRecipeInfo, recipeID)
+        local recipeProfession = self:RecipeProfession(recipeID, profession)
         if info and info.learned then
             local schematic = safe(trade.GetRecipeSchematic, recipeID, false)
             local output = safe(trade.GetRecipeOutputItemData, recipeID)
@@ -37,7 +92,7 @@ function FCM:ScanRecipes()
             local outputLink = output and output.hyperlink
             if not outputLink and trade.GetRecipeItemLink then outputLink = safe(trade.GetRecipeItemLink, recipeID) end
             local r = { id = recipeID, name = info.name or (schematic and schematic.name) or ("Recipe #" .. recipeID),
-                profession = profession, learned = true, outputID = outputID, outputLink = outputLink,
+                profession = recipeProfession, learned = true, outputID = outputID, outputLink = outputLink,
                 reagents = {}, quantity = math.max(1, tonumber(schematic and schematic.quantityMin) or 1),
                 complex = false, scanned = self:Now(),
                 source = safe(trade.GetRecipeSourceText, recipeID),
@@ -66,12 +121,12 @@ function FCM:ScanRecipes()
             local schematic = safe(trade.GetRecipeSchematic,recipeID,false)
             local output = safe(trade.GetRecipeOutputItemData,recipeID)
             ch.unlearnedRecipes[recipeID]={id=recipeID,
-                name=info.name or ("Recipe #"..recipeID),profession=profession,
+                name=info.name or ("Recipe #"..recipeID),profession=recipeProfession,
                 outputID=(schematic and schematic.outputItemID) or (output and output.itemID),
                 source=safe(trade.GetRecipeSourceText,recipeID),
                 scan=self:Now(),status="Visible, not learned"}
             -- Do not erase recipes recorded from another profession.
-            if ch.recipes[recipeID] and ch.recipes[recipeID].profession == profession then
+            if ch.recipes[recipeID] and ch.recipes[recipeID].profession == recipeProfession then
                 ch.recipes[recipeID] = nil
             end
         end
