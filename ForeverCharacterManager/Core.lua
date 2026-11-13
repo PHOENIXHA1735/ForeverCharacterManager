@@ -3,7 +3,8 @@
 local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
-FCM.version = "0.8.9"
+FCM.version = "0.9.0"
+FCM.build = "Release-20261112-Consolidated"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -31,10 +32,12 @@ end
 
 function FCM:CharacterKey()
     local guid = UnitGUID and UnitGUID("player")
-    local name, realm = UnitFullName and UnitFullName("player")
-    if not name and UnitName then name = UnitName("player") end
-    if not realm or realm == "" then realm = GetRealmName and GetRealmName() or "Unknown" end
-    return (guid and guid ~= "" and guid) or ((name or "Unknown") .. "-" .. realm)
+    -- Forever: UnitFullName's second value is the SURNAME, not a realm.
+    -- GUID remains the primary saved key so existing character records survive.
+    local name, surname = UnitFullName and UnitFullName("player")
+    if not name and UnitName then name, surname = UnitName("player") end
+    local fallback = (name or "Unknown") .. "-" .. (surname or "Unknown")
+    return (guid and guid ~= "" and guid) or fallback
 end
 
 function FCM:InitDB()
@@ -42,12 +45,26 @@ function FCM:InitDB()
     local db = FCM_DB
     db.schema = math.max(tonumber(db.schema) or 0, 5)
     db.characters = db.characters or {}
+    -- Non-destructive migration: v0.9.1 stored the Forever surname in realm.
+    -- Keep the old field for recovery but never interpret it as transfer access.
+    for _,ch in pairs(db.characters) do
+        if type(ch)=="table" and (not ch.surname or ch.surname=="") and
+           type(ch.realm)=="string" and ch.realm~="" and
+           not self:NormalizeRuleset(ch.realm) and
+           not string.lower(ch.realm):find("realm",1,true) then
+            ch.surname=ch.realm
+        end
+    end
     db.settings = db.settings or { mode = "dps", minimumUpgrade = 1, tooltip = true }
     db.settings.mode = db.settings.mode or "dps"
     -- Gear activity is saved on each character. Retain legacy DPS/Balanced/
     -- Survival selection as the starting secondary preference for old saves.
     db.settings.gearActivity = db.settings.gearActivity or "leveling"
     db.settings.minimumUpgrade = db.settings.minimumUpgrade or 1
+    -- BoE safety alerts use their own toggle; hiding normal addon tooltips
+    -- should not silently disable bag-loot protection.
+    db.settings.boeAlerts = db.settings.boeAlerts ~= false
+    db.settings.boeFutureLevels = math.max(0,math.min(30,tonumber(db.settings.boeFutureLevels) or 10))
     -- Minimap coordinates are saved as offsets from the minimap center.
     -- An existing v0.1.0 SavedVariables file remains compatible.
     db.settings.minimap = db.settings.minimap or { x = -66, y = 66 }
@@ -70,7 +87,8 @@ function FCM:InitDB()
     db.settings.dungeonView = db.settings.dungeonView or "dungeons"
     db.settings.dungeonLevelFilter = db.settings.dungeonLevelFilter or "all"
     db.settings.dungeonLootScope = db.settings.dungeonLootScope or "class"
-    if db.settings.dungeonLootScope ~= "all" and db.settings.dungeonLootScope ~= "upgrades" then
+    if db.settings.dungeonLootScope ~= "all" and db.settings.dungeonLootScope ~= "upgrades" and
+       db.settings.dungeonLootScope ~= "spec" then
         db.settings.dungeonLootScope = "class"
     end
     if db.settings.factionView ~= "Alliance" and db.settings.factionView ~= "Horde" then
@@ -126,6 +144,67 @@ function FCM:NormalizeFaction(faction)
     return nil
 end
 
+-- WoW Forever has region-wide RULESETS, not selectable named realms.
+-- Normalize known in-game/companion labels to a stable per-character value.
+function FCM:NormalizeRuleset(value)
+    if type(value)~="string" then return nil end
+    local x=string.lower(value):gsub("[^%w]", "")
+    if x=="" then return nil end
+    if x=="rppvp" or x=="roleplaypvp" or x:match("rppvp$") or x:match("roleplaypvp$") then return "RP-PvP" end
+    if x=="rp" or x=="roleplay" or x=="roleplaying" or x:match("roleplay$") or x:match("realm%d+rp$") then return "RP" end
+    if x=="pvp" or x:match("pvp$") then return "PvP" end
+    if x=="pve" or x=="normal" or x:match("pve$") or x:match("normal$") then return "Normal" end
+    if x=="hardcore" or x:match("hardcore$") then return "Hardcore" end
+    return nil
+end
+
+function FCM:CurrentRuleset()
+    -- An installed identity library can supply exact RP-PvP differentiation.
+    if type(LibStub)=="function" or type(LibStub)=="table" then
+        local ok,lib=pcall(LibStub,"LibForeverIdentity-1.0",true)
+        if ok and lib and type(lib.GetRuleset)=="function" then
+            local valid,value=pcall(lib.GetRuleset,lib)
+            if valid then
+                local rule=self:NormalizeRuleset(value)
+                if rule then return rule end
+            end
+        end
+    end
+    -- Forever's hidden backend string often ends in PvE/PvP/RP. It is used
+    -- ONLY to detect a rule suffix, never as a realm/identity or trade key.
+    if type(GetRealmName)=="function" then
+        local ok,label=pcall(GetRealmName)
+        if ok then return self:NormalizeRuleset(label) end
+    end
+    return nil
+end
+
+function FCM:CurrentRegion()
+    local mapping={[1]="US",[2]="KR",[3]="EU",[4]="TW",[5]="CN"}
+    if type(GetCurrentRegion)=="function" then
+        local ok,id=pcall(GetCurrentRegion)
+        if ok and mapping[id] then return mapping[id] end
+    end
+    -- A backend string may mention its region; never guess from a surname.
+    if type(GetRealmName)=="function" then
+        local ok,label=pcall(GetRealmName)
+        if ok and type(label)=="string" then
+            local tag=label:upper():match("^CAMWOW%s+(%a%a)%d*")
+            if tag=="US" or tag=="EU" or tag=="KR" or tag=="TW" or tag=="CN" then return tag end
+        end
+    end
+    return nil
+end
+
+function FCM:FullCharacterName(ch)
+    if not ch then return "Unknown" end
+    local first=type(ch.name)=="string" and ch.name or "Unknown"
+    local surname=type(ch.surname)=="string" and ch.surname or ""
+    if surname=="" and type(ch.realm)=="string" and not self:NormalizeRuleset(ch.realm) and
+       not string.lower(ch.realm):find("realm",1,true) then surname=ch.realm end
+    return surname~="" and (first.." "..surname) or first
+end
+
 function FCM:FactionView()
     local view=self.db and self.db.settings and self.db.settings.factionView
     return (view=="Horde" or view=="Alliance") and view or "all"
@@ -144,22 +223,22 @@ function FCM:VisibleCharacters()
     return result
 end
 
--- Conservative eligibility: cross-faction or cross-ruleset crafting/material
--- exchange must not be promised. Empty faction/realm values are NOT permission.
--- Characters can still be compared and inspected regardless of these restrictions.
+-- Account-wide tracking is not a transfer permission. Only characters with
+-- confirmed matching faction, ruleset and region may be direct recipients.
 function FCM:CanCollaborate(a,b)
     if not a or not b then return false,"Unknown character" end
     if a.key and b.key and a.key==b.key then return true,"Same character" end
     local af,bf=self:NormalizeFaction(a.faction),self:NormalizeFaction(b.faction)
     if not af or not bf then return false,"Faction not recorded" end
     if af~=bf then return false,"Opposing factions cannot directly transfer items" end
-    local ar,br=type(a.realm)=="string" and string.lower(a.realm) or "",
-                type(b.realm)=="string" and string.lower(b.realm) or ""
-    if ar=="" or br=="" or ar=="unknown" or br=="unknown" then
-        return false,"Realm or ruleset not recorded"
-    end
-    if ar~=br then return false,"Different realms or rulesets" end
-    return true,"Same faction and realm"
+    local ar,br=self:NormalizeRuleset(a.ruleset),self:NormalizeRuleset(b.ruleset)
+    if not ar or not br then return false,"Ruleset not yet verified; log into this character" end
+    if ar~=br then return false,"Different rulesets ("..ar.." / "..br..")" end
+    local regionA=type(a.region)=="string" and string.upper(a.region) or ""
+    local regionB=type(b.region)=="string" and string.upper(b.region) or ""
+    if regionA=="" or regionB=="" then return false,"Region not yet verified" end
+    if regionA~=regionB then return false,"Different regions" end
+    return true,"Same faction, ruleset and region"
 end
 
 function FCM:VisibleRequests()
@@ -179,11 +258,17 @@ end
 function FCM:FindCharacter(query)
     if not self.db or not query then return nil end
     if self.db.characters[query] then return self.db.characters[query] end
-    local q = string.lower(query)
-    for _, ch in pairs(self.db.characters) do
-        if string.lower(ch.name or "") == q or string.lower((ch.name or "") .. "-" .. (ch.realm or "")) == q then return ch end
+    local q=string.lower(tostring(query)):gsub("%-"," "):gsub("%s+"," ")
+    local firstMatch,count=nil,0
+    for _,ch in pairs(self.db.characters) do
+        local full=string.lower(self:FullCharacterName(ch))
+        if full==q then return ch end
+        if string.lower(ch.name or "")==q then
+            firstMatch=ch
+            count=count+1
+        end
     end
-    return nil
+    return count==1 and firstMatch or nil
 end
 
 -- Remove exactly one saved character record (by unique key, not by name).
@@ -258,7 +343,7 @@ function FCM:SetGearStyle(char, style, activity)
 end
 
 function FCM:DisplayCharacter(ch)
-    return (ch and ch.name or "Unknown") .. " - " .. (ch and ch.realm or "Unknown")
+    return self:FullCharacterName(ch)
 end
 
 function FCM:Age(timestamp)
@@ -268,6 +353,50 @@ function FCM:Age(timestamp)
     if delta < 3600 then return math.floor(delta / 60) .. "m ago" end
     if delta < 86400 then return math.floor(delta / 3600) .. "h ago" end
     return math.floor(delta / 86400) .. "d ago"
+end
+
+-- Scan timestamps are saved on each character. A cached record can be useful
+-- while its owner is offline, but "recent" is not proof of current inventory.
+-- Thresholds are conservative review prompts, never proof data has changed.
+local scanSources = {
+    gear={stamp="gearStamp",days=7},
+    bags={stamp="bagsStamp",days=2},
+    bank={stamp="bankStamp",days=7},
+    professions={stamp="professionsStamp",days=14},
+    recipes={stamp="recipeStamp",days=14},
+    talents={stamp="talentStamp",days=7},
+    reputation={stamp="reputationStamp",days=7},
+}
+function FCM:ScanFreshness(ch,category)
+    local source=scanSources[category]
+    if not source or not ch then
+        return {status="unknown",timestamp=nil,label="Never scanned",age=nil}
+    end
+    local stamp=tonumber(ch[source.stamp])
+    -- Older save files stored per-profession timestamps but no overall stamp.
+    if category=="professions" and (not stamp or stamp<=0) then
+        for _,entry in pairs(ch.professions or {}) do
+            local older=type(entry)=="table" and tonumber(entry.scan)
+            if older and older>0 and (not stamp or older>stamp) then stamp=older end
+        end
+    end
+    if not stamp or stamp<=0 then
+        return {status="unknown",timestamp=nil,label="Never scanned",age=nil}
+    end
+    local now=tonumber(self:Now()) or 0
+    local age=math.max(0,now-stamp)
+    local threshold=source.days*86400
+    local current=ch.key~=nil and ch.key==self.currentKey and
+        type(self.sessionStartedAt)=="number" and stamp>=self.sessionStartedAt
+    local status=(age>threshold) and "outdated" or (current and "current" or "cached")
+    local ageText=self:Age(stamp)
+    local label=status=="current" and ("Current session ("..ageText..")") or
+        (status=="outdated" and ("Review - saved "..ageText) or ("Saved "..ageText))
+    return {status=status,timestamp=stamp,age=age,days=source.days,
+        current=current,label=label}
+end
+function FCM:ScanFreshnessLabel(ch,category)
+    return self:ScanFreshness(ch,category).label
 end
 
 function FCM:KnownNamesForRecipe(recipeID)
@@ -291,6 +420,8 @@ f:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_LOGIN" then
         if not FCM.db then FCM:InitDB() end
         FCM.currentKey = FCM:CharacterKey()
+        FCM.sessionStartedAt = FCM:Now()
+        FCM._boeBagBaselineReady=false
         local active=FCM:Current()
         -- Start a new leveling session without carrying elapsed time over logout.
         active.sessionAnchor=FCM:Now()
@@ -371,6 +502,13 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     if cmd == "scan" then
         local ok, count, total=FCM:ScanAll()
         FCM:Say("Manual scan "..(ok and "completed" or "partially completed").." ("..tostring(count).."/"..tostring(total).."). Open profession and bank windows for those snapshots.")
+    elseif cmd == "ahdiag" then
+        local itemID=tonumber(rest) or 4537
+        if type(FCM.AHPriceDiagnostic)=="function" then
+            FCM:AHPriceDiagnostic(itemID)
+        else
+            FCM:Say("AH diagnostics are unavailable in this build.")
+        end
     elseif cmd == "diag" or cmd == "diagnostics" then
         if FCM.UI then FCM.UI.tab="Diagnostics" end
         if FCM.Toggle then
@@ -381,6 +519,34 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         if FCM.Toggle then
             if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
         end
+    elseif cmd == "boealerts" then
+        local value=string.lower(rest or "")
+        if value=="on" or value=="off" then
+            FCM.db.settings.boeAlerts=(value=="on")
+            FCM:Say("New-item BoE alerts: "..value)
+        else FCM:Say("Usage: /fcm boealerts on|off") end
+    elseif cmd == "boelevels" then
+        local n=tonumber(rest)
+        if n and n>=0 and n<=30 and n==math.floor(n) then
+            FCM.db.settings.boeFutureLevels=n
+            FCM:Say("BoE future-upgrade lookahead: "..n.." levels")
+        else FCM:Say("Usage: /fcm boelevels <0-30>") end
+    elseif cmd == "decheck" or cmd == "boe" then
+        local id=tonumber((rest or ""):match("item:(%d+)")) or tonumber(rest)
+        if not id then
+            FCM:Say("Usage: /fcm decheck <itemID or item link> (uses saved roster scans)")
+        elseif type(FCM.BoEProtectionCheck)=="function" then
+            local assessment=FCM:BoEProtectionCheck(id,FCM:Current())
+            for _,line in ipairs(FCM:BoEProtectionLines(assessment,8)) do FCM:Say(line) end
+        else FCM:Say("BoE advisor unavailable.") end
+    elseif cmd == "farm" then
+        local itemID,count=(rest or ""):match("^(%d+)%s*(%d*)$")
+        itemID,count=tonumber(itemID),tonumber(count) or 1
+        if itemID and itemID>0 and count>0 and count<=1000000 and FCM.FarmAdviceLines then
+            local advice=FCM:FarmAdviceLines(itemID,count,FCM:Current(),4)
+            for i=1,math.min(#advice,23) do FCM:Say(advice[i]) end
+            FCM:Say("For full details: /fcm item "..itemID)
+        else FCM:Say("Usage: /fcm farm <itemID> [quantity] (reference data only)") end
     elseif cmd == "item" then
         if FCM.UI then
             FCM.UI.tab="Item Explorer"
@@ -513,11 +679,30 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     elseif cmd == "talentadd" then
         local level, name = (rest or ""):match("^(%d+)%s+(.+)$")
         level = tonumber(level)
-        if level and level >= 1 and level <= 100 and name then
-            FCM:SetTalentOverride(FCM:Current(),level,name)
+        if level and level >= 10 and level <= 60 and name and FCM:Current() and
+           FCM:SetTalentOverride(FCM:Current(),level,name) then
             FCM:Say("Custom talent for "..FCM:TalentProfileID(FCM:Current())..": level " .. level .. " => " .. name)
             if FCM.Refresh then FCM:Refresh() end
         else FCM:Say("Usage: /fcm talentadd <level> <talent name>") end
+    elseif cmd == "talentrank" then
+        local level,rank,name=(rest or ""):match("^(%d+)%s+(%d+)%s+(.+)$")
+        local ch=FCM:Current()
+        if ch and FCM:SetTalentOverrideRank(ch,tonumber(level),tonumber(rank),name) then
+            FCM:Say("Saved custom talent rank for "..ch.name..": level "..level..
+                " -> "..name.." rank "..rank.." (unverified manual input).")
+            if FCM.Refresh then FCM:Refresh() end
+        else
+            FCM:Say("Usage: /fcm talentrank <level 10-60> <rank 1-10> <talent name>")
+        end
+    elseif cmd == "talentaudit" then
+        local ch=FCM:Current()
+        if ch and FCM.TalentAudit then
+            local audit=FCM:TalentAudit(ch)
+            FCM:Say(audit.status.." | Guide points "..audit.reviewed..
+                " | Matched "..audit.matched.." | Review "..audit.needsReview)
+            if FCM.UI then FCM.UI.tab="Talents" end
+            if FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Talent audit not available.") end
     elseif cmd == "talentclear" then
         local level = tonumber(rest)
         if level and FCM:SetTalentOverride(FCM:Current(),level,nil) then
@@ -535,14 +720,14 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         local recipe = tonumber(rest)
         if recipe then FCM.db.gates[recipe] = nil; FCM:Say("Removed gate for recipe " .. recipe) end
     elseif cmd == "help" then
-        FCM:Say("/fcm | scan | upgrades | shopping | item <name or ID> | diag | minimap reset | ui reset")
+        FCM:Say("/fcm | scan | upgrades | shopping | item <name or ID> | farm <itemID> [quantity] | ahdiag [itemID] | diag | minimap reset | ui reset")
         FCM:Say("/fcm threshold <score> | notifications on|off | legacygoal <goal>")
         FCM:Say("/fcm requeststatus <number> requested|gathering|ready|crafted|delivered|cancelled")
         FCM:Say("Characters tab: select a saved character and choose Remove Saved Character. Confirmation required. The active character is protected.")
         FCM:Say("Requests tab: see crafts assigned to you, mark them complete, or cancel them.")
         FCM:Say("/fcm talentbuild <profile ID> | /fcm talentsource icy|custom | /fcm talentspec <name>")
         FCM:Say("Available profile IDs for this spec: "..table.concat(FCM:TalentProfileOrder(FCM:Current())," | "))
-        FCM:Say("/fcm talentadd <level> <talent> | /fcm talentclear <level>")
+        FCM:Say("/fcm talentadd <level> <talent> | /fcm talentrank <level> <rank> <talent> | /fcm talentclear <level> | /fcm talentaudit")
         FCM:Say("/fcm repgate <recipeID> <factionID> <standing 1-8> | /fcm clearrepgate <recipeID>")
     else
         if FCM.Toggle then FCM:Toggle() else FCM:Say("UI not loaded; use /reload") end

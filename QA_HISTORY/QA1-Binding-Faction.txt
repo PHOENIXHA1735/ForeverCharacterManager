@@ -1,0 +1,41 @@
+FOREVER CHARACTER MANAGER v0.9.1 — QA1 TEST BUILD
+Build: QA1-20261112-BindingFaction
+Date: 2026-11-12
+
+PURPOSE
+Targeted QA correction to the v0.9.0-Faction-BoE-Fix4 test build.
+The stable GitHub v0.8.9 release is not changed by this ZIP.
+
+WHAT CHANGED
+- Scan.lua: correctly constructs ItemLocation with the required receiver for bag and bank slot checks, validates instances, and safely handles C_Item.IsBound errors.
+- Scan.lua: preserves the legitimate false result from C_Container.GetContainerItemInfo().isBound; false means unbound, not unknown.
+- Scan.lua: retains unknown rather than assuming an item is transferable when strict binding checks fail, and limits duplicate binding errors during one scan pass.
+- Core.lua, both .toc files: v0.9.1 and unique build identifier.
+- Diagnostics.lua: shows the build identifier so screenshots identify the exact source in use.
+- Tooltips.lua: shows FCM version and spec name on personal-gear upgrade suggestions.
+- Includes the v0.9.0 faction restriction code, which excludes opposing factions / incompatible realms from KEEP/REVIEW recipients; adds explicit excluded text for context.
+
+QA PERFORMED
+- All 23 shipped top-level Lua modules parsed successfully with texluac.
+- 16 deterministic offline regression scenarios passed using a mocked WoW environment.
+- Confirmed the v0.9.1 package differs from uploaded v0.9.0 only in six intended code/config files and by omission of the generated price stub.
+- The change has not been tested in the live WoW Forever client. Real in-game tests remain essential.
+
+IMPORTANT FOR USER DATA
+- This is an UPDATE package for an EXISTING FCM installation, not a clean-install package.
+- Companion-generated AHPrices.generated.lua and ExternalData.generated.lua are deliberately NOT included, to avoid overwriting your local reference data or AH prices.
+- Do NOT delete the existing addon directory. Do NOT delete or replace WTF/SavedVariables/FCM_DB.lua.
+- No credentials or personal SavedVariables are included.
+
+INSTALL
+1. Exit WoW and close the Windows FCM Data Companion.
+2. Back up the existing Interface/AddOns/ForeverCharacterManager folder and WTF/SavedVariables.
+3. Extract the ZIP into a temporary folder, not directly into the game.
+4. Copy the included ForeverCharacterManager folder into Interface/AddOns, merging with the existing folder; replace matching files. Do NOT delete the old folder first.
+5. Reopen WoW. Diagnostics should show FCM v0.9.1 / Build: QA1-20261112-BindingFaction.
+6. On Frosty, open Diagnostics and select Clear Error Log, then Scan. Recheck: repeated C_Item.IsBound errors should not recur.
+7. Hover the Reinforced Linen Cape. Itty (Horde) must be marked excluded and must not drive KEEP/REVIEW. Spotty (Alliance) can qualify only if transferability is established. Compare with the equipped Frost-damage cape using Frost and Arcane spec settings.
+8. Send screenshots of Diagnostics and the cape tooltip for any remaining issues.
+
+ROLLBACK
+Restore the backed-up addon folder; leave SavedVariables and generated data unchanged.

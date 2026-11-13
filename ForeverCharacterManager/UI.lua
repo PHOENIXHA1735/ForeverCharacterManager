@@ -420,35 +420,80 @@ function UI:RenderDungeonDetail(r,ch)
     if r.newToForever then line("New to WoW Forever",17,"93ddb9") end
     gap(9)
     local scope=FCM.db.settings.dungeonLootScope or "class"
+    if scope=="spec" then
+        line("Spec-fit uses stat patterns, not BIS or proven specialization value.",39,"aeb9ca")
+    elseif scope=="upgrades" then
+        line("Upgrades are weighted estimates from cached client item stats.",39,"aeb9ca")
+    end
     local filtered=0
     local seen={}
     local shown=0
+    local eligibilityCache={}
+    local focus=self.dungeonBossFocus
+    local focusedIndex=(focus and focus.dungeon==tostring(r.id)) and focus.index or nil
     local function allowed(itemID)
-        local eligibility,reason=FCM:DungeonItemEligibility(itemID,ch)
-        local upgrade=ch and FCM.Gear and FCM.Gear:DungeonUpgradeAssessment(itemID,ch) or nil
-        local ok=scope=="all" or (scope=="class" and eligibility~="other") or
-            (scope=="upgrades" and eligibility~="other" and upgrade and upgrade.state=="upgrade")
-        return ok,eligibility,reason,upgrade
+        local cache=eligibilityCache[itemID]
+        if not cache then
+            local eligibility,reason=FCM:DungeonItemEligibility(itemID,ch)
+            local upgrade=ch and FCM.Gear and FCM.Gear:DungeonUpgradeAssessment(itemID,ch) or nil
+            local fit,fitReason=FCM:DungeonSpecFit(itemID,ch)
+            cache={eligibility=eligibility,reason=reason,upgrade=upgrade,fit=fit,fitReason=fitReason}
+            eligibilityCache[itemID]=cache
+        end
+        local eligible=cache.eligibility~="other" and cache.eligibility~="future"
+        local ok=scope=="all" or (scope=="class" and cache.eligibility~="other") or
+            (scope=="spec" and eligible and cache.fit=="match") or
+            (scope=="upgrades" and eligible and cache.upgrade and cache.upgrade.state=="upgrade")
+        return ok,cache.eligibility,cache.reason,cache.upgrade,cache.fit,cache.fitReason
+    end
+    local function lootKey(bossIndex,itemID)
+        return tostring(r.id)..":"..(bossIndex and ("boss:"..bossIndex) or "associated")..":"..tostring(itemID)
+    end
+    local function unassignedDrops()
+        return FCM:DungeonAssociatedDrops(r)
+    end
+    -- Sort a copy, never the saved/imported data. Confirmed positive weighted
+    -- comparisons appear before unknowns; deterministic name ordering follows.
+    local function orderedDrops(drops)
+        local sorted={}
+        for _,drop in ipairs(drops or {}) do sorted[#sorted+1]=drop end
+        table.sort(sorted,function(a,b)
+            local aid,bid=tonumber(a.id),tonumber(b.id)
+            local _,_,_,aa=allowed(aid)
+            local _,_,_,bb=allowed(bid)
+            local av=(aa and aa.state=="upgrade") and aa.delta or nil
+            local bv=(bb and bb.state=="upgrade") and bb.delta or nil
+            if av and bv and av~=bv then return av>bv end
+            if (av~=nil)~=(bv~=nil) then return av~=nil end
+            local an,bn=tostring(a.name or ""),tostring(b.name or "")
+            if an~=bn then return an<bn end
+            return (aid or 0)<(bid or 0)
+        end)
+        return sorted
     end
     -- Selected loot details stay near the top, rather than expanding at the
     -- bottom of a long, scrolling boss/loot list.
-    local selectedDrop,selectedBoss,selectedVerified
-    local function checkSelected(drop,bossName,verified)
+    local selectedDrop,selectedBoss,selectedBossLinked
+    local function checkSelected(drop,bossName,bossIndex)
         local id=tonumber(drop and drop.id)
-        if id and self.dungeonItemSelection==tostring(r.id)..":"..tostring(id) then
+        if id and self.dungeonItemSelection==lootKey(bossIndex,id) then
             local visible=allowed(id)
             if visible then
-                selectedDrop,selectedBoss,selectedVerified=drop,bossName,verified
+                selectedDrop,selectedBoss,selectedBossLinked=drop,bossName,bossIndex~=nil
             end
         end
     end
-    for _,boss in ipairs(r.bosses or {}) do
-        for _,drop in ipairs(boss.loot or {}) do
-            checkSelected(drop,tostring(boss.name or "Boss name unavailable"),true)
+    for index,boss in ipairs(r.bosses or {}) do
+        if not focusedIndex or focusedIndex==index then
+            for _,drop in ipairs(boss.loot or {}) do
+                checkSelected(drop,tostring(boss.name or "Boss name unavailable"),index)
+            end
         end
     end
-    for _,drop in ipairs(r.dungeonLoot or {}) do
-        if not selectedDrop then checkSelected(drop,nil,false) end
+    if not focusedIndex then
+        for _,drop in ipairs(unassignedDrops()) do
+            if not selectedDrop then checkSelected(drop,nil,nil) end
+        end
     end
     if selectedDrop then
         local id=tonumber(selectedDrop.id)
@@ -536,10 +581,15 @@ function UI:RenderDungeonDetail(r,ch)
             end
             line("Unmodeled: procs, caps, set bonuses, PvP effects.",33,"99aaba",8)
         end
-        if selectedVerified then
-            line("Source-reported boss: "..short(selectedBoss or "Unknown",40),22,"c7d6e9",8)
+        if selectedBossLinked then
+            local provenance=tostring(selectedDrop.sourceType or "legacy")
+            line("Reference-linked boss: "..short(selectedBoss or "Unknown",39),22,"c7d6e9",8)
+            line(provenance=="boss-direct" and "Link: boss loot payload (ForeverDB)" or
+                (provenance=="boss-explicit" and "Link: explicit boss field (ForeverDB)" or
+                "Link: legacy import; provenance not recorded"),32,"aeb9ca",8)
+            line("Boss/drop not confirmed by live game observation.",32,"e4b27e",8)
         else
-            line("Dungeon-associated; specific boss not verified",32,"c7d6e9",8)
+            line("Dungeon-associated; boss not verified.",32,"e4b27e",8)
         end
         line("Right-click an item row for the full game tooltip.",31,"99aaba",8)
         gap(7)
@@ -556,7 +606,7 @@ function UI:RenderDungeonDetail(r,ch)
             not name:find("name unavailable",1,true) then bossNames[#bossNames+1]=name end
         bossRows[#bossRows+1]=boss
     end
-    line("BOSSES  ("..#bossNames.." named)",20,"ffd76d")
+    line("BOSSES  ("..#bossNames.." named in reference)",26,"ffd76d")
     if #bossNames==0 then
         line("Boss names not available in imported data.",35,"aeb9ca")
     else
@@ -567,16 +617,16 @@ function UI:RenderDungeonDetail(r,ch)
         end
     end
     gap(11)
-    local function itemRow(drop, bossName, verifiedBoss)
+    local function itemRow(drop, bossName, bossIndex)
         local id=tonumber(drop.id)
         if not id or id<=0 then return end
-        local show,eligibility,why,upgrade=allowed(id)
+        local show,eligibility,why,upgrade,fit,fitReason=allowed(id)
         if not show then filtered=filtered+1;return end
-        if seen[id] then return end
-        seen[id]=true
+        local key=lootKey(bossIndex,id)
+        if seen[key] then return end
+        seen[key]=true
         shown=shown+1
         local meta=itemMetadata(id,drop)
-        local key=tostring(r.id)..":"..id
         local selected=self.dungeonItemSelection==key
         local row=self:AcquireDungeonWidget("row")
         row:ClearAllPoints()
@@ -591,8 +641,10 @@ function UI:RenderDungeonDetail(r,ch)
         if eligibility=="other" then verdict="Not for this class"
         elseif upgrade and upgrade.state=="upgrade" then verdict="Potential upgrade"
         elseif upgrade and upgrade.state=="not-upgrade" then verdict="Not an upgrade"
-        elseif eligibility=="candidate" or eligibility=="future" then verdict="Potential class item" end
-        row.sub:SetText(short(label.."  |  "..verdict,48))
+        elseif eligibility=="future" then verdict="Requires a higher level"
+        elseif eligibility=="candidate" then verdict="Potential class item" end
+        local fitLabel=fit=="match" and "spec fit?" or (fit=="offspec" and "off-spec?" or "")
+        row.sub:SetText(short(label.."  |  "..verdict..(fitLabel~="" and (" | "..fitLabel) or ""),51))
         row.sub:SetWidth(width-70)
         -- Left click opens a readable in-panel detail area at the top.
         -- Only right click opens the game's large (and addon-extended) tooltip.
@@ -615,39 +667,46 @@ function UI:RenderDungeonDetail(r,ch)
         row:Show()
         y=y+54
     end
-    line("SOURCE-ATTRIBUTED BOSS LOOT",20,"ffd76d")
+    line("FOREVERDB BOSS-LINKED LOOT (reference, not confirmed)",38,"ffd76d")
     local bossDropCount=0
-    for _,boss in ipairs(bossRows) do
-        local drops=boss.loot or {}
-        if #drops>0 then
-            bossDropCount=bossDropCount+#drops
-            local bossName=tostring(boss.name or "Boss name unavailable")
-            line(short(bossName,38),20,"c7d6e9")
-            for _,drop in ipairs(drops) do itemRow(drop,bossName,bossName~="Boss name unavailable") end
+    for index,boss in ipairs(bossRows) do
+        if not focusedIndex or focusedIndex==index then
+            local drops=boss.loot or {}
+            if #drops>0 then
+                bossDropCount=bossDropCount+#drops
+                local bossName=tostring(boss.name or "Boss name unavailable")
+                line(short(bossName,38),20,"c7d6e9")
+                for _,drop in ipairs(orderedDrops(drops)) do itemRow(drop,bossName,index) end
+            end
         end
     end
     if bossDropCount==0 then
-        line("No individual boss loot imported yet.",23,"aeb9ca")
+        line("No boss-linked loot records for this selection.",35,"aeb9ca")
     else
-        line("Boss attribution is from reference data, not verified in-game.",35,"aeb9ca")
+        line("Source-linked, not confirmed in the live game.",31,"aeb9ca")
     end
     gap(9)
-    line("DUNGEON-ASSOCIATED ITEMS",21,"ffd76d")
-    line("Specific boss unverified. Listed items are not confirmed drops.",35,"aeb9ca")
-    local unassigned=r.dungeonLoot or {}
-    local before=shown
-    for _,drop in ipairs(unassigned) do itemRow(drop,nil,false) end
-    if #unassigned==0 then
-        line("No dungeon-associated items imported yet.",23,"aeb9ca")
-    elseif shown==before then
-        line("No additional items match the filter.",23,"aeb9ca")
+    if not focusedIndex then
+        line("DUNGEON-ASSOCIATED (BOSS UNKNOWN)",23,"ffd76d")
+        line("No boss inferred; these are not confirmed drops.",33,"aeb9ca")
+        local unassigned=unassignedDrops()
+        local before=shown
+        for _,drop in ipairs(orderedDrops(unassigned)) do itemRow(drop,nil,nil) end
+        if #unassigned==0 then
+            line("No dungeon-only item associations imported.",29,"aeb9ca")
+        elseif shown==before then
+            line("No associated items match the filter.",29,"aeb9ca")
+        end
+    else
+        line("Boss filter active; dungeon-only associations hidden.",34,"aeb9ca")
     end
     if filtered>0 then
         gap(6)
         line(tostring(filtered).." items hidden by current loot filter.",19,"abb9c9")
     end
     gap(11)
-    line("Source: ForeverDB.net  |  Verify with live game data.",38,"96a3b3")
+    line("Reference: "..tostring(r.sourceProvider or "ForeverDB").."  |  Imported "..tostring(r.referenceCheckedAt or "date unknown"),34,"96a3b3")
+    line("Reported sources are not confirmed live drops.",25,"96a3b3")
     self.detailChild:SetHeight(math.max(340,y+12))
 end
 
@@ -707,14 +766,14 @@ function UI:RefreshProfessionTabs(ch)
         position=position+1
         local widget=self.tabButtons[tab]
         widget:ClearAllPoints()
-        widget:SetPoint("TOPLEFT",self.sidebar,"TOPLEFT",7,-7-(position-1)*24)
+        widget:SetPoint("TOPLEFT",self.sidebarContent,"TOPLEFT",7,-7-(position-1)*24)
         if tab=="Professions" and not inserted then
             inserted=true
             for i,name in ipairs(names) do
                 local b=self.professionButtons[i]
                 local destination="Profession:"..string.lower(name)
                 if not b then
-                    b=button(self.sidebar,name,131,23,function() self:Navigate(b.destination) end)
+                    b=button(self.sidebarContent,name,131,23,function() self:Navigate(b.destination) end)
                     self.professionButtons[i]=b
                 end
                 b.destination=destination
@@ -722,9 +781,16 @@ function UI:RefreshProfessionTabs(ch)
                 b:SetEnabled(self.tab~=destination)
                 b:ClearAllPoints()
                 position=position+1
-                b:SetPoint("TOPLEFT",self.sidebar,"TOPLEFT",7,-7-(position-1)*24)
+                b:SetPoint("TOPLEFT",self.sidebarContent,"TOPLEFT",7,-7-(position-1)*24)
                 b:Show()
             end
+        end
+    end
+    if self.sidebarContent then self.sidebarContent:SetHeight(math.max(400,position*24+14)) end
+    if self.sidebarScroll then
+        local maxScroll=math.max(0,(self.sidebarContent:GetHeight() or 0)-(self.sidebarScroll:GetHeight() or 1))
+        if (self.sidebarScroll:GetVerticalScroll() or 0)>maxScroll then
+            self.sidebarScroll:SetVerticalScroll(maxScroll)
         end
     end
 end
@@ -802,6 +868,9 @@ function UI:Create()
     if f.SetBackdrop then f:SetBackdrop({edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize=24, insets={left=5,right=5,top=5,bottom=5}}) end
     text(f,"Forever Character Manager", "GameFontNormalLarge", 20, -16, 700)
     text(f,"WoW Forever  |  v"..FCM.version.."  |  Character data is recorded when each toon logs in", "GameFontHighlightSmall", 22, -42, 920)
+    local sources=f:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall")
+    sources:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",22,8)
+    sources:SetText("Data from ForeverDB.net (https://foreverdb.net)  |  Prices from AHledger (https://ahledger.com)")
     -- ESC is handled by the Blizzard UI panel close stack, not by an OnKeyDown
     -- handler that could swallow normal gameplay input.
     if type(UISpecialFrames)=="table" then
@@ -819,14 +888,34 @@ function UI:Create()
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
     background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrades", "Characters", "Gear", "Crafting", "Requests", "Shopping", "Professions", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "Settings", "Diagnostics", "Help"}
+    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "Settings", "Diagnostics", "Help"}
+    -- Sidebar can exceed the window height when a character has multiple
+    -- profession tabs. Keep every destination reachable with wheel or arrows.
+    local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
+    sidebarScroll:SetPoint("TOPLEFT",sidebar,"TOPLEFT",0,-4)
+    sidebarScroll:SetPoint("BOTTOMRIGHT",sidebar,"BOTTOMRIGHT",0,30)
+    local sidebarContent=CreateFrame("Frame",nil,sidebarScroll)
+    sidebarContent:SetSize(145,540)
+    sidebarScroll:SetScrollChild(sidebarContent)
+    local function sidebarStep(delta)
+        local maxScroll=math.max(0,(sidebarContent:GetHeight() or 0)-(sidebarScroll:GetHeight() or 1))
+        sidebarScroll:SetVerticalScroll(math.max(0,math.min(maxScroll,(sidebarScroll:GetVerticalScroll() or 0)+delta)))
+    end
+    sidebarScroll:EnableMouseWheel(true)
+    sidebarScroll:SetScript("OnMouseWheel",function(_,delta) sidebarStep(-delta*72) end)
+    local up=button(sidebar,"Up",61,22,function() sidebarStep(-72) end)
+    up:SetPoint("BOTTOMLEFT",sidebar,"BOTTOMLEFT",7,5)
+    local down=button(sidebar,"Down",61,22,function() sidebarStep(72) end)
+    down:SetPoint("LEFT",up,"RIGHT",7,0)
     self.sidebar=sidebar
+    self.sidebarScroll=sidebarScroll
+    self.sidebarContent=sidebarContent
     self.sidebarTabs=tabs
     self.tabButtons={}
     self.professionButtons={}
     for _,tab in ipairs(tabs) do
         local selectedTab=tab
-        self.tabButtons[tab]=button(sidebar,tab,131,23,function() self:Navigate(selectedTab) end)
+        self.tabButtons[tab]=button(sidebarContent,tab,131,23,function() self:Navigate(selectedTab) end)
     end
 
     local panel = CreateFrame("Frame",nil,f)
@@ -1037,6 +1126,9 @@ function UI:Create()
     end)
     self.dungeonLootButton:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-318,10)
     self.dungeonLootButton:Hide()
+    self.dungeonBossButton=button(panel,"Boss: All",146,25,function() self:ShowDungeonBossMenu() end)
+    self.dungeonBossButton:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-471,10)
+    self.dungeonBossButton:Hide()
 
     -- Talent settings are per-character. These only appear on the Talents tab,
     -- outside the scrolling detail area so they never cover recommendations.
@@ -1232,17 +1324,35 @@ end
 function UI:ShowDungeonLootMenu()
     local options={}
     for _,choice in ipairs({
-        {"Potential upgrades (verified stats)","upgrades"},
+        {"Potential upgrades (known stats)","upgrades"},
+        {"Likely spec-fit (stat heuristic)","spec"},
         {"Class loot (including uncertain)","class"},
         {"All associated items","all"},
     }) do
         local label,value=choice[1],choice[2]
         options[#options+1]={label=label,run=function()
             FCM.db.settings.dungeonLootScope=value
-            self.selectedRow=nil
+            self.dungeonItemSelection=nil
         end}
     end
     self:MakeMenu(self.dungeonLootButton,options,242,true)
+end
+function UI:ShowDungeonBossMenu()
+    local r=self.currentDungeonRecord
+    if not r then return end
+    local options={{label="All bosses + dungeon items",run=function()
+        self.dungeonBossFocus=nil
+        self.dungeonItemSelection=nil
+    end}}
+    for index,boss in ipairs(r.bosses or {}) do
+        local i=index
+        local name=tostring(boss.name or ("Boss #"..index))
+        options[#options+1]={label=short(name,39),run=function()
+            self.dungeonBossFocus={dungeon=tostring(r.id),index=i}
+            self.dungeonItemSelection=nil
+        end}
+    end
+    self:MakeMenu(self.dungeonBossButton,options,255,true)
 end
 function UI:ShowRequestStatusMenu()
     local req=self.activeRequest
@@ -1475,7 +1585,7 @@ function UI:ShowCrafterMenu(recipe, recipientKey, existing, eligibleCrafters)
         end
     end
     if #options == 0 then
-        FCM:Say("No eligible same-faction, same-realm crafter with the learned recipe is recorded.")
+        FCM:Say("No eligible same-faction, same-ruleset crafter with the learned recipe is recorded.")
         return
     end
     if #options == 1 then
@@ -1494,6 +1604,8 @@ local function buildRows(ui)
     local function charDetails(c)
         local p={"|cffffd983"..FCM:DisplayCharacter(c).."|r","",
             (c.class or "Class unknown").."  /  "..(c.race or "Race unknown").."  /  "..(c.faction or "Faction unknown"),
+            "Ruleset: "..(FCM:NormalizeRuleset(c.ruleset) or "Not yet verified - log into this character"),
+            "Region: "..(c.region or "Not yet verified"),
             "Level: "..tostring(c.level or "?"),"Gold: "..niceGold(c.gold),
             "XP: "..tostring(c.xp or 0).." / "..tostring(c.xpMax or 0),
             "Last login: "..FCM:Age(c.lastSeen),"",
@@ -1505,14 +1617,37 @@ local function buildRows(ui)
         end
         if not has then p[#p+1]="  Open your profession pane to scan" end
         p[#p+1]=""
-        p[#p+1]="Equipment: "..FCM:Age(c.gearStamp)
-        p[#p+1]="Bags: "..FCM:Age(c.bagsStamp)
-        p[#p+1]="Bank: "..FCM:Age(c.bankStamp)
-        p[#p+1]="Reputation: "..FCM:Age(c.reputationStamp)
-        p[#p+1]="Recipes: "..FCM:Age(c.recipeStamp)
+        p[#p+1]=""
+        p[#p+1]="Scan freshness (saved across logouts):"
+        for _,entry in ipairs(FCM:DataQuality(c)) do
+            p[#p+1]="  "..entry.name..": "..entry.label
+        end
+        p[#p+1]="Bank/recipes update when their game windows are opened."
+        p[#p+1]="An old scan needs review; it does not mean the items were lost."
         return table.concat(p,"\n")
     end
-    if tab=="Upgrades" then
+    if tab=="Upgrade Plan" then
+        local recommendations=FCM:AccountUpgradePlans(8)
+        for i,entry in ipairs(recommendations) do
+            local e=entry
+            local prefix=e.kind=="crafted" and "Craft" or
+                (e.kind=="dungeon" and "Dungeon" or "Unlearned")
+            add("account-plan:"..i,FCM:DisplayCharacter(e.character)..": "..e.itemName,
+                prefix.." | +"..FCM.Gear:ScoreLabel(e.delta).." weighted | "..e.status,
+                function() return table.concat(FCM:AccountUpgradePlanLines(e),"\n") end,
+                e.kind=="crafted" and e.recipe or nil,nil,
+                e.kind=="crafted" and e.crafters or nil,
+                e.character.key,e.kind=="crafted" and e.plan and e.plan.ready or false)
+            rows[#rows].itemID=e.itemID
+            rows[#rows].compareSlot=e.slot
+        end
+        if #recommendations==0 then
+            add("account-plan-empty","No scored upgrade plans yet",
+                "Log in to scan gear, recipes, and reference items after the servers return.",
+                "Account-wide suggestions require scanned equipped items, known stats and reliable recipe or dungeon references.\n\n"
+                .."No score is inferred for unknown gear. Cross-faction trades and unknown item binding are never assumed safe.")
+        end
+    elseif tab=="Upgrades" then
         for i,entry in ipairs(FCM:UpgradeDashboard()) do
             local e=entry
             add("upgrade:"..i,e.title,e.summary,function()
@@ -1587,7 +1722,8 @@ local function buildRows(ui)
                     function()
                         return "Potential dungeon item for "..FCM:DisplayCharacter(ch).."\n\n"..
                             "Item: "..(item.info.name or ("Item #"..item.itemID)).."\n"..
-                            "Source: "..item.source.."\n"..
+                            "Source-reported associations (not confirmed live drops):\n"..
+                            table.concat(item.sources or {item.source},"\n").."\n"..
                             "Estimated weighted gain: +"..FCM.Gear:ScoreLabel(item.delta).."\n\n"..
                             "NOT a simulated DPS gain. Dungeon loot and equip restrictions must be verified against the live Forever client."
                     end)
@@ -1821,12 +1957,13 @@ local function buildRows(ui)
         ui.dungeonTotal=#records
         local source=FCM.dungeonDirectorySource or "https://www.icy-veins.com/wow-forever/dungeons-overview"
         add("dungeon-source", "Dungeon directory — "..#records.." entries",
-            "Reference level ranges | Boss drops for current class when imported",function()
+            "Reference levels | boss-linked data vs unconfirmed associations",function()
                 return "The dungeon DIRECTORY uses the 35 entries published by Icy Veins (24 Oct 2026). "..
                     "Its levels are guide ranges, not confirmed entrance requirements. Boss and loot details are separate and "..
                     "appear only when supported by imported ForeverDB records. Use the Dungeons / Raids button below to change views.\n\n"..
                     "Directory: "..source.."\nImported data: https://foreverdb.net\n"..
-                    "Items and dungeon sources still require live verification."
+                    "A boss-linked reference is NOT a verified live-game drop. Use the boss and class/spec filters; "..
+                    "only cached live client stats can support a weighted upgrade comparison."
             end)
         for _,entry in ipairs(records) do
             local r=entry
@@ -1851,7 +1988,7 @@ local function buildRows(ui)
             local rowId="dungeon:"..r.id
             add(rowId,r.name,
                 typeLabel.." | Levels "..tostring(r.levels or "unknown").." | "..bossStatus,
-                "Select a dungeon to view bosses, item icons, loot, and details.")
+                "Select a dungeon to view source-linked bosses, class/spec filters and estimated upgrades.")
             rows[#rows].dungeonRecord=r
         end
         if #records==0 then
@@ -1905,7 +2042,7 @@ local function buildRows(ui)
             add("fresh:"..c.key,FCM:DisplayCharacter(c),"Snapshot freshness",function()
                 local d={"Data freshness for "..FCM:DisplayCharacter(c),""}
                 for _,item in ipairs(FCM:DataQuality(c)) do
-                    d[#d+1]=item.name..": "..item.state.." ("..FCM:Age(item.timestamp)..")"
+                    d[#d+1]=item.name..": "..item.label
                 end
                 d[#d+1]=""
                 d[#d+1]="To refresh a character, log into it. Bank and profession data require opening those windows."
@@ -1962,7 +2099,7 @@ local function buildRows(ui)
             local c=person
             local recipes=0
             for _,r in pairs(c.recipes or {}) do if r.learned then recipes=recipes+1 end end
-            add(c.key,FCM:DisplayCharacter(c),"["..(FCM:NormalizeFaction(c.faction) or "Unknown").."] Lv "..tostring(c.level or "?").." "..(c.class or "").." | "..recipes.." learned recipes",function() return charDetails(c) end)
+            add(c.key,FCM:DisplayCharacter(c),"["..(FCM:NormalizeFaction(c.faction) or "Unknown").." / "..(FCM:NormalizeRuleset(c.ruleset) or "Ruleset unverified").."] Lv "..tostring(c.level or "?").." "..(c.class or "").." | "..recipes.." learned recipes",function() return charDetails(c) end)
         end
         if #rows==0 then add("empty","No characters scanned","Log into a character to initialize your roster.",function()
             return "The addon automatically scans the currently played character. It cannot inspect a toon that has never logged in with FCM installed."
@@ -2076,7 +2213,7 @@ local function buildRows(ui)
                     "Profession: "..(r.profession or "Unknown"),"","Known by:"}
                 for _,c in ipairs(r.crafters or {}) do
                     d[#d+1]="  "..FCM:DisplayCharacter(c)..
-                        ((ch and not FCM:CanCollaborate(c,ch)) and " (different faction/realm)" or "")
+                        ((ch and not FCM:CanCollaborate(c,ch)) and " (different faction/ruleset)" or "")
                 end
                 local crafter=listedCrafter
                 local plan=FCM:CraftAvailability(r,crafter)
@@ -2088,45 +2225,65 @@ local function buildRows(ui)
                     d[#d+1]=m.name..": "..m.unreserved.."/"..m.required.." (reserved "..m.reserved..")"
                     if missing>0 then d[#d+1]="  Still needed: "..missing end
                     for _,location in ipairs(m.locations) do
-                        d[#d+1]="  "..short(location.name,21).." "..location.where..": "..location.count..(location.usable and "" or " [bound or different faction/realm]")
+                        d[#d+1]="  "..short(location.name,21).." "..location.where..": "..location.count..(location.usable and "" or " [bound or different faction/ruleset]")
                     end
-                end
-                local expanded=FCM:ExpandedCraftingPlan(r,crafter)
-                if #expanded.intermediates>0 then
-                    d[#d+1]=""
-                    d[#d+1]="Intermediate crafts:"
-                    for _,step in ipairs(expanded.intermediates) do
-                        d[#d+1]="  "..step.count.."x "..step.recipe
-                    end
-                end
-                local hasRaw=false
-                for reagentID,quantity in pairs(expanded.missing or {}) do
-                    if not hasRaw then d[#d+1]="";d[#d+1]="Final missing raw items:";hasRaw=true end
-                    d[#d+1]="  "..FCM.ItemName(reagentID)..": "..quantity
-                end
-                if not hasRaw and not expanded.unresolved then d[#d+1]="No raw-material shortage in the computed plan*" end
-                if #plan.transfers>0 then
-                    d[#d+1]=""
-                    d[#d+1]="Potential transfers to crafter:"
-                    for _,t in ipairs(plan.transfers) do
-                        d[#d+1]="  "..t.count.."x "..t.name.." from "..t.from.." ("..t.where..")"
-                    end
-                end
-                if r.complex or expanded.unresolved then d[#d+1]="Optional/alternative/currency reagents not fully resolved." end
-                local gate=FCM:ReputationGate(r.id,crafter)
-                if gate then
-                    d[#d+1]=""
-                    d[#d+1]="Recipe reputation gate: "..gate.faction
-                    d[#d+1]="Required: "..(standingNames[gate.required] or "?")
-                    d[#d+1]="Standing: "..(standingNames[gate.current] or "Unknown")
                 end
                 d[#d+1]=""
-                d[#d+1]="*Offline counts are last-seen snapshots. Transfers may not be possible across realms or factions."
+                local expanded=FCM:SmartCraftingPlan(r,ch,crafter,1)
+                for _,line in ipairs(FCM:SmartCraftingPlanLines(expanded)) do
+                    d[#d+1]=line
+                end
+                d[#d+1]=""
+                d[#d+1]="*Offline counts are last-seen snapshots. Transfers may not be possible across rulesets or factions."
                 return table.concat(d,"\n")
             end,(#eligible>0 and r or nil),nil,eligible,ch and ch.key,(#eligible>0 and listedPlan.ready or nil))
             end
         end
         if #rows==0 then add("no-recipes","No learned recipes scanned","Open the crafting window on each profession toon.","Use /fcm scan with a profession window open. The addon stores learned recipe information when it is visible to the game API.") end
+    elseif tab=="Planner" then
+        add("planner-summary","Smart Crafting Planner | unified v0.9.0",
+            "Select a known recipe or pending request to calculate an account-wide crafting chain.",
+            "This planner uses cached materials and learned recipes. It selects eligible crafters, reserves existing requests, recursively expands simple recipes, and shows missing ingredients and potential transfers.\n\nAlternative reagent slots and unknown bind restrictions require manual verification. Nothing is moved, bought, crafted, or mailed automatically.")
+        for _,pending in ipairs(FCM:VisibleRequests()) do
+            local row=pending
+            if row.recipe and row.recipient then
+                local r=row.recipe
+                local request=row.request
+                local who=row.crafter
+                add("plan-request:"..tostring(request.key),"REQUEST: "..(r.name or "Recipe"),
+                    "For "..FCM:DisplayCharacter(row.recipient).." | "..
+                        (who and FCM:DisplayCharacter(who) or "Unassigned crafter"),
+                    function()
+                        local plan=FCM:SmartCraftingPlan(r,row.recipient,who,1,request.key)
+                        return table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
+                    end)
+                rows[#rows].itemID=tonumber(r.outputID)
+            end
+        end
+        local recipeCount=0
+        for _,r in ipairs(FCM:AllRecipes()) do
+            -- List without calculating every plan on every UI refresh. The full
+            -- plan is generated only when the user selects a recipe.
+            local recipe=r
+            local eligible={}
+            for _,c in ipairs(recipe.crafters or {}) do
+                if ch and FCM:CanCollaborate(c,ch) then eligible[#eligible+1]=c end
+            end
+            local available=#eligible>0
+            recipeCount=recipeCount+1
+            add("plan-recipe:"..tostring(recipe.id),recipe.name or ("Recipe #"..tostring(recipe.id)),
+                (recipe.profession or "Craft").." | "..#(recipe.crafters or {})..
+                    " scanned crafter(s) | "..(available and "Plan available" or "Not transferable to selected character"),
+                function()
+                    local plan=FCM:SmartCraftingPlan(recipe,ch,nil,1)
+                    return table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
+                end,available and recipe or nil,nil,available and eligible or nil,
+                ch and ch.key,available and true or false)
+            rows[#rows].itemID=tonumber(recipe.outputID)
+        end
+        if recipeCount==0 then add("planner-empty","No learned recipes recorded",
+            "Log in on profession characters and scan their recipes when the servers return.",
+            "FCM does not assume an imported recipe is learned or craftable by your characters.") end
     elseif tab=="Requests" then
         for _, entry in ipairs(FCM:VisibleRequests()) do
             local req, recipe, crafter, recipient = entry.request, entry.recipe, entry.crafter, entry.recipient
@@ -2171,6 +2328,13 @@ local function buildRows(ui)
                     d[#d+1]="Recipe missing from the current known-recipe database; scan the crafter again."
                 else
                     d[#d+1]="Assign a crafter before checking transferable material quantities."
+                end
+                if recipe and recipient then
+                    d[#d+1]=""
+                    local expanded=FCM:SmartCraftingPlan(recipe,recipient,crafter,1,req.key)
+                    for _,line in ipairs(FCM:SmartCraftingPlanLines(expanded)) do
+                        d[#d+1]=line
+                    end
                 end
                 d[#d+1]=""
                 d[#d+1]="Use Assign/Reassign and Set Status to track requested > gathering > ready > crafted > delivered."
@@ -2263,6 +2427,15 @@ local function buildRows(ui)
                 report.summary or "", "", "Source: "..(report.url or "No source"), "",
                 "FCM never spends talent points and will not recommend a respec automatically. Unknown steps stay unknown; do not extrapolate them."}
             add("advice","Talent recommendation",report.status,table.concat(summary,"\n"))
+            if FCM.TalentAudit then
+                local audit=FCM:TalentAudit(ch)
+                add("talent-audit","Allocation audit",audit.status,table.concat(audit.lines or {},"\n"))
+            end
+            if FCM.TalentGearHints then
+                local hints=FCM:TalentGearHints(ch,7)
+                add("talent-gear","Gear priorities for this spec",
+                    "Estimated stat weights - "..tostring(hints.activity),table.concat(hints.lines or {},"\n"))
+            end
             local variants=report.guide and report.guide.profiles or {}
             for _,id in ipairs(FCM:TalentProfileOrder(ch)) do
                 local variant=variants[id]
@@ -2304,7 +2477,7 @@ local function buildRows(ui)
             end
             local stepLines={"|cffffd983Saved exact / custom steps for this profile|r", ""}
             for _,step in ipairs(report.steps or {}) do
-                local suffix=step.custom and "(your profile override)" or "(reviewed IV step)"
+                local suffix=step.custom and "(your profile override, not source-verified)" or "(reviewed IV step)"
                 stepLines[#stepLines+1]="Level "..tostring(step.level)..": "..step.name..
                     (step.rank and " rank "..tostring(step.rank) or "").." "..suffix
                 if step.reason then stepLines[#stepLines+1]="Why: "..step.reason end
@@ -2344,7 +2517,7 @@ local function buildRows(ui)
                 "\n\nExact rank orders require source review. The companion does not scrape Icy Veins. FCM cannot fetch URLs during gameplay.")
             add("custom-plan","Edit the selected profile","/fcm talentadd <level> <name>",
                 "Choose the Spec and Profile buttons below. Custom entries are saved independently for each character, spec, and profile.\n\n"..
-                "/fcm talentadd <level> <talent name>\n/fcm talentclear <level>\n"..
+                "/fcm talentadd <level> <talent name>\n/fcm talentrank <level> <rank> <talent name>\n/fcm talentclear <level>\n"..
                 "/fcm talentbuild leveling|sustain|output\n"..
                 "/fcm talentsource icy|custom\n\n"..
                 "Your old v0.7.0 custom entries are copied once into their original active profile. Other profiles are not overwritten.")
@@ -2377,6 +2550,30 @@ local function buildRows(ui)
                     d[#d+1]=short(place.name,24).." "..place.where..": "..place.count..(place.bound and " (bound)" or "")
                     d[#d+1]="  Last scan: "..FCM:Age(place.lastScan)
                 end
+                -- Evaluate every recorded holder, not merely the currently
+                -- selected character. This view is account-wide.
+                if type(FCM.BoEProtectionCheck)=="function" then
+                    local processed=0
+                    for _,holder in ipairs(FCM:Characters()) do
+                        local has=false
+                        for _,section in ipairs({"bags","bank"}) do
+                            for _,entry in pairs(holder[section] or {}) do
+                                if tonumber(entry.itemID)==tonumber(v.id) then has=true;break end
+                            end
+                            if has then break end
+                        end
+                        if has then
+                            local boe=FCM:BoEProtectionCheck(v.id,holder)
+                            if boe.info and boe.info.bindType==2 then
+                                d[#d+1]=""
+                                d[#d+1]="Holder: "..FCM:DisplayCharacter(holder)
+                                for _,line in ipairs(FCM:BoEProtectionLines(boe,4)) do d[#d+1]=line end
+                            end
+                            processed=processed+1
+                            if processed>=4 then d[#d+1]="Additional item holders omitted";break end
+                        end
+                    end
+                end
                 return table.concat(d,"\n")
             end)
         end
@@ -2397,7 +2594,7 @@ local function buildRows(ui)
             "Custom stat weight: /fcm gearweight spell 5 (per toon/activity); /fcm gearweight reset.\n\n"..
             "Score comparisons are approximate weighted stats, not actual DPS, PvP win rates, healing simulations, hit-cap modeling or verified IV weights.")
         add("guide","Talent plan customization","Use slash commands to add or clear planned talent steps.",
-            "/fcm talentbuild <profile ID> (see Talents tab for this spec's available profiles)\n/fcm talentsource icy|custom\n/fcm talentspec <spec>\n/fcm talentadd <level> <talent name>\n/fcm talentclear <level>\n\nGuide modules include verified notes and selected exact steps. All 27 specializations have at least three profile slots; distinct IV alternate builds are added where verified. Full exact point order remains incomplete and is labeled clearly.")
+            "/fcm talentbuild <profile ID> (see Talents tab for this spec's available profiles)\n/fcm talentsource icy|custom\n/fcm talentspec <spec>\n/fcm talentadd <level> <talent name>\n/fcm talentrank <level> <rank> <talent name>\n/fcm talentclear <level>\n/fcm talentaudit\n\nGuide modules include verified notes and selected exact steps. All 27 specializations have at least three profile slots; distinct IV alternate builds are added where verified. Full exact point order remains incomplete and is labeled clearly.")
         add("window","Resizable interface","Drag the lower-right corner; /fcm ui reset to restore defaults.",
             "The window remembers its width, height and position. Resize using the small lower-right grip.\n\n/fcm ui reset resets layout to its initial size and position.")
         add("threshold","Upgrade score threshold","Minimum gain: "..tostring(FCM.db.settings.minimumUpgrade),
@@ -2407,18 +2604,18 @@ local function buildRows(ui)
         add("manual-reputation","Recipe reputation requirements","Register verified gates by recipe ID and faction ID.",
             "/fcm repgate <recipeID> <factionID> <standing 1-8>\n/fcm clearrepgate <recipeID>\n\nStanding IDs: 1 Hated through 8 Exalted. Unregistered vendors are not automatically inferred.")
     elseif tab=="Help" then
-        add("advanced","What's new in v0.8.9","Normalized spell stats, readable comparison arrows, equipped/new stat summaries",
-            "Version 0.7 adds an account-wide Smart Upgrade Center with reservation-aware readiness, item-to-recipe lookup, professional craft suggestions, filter/sort controls, and improved updater validation. It retains the FCM emblem, requests, gear and talent guidance.\n\nNo live Icy Veins sync, guaranteed vendor stock, automatic Legacy totals, precise DPS simulation, mailing or crafting automation is claimed.")
+        add("advanced","What's new in unified v0.9.0","Reference provenance, safer import merges, offline data-health audit",
+            "The Windows companion now records reference provider, fetch date and evidence caveats, retains multiple dungeon sources, and reports incomplete data using its Audit Reference Data button. Partial API replies no longer discard known recipe output/reagents or cached boss loot.\n\nThese are public reference records, not verified game drops or vendor stock. No live Icy Veins sync, automatic Legacy totals, DPS simulation, mailing or crafting automation is claimed.")
         add("requests", "Cross-character crafting requests", "Open Requests to see work assigned to the crafter.",
             "From Gear or Crafting choose a recipient in the top dropdown, select a recipe or suggested upgrade, and click Request Craft. If multiple characters know it, choose the crafter.\n\nLog into that crafter: FCM announces pending assignments and Requests lists the item, recipient, and materials. Assign/Reassign changes the crafter. Set Status moves it through requested, gathering, ready, and crafted; Delivered or Cancelled archives it. Nothing is crafted or mailed automatically.")
         add("delete", "Removing a saved character", "Characters tab > select a toon > Remove Saved Character",
             "You must be logged into a different toon than the record being removed. Select its row in Characters, then press Remove Saved Character and confirm the prompt.\n\nOnly FCM's saved data and that character's queued crafts are removed. The actual WoW character is untouched. Log into the removed character again if you want to re-add it.\n\nOther characters' records remain intact.")
         add("factions","Horde and Alliance support","Use Faction: All / Alliance / Horde above the list.",
-            "FCM scans both factions and keeps every character's talents, gear, inventory, professions and reputation in separate records. Selecting Faction only changes the roster view.\n\nCrafts and material transfers are restricted to the same known faction and realm/ruleset; FCM never assumes cross-faction transfers. Auction snapshots use the companion's selected market and must match the character's faction. Log into Horde characters to capture their actual data.")
+            "FCM scans both factions and keeps every character's talents, gear, inventory, professions and reputation in separate records. Selecting Faction only changes the roster view.\n\nCrafts and material transfers are restricted to the same confirmed faction, region and ruleset; FCM never assumes cross-faction transfers. Auction snapshots use the companion's selected market and must match the character's faction. Log into Horde characters to capture their actual data.")
         add("start","Getting started","First login for each toon; open professions and bank once.",
             "1. Install and enable the addon.\n2. Type /fcm.\n3. Log into every character you want tracked.\n4. Open each profession to capture known recipes.\n5. Open your bank to scan stored items.\n6. Choose a character and gear priority.\n\n/fcm help displays commands.")
         add("limits","Important accuracy notes","What the addon cannot reliably verify yet.",
-            "No direct website access in-game; the separate PC updater can import public reference data. Every spec has a three-profile IV guide reference; unverified rank orders remain explicitly missing.\nNo full reputation-vendor recipe catalog yet.\nDungeon drops depend on ForeverDB detail coverage; no combat simulation.\nUnscanned offline gear and bank counts may be stale.\nNo automated mailing, crafting, or talent spending.\nComplex and optional recipe reagents are flagged rather than guessed.")
+            "No direct website access in-game; the separate PC updater can import public reference data. Every spec has a three-profile IV guide reference; unverified rank orders remain explicitly missing.\nNo full reputation-vendor recipe catalog yet.\nDungeon drops depend on ForeverDB detail coverage; imported links are not live drop confirmations.\nUnscanned offline gear and bank counts may be stale.\nNo automated mailing, crafting, or talent spending.\nComplex and optional recipe reagents are flagged rather than guessed.")
     end
     return rows
 end
@@ -2582,10 +2779,21 @@ function UI:Refresh()
         self.dungeonViewButton:SetShown(dungeonBrowsing)
         self.dungeonLevelButton:SetShown(dungeonBrowsing)
         self.dungeonLootButton:SetShown(dungeonBrowsing)
+        self.dungeonBossButton:SetShown(dungeonBrowsing)
         if dungeonBrowsing then
+            self.currentDungeonRecord=selected and selected.dungeonRecord or nil
+            local focus=self.dungeonBossFocus
+            if not self.currentDungeonRecord or (focus and focus.dungeon~=tostring(self.currentDungeonRecord.id)) then
+                self.dungeonBossFocus=nil
+                focus=nil
+            end
+            self.dungeonBossButton:SetEnabled(self.currentDungeonRecord~=nil)
+            local b=self.currentDungeonRecord and focus and (self.currentDungeonRecord.bosses or {})[focus.index]
+            self.dungeonBossButton:SetText(b and ("Boss: "..short(tostring(b.name or "Unknown"),13)) or "Boss: All")
             local lootScope=FCM.db.settings.dungeonLootScope or "class"
             self.dungeonLootButton:SetText(lootScope=="all" and "All items" or
-                (lootScope=="upgrades" and "Upgrades only" or "Class loot"))
+                (lootScope=="upgrades" and "Upgrades only" or
+                (lootScope=="spec" and "Spec-fit" or "Class loot")))
             local dview=FCM.db.settings.dungeonView or "dungeons"
             self.dungeonViewButton:SetText(dview=="raids" and "Raids" or (dview=="all" and "All references" or "Dungeons"))
             self.dungeonLevelButton:SetText(FCM.db.settings.dungeonLevelFilter=="current" and "At my level" or "All levels")

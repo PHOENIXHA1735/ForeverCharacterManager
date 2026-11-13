@@ -377,6 +377,10 @@ function FCM:CatalogItemDetails(id,ch)
             end
         end
     end
+    if self.FarmAdviceLines then
+        lines[#lines+1]=""
+        for _,line in ipairs(self:FarmAdviceLines(id,1,ch,7)) do lines[#lines+1]=line end
+    end
     lines[#lines+1]=""
     lines[#lines+1]=self:ExpandedItemDetails(id)
     return table.concat(lines,"\n")

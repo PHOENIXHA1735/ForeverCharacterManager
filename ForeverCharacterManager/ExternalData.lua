@@ -72,10 +72,29 @@ function FCM:ExplorerDetails(itemID)
     end
     field("Category",item.category)
     field("Where to obtain",item.where)
-    field("Reported dungeon drops",item.dungeon)
+    if self.FarmAdviceLines then
+        result[#result+1]=""
+        for _,line in ipairs(self:FarmAdviceLines(itemID,1,nil,5)) do result[#result+1]=line end
+        result[#result+1]=""
+    end
+    field("Reported dungeon drops",item.dungeonSources or item.dungeon)
     field("Source confidence",item.confidence)
+    field("Reference provider",item.sourceProvider)
+    field("Reference last checked",item.referenceCheckedAt)
+    field("Evidence level",item.sourceEvidence)
+    field("Gathering evidence",item.gatheringEvidence)
+    field("Vendor evidence",item.vendorEvidence)
+    -- Reuse the same market and quality evaluation as the bag tooltip.
+    local marketInfo
+    if type(self.MarketItemAdvice)=="function" then
+        marketInfo=self:MarketItemAdvice(itemID,nil,1,item.quality,item.vendorPrice)
+        if marketInfo then
+            for _,line in ipairs(self:MarketItemAdviceLines(marketInfo)) do result[#result+1]=line end
+            result[#result+1]=""
+        end
+    end
     local price=self:PriceQuote(itemID)
-    if price then
+    if price and not marketInfo then
         local function money(copper)
             local c=tonumber(copper)
             if not c then return "Unavailable" end
@@ -116,6 +135,9 @@ function FCM:ExplorerDetails(itemID)
         if type(r)=="table" and tonumber(r.resultID)==itemID then
             result[#result+1]="Produced by: "..(r.name or "Unknown recipe").." ("..(r.profession or "Profession unknown")..")"
             field("Recipe acquisition",r.acquisition)
+            field("Reference provider",r.sourceProvider)
+            field("Reference last checked",r.referenceCheckedAt)
+            field("Reference evidence",r.sourceEvidence)
             field("Required profession skill",r.skill)
             result[#result+1]=r.source or "Imported reference recipe; verify against current client"
         end
@@ -165,16 +187,28 @@ function FCM:MarketPricesFor(ch)
     local faction=ch and self:NormalizeFaction(ch.faction)
     if not faction then return {} end
     local wanted="."..string.lower(faction).."."
-    local realm=ch and type(ch.realm)=="string" and string.lower(ch.realm) or ""
-    local rule=nil
-    if realm:find("rppvp",1,true) then rule="rppvp"
-    elseif realm:find("normal",1,true) then rule="normal"
-    elseif realm:find("pvp",1,true) then rule="pvp"
-    elseif realm:find("roleplay",1,true) or realm=="rp" then rule="rp" end
+    -- Prefer the scheduled, ruleset-specific AH pair when its source cache is
+    -- still valid. Do not mix Normal/PvP or Horde/Alliance prices.
+    local canonical={Normal="normal",PvP="pvp",RP="rp",["RP-PvP"]="rppvp",Hardcore="hardcore"}
+    local rule=canonical[self:NormalizeRuleset(ch and ch.ruleset)]
+    local currentRegion=ch and type(ch.region)=="string" and string.lower(ch.region) or nil
+    -- No guessing from surnames or a companion's last selected market.
+    if not rule or not currentRegion or currentRegion=="" then return {} end
+    local ruleset=data.dailyAHRuleSet
+    local region=data.dailyAHRegion
+    local now=(type(time)=="function" and time()) or (os and os.time and os.time()) or 0
+    if ruleset and region and string.lower(tostring(ruleset))==rule and
+       string.lower(tostring(region))==currentRegion and
+       (tonumber(data.dailyAHExpiresAt) or 0)>now then
+        local selected="forever."..rule.."."..string.lower(faction).."."..currentRegion
+        local items=data.pricesByMarket and data.pricesByMarket[selected]
+        if type(items)=="table" then return items end
+    end
     local options={}
     for market,items in pairs(data.pricesByMarket or {}) do
         if type(market)=="string" and type(items)=="table" and
-           market:find(wanted,1,true) and (not rule or market:find("forever."..rule..".",1,true)==1) then
+           market:find(wanted,1,true) and market:find("forever."..rule..".",1,true)==1 and
+           market:sub(-#currentRegion)==currentRegion then
             options[#options+1]=items
         end
     end
@@ -186,13 +220,132 @@ function FCM:MarketPricesFor(ch)
         if type(price)=="table" and price.market then market=price.market;break end
     end
     if market and market:find(wanted,1,true) and
-       (not rule or market:find("forever."..rule..".",1,true)==1) then
+       market:find("forever."..rule..".",1,true)==1 and
+       market:sub(-#currentRegion)==currentRegion then
         return legacy
     end
     return {}
 end
+-- AHledger's in-game API owns its market data and freshness. This module
+-- NEVER copies AHledger price data into character SavedVariables or generated
+-- Lua cache. FCM only reads it while the user is playing.
+-- Market identifiers may use either dots or slashes, depending on the API
+-- response; canonicalize them before comparing, without mixing factions.
+local function canonicalAHMarket(value)
+    if type(value)~="string" then return nil end
+    local key=string.lower(value):gsub("/", ".")
+    local game,rule,faction,region=key:match("^([%w]+)%.([%w]+)%.([%w]+)%.([%w]+)$")
+    if game~="forever" or (faction~="alliance" and faction~="horde") or
+       (region~="us" and region~="eu" and region~="cn") or
+       (rule~="normal" and rule~="pvp" and rule~="rp" and rule~="rppvp") then
+        return nil
+    end
+    return key
+end
+
+local function aHLQuote(p,selected)
+    if type(p)~="table" then return nil end
+    local actual=canonicalAHMarket(p.market)
+    -- An explicit requested market must not yield a different market's quote.
+    if selected and actual and actual~=selected then return nil end
+    local median=tonumber(p.median)
+    local low=tonumber(p.minBuyout)
+    if not ((median and median>0) or (low and low>0)) then return nil end
+    local observed=p.updated
+    return {market=actual or selected,median=median,minBuyout=low,
+        quantity=tonumber(p.quantity),
+        median7d=tonumber(p.median7d),median30d=tonumber(p.median30d),
+        soldPerDay=tonumber(p.soldPerDay),
+        source="AHledgerAPI",snapshot=p.snapshot==true,
+        observedAt=observed and tostring(observed) or nil,
+        observedUnix=tonumber(observed)}
+end
+
 function FCM:PriceQuote(itemID,ch)
-    return self:MarketPricesFor(ch)[tonumber(itemID)]
+    itemID=tonumber(itemID)
+    if not itemID or itemID<=0 then return nil end
+    local api=AHledgerAPI
+    if type(api)=="table" and type(api.GetPrice)=="function" then
+        local current=self:Current()
+        local target=ch or current
+        local playerFaction=type(UnitFactionGroup)=="function" and
+            self:NormalizeFaction(UnitFactionGroup("player")) or nil
+        local faction=target and self:NormalizeFaction(target.faction)
+        -- A current-player quote is safe to obtain using the documented
+        -- default-market form; an offline character's price is NOT.
+        local active=not ch or (current~=nil and ch==current)
+        if not faction and active then faction=playerFaction end
+        local ownMarket=nil
+        if type(api.GetMarket)=="function" then
+            local ok,value=pcall(api.GetMarket)
+            if ok then ownMarket=canonicalAHMarket(value) end
+        end
+        local requested=nil
+        if faction and ownMarket then
+            local rule,_,region=ownMarket:match("^forever%.([%w]+)%.([%w]+)%.([%w]+)$")
+            requested="forever."..rule.."."..string.lower(faction).."."..region
+            -- Explicit market is essential for other characters, including
+            -- offline Horde characters viewed from an Alliance login.
+            local ok,p=pcall(api.GetPrice,itemID,requested)
+            if ok then
+                local quote=aHLQuote(p,requested)
+                if quote then return quote end
+            end
+        end
+        -- Some AHledger versions expose their price lookup before their
+        -- market helper, or return nil on explicit-market lookup even though
+        -- their default/current-market lookup is populated. Only use this
+        -- fallback for the logged-in character, never for an offline toon.
+        if active and faction and playerFaction==faction then
+            local ok,p=pcall(api.GetPrice,itemID)
+            if ok and type(p)=="table" then
+                local actual=canonicalAHMarket(p.market)
+                -- If a market is supplied, its faction MUST match the player.
+                if actual then
+                    local pFaction=actual:match("^forever%.[%w]+%.([%w]+)%.")
+                    if pFaction==string.lower(faction) and
+                       (not ownMarket or actual==ownMarket) then
+                        local quote=aHLQuote(p,actual)
+                        if quote then return quote end
+                    end
+                elseif ownMarket and ownMarket:find("."..string.lower(faction)..".",1,true) then
+                    local quote=aHLQuote(p,ownMarket)
+                    if quote then return quote end
+                end
+            end
+        end
+    end
+    -- Previous provider cache is accepted only while its expiry is valid.
+    local quote=self:MarketPricesFor(ch)[itemID]
+    if quote and quote.expiresAt then
+        local now=(type(time)=="function" and time()) or (os and os.time and os.time()) or 0
+        if tonumber(quote.expiresAt)<=now then return nil end
+    end
+    return quote
+end
+
+-- In-game diagnostics, intentionally no API tokens/account information.
+function FCM:AHPriceDiagnostic(itemID)
+    local api=AHledgerAPI
+    local available=type(api)=="table" and type(api.GetPrice)=="function"
+    local market=nil
+    if available and type(api.GetMarket)=="function" then
+        local ok,value=pcall(api.GetMarket)
+        if ok then market=tostring(value) end
+    end
+    local direct=nil
+    if available then
+        local ok,p=pcall(api.GetPrice,tonumber(itemID) or 4537)
+        if ok and type(p)=="table" then direct=p end
+    end
+    local ch=self:Current()
+    local quote=self:PriceQuote(itemID,ch)
+    self:Say("AH check: AHledger API "..(available and "present" or "missing")..
+        " | player market "..tostring(market or "unavailable")..
+        " | faction "..tostring(ch and ch.faction or "unknown"))
+    self:Say("AH check: provider median "..tostring(direct and direct.median or "nil")..
+        " | provider market "..tostring(direct and direct.market or "nil")..
+        " | FCM median "..tostring(quote and quote.median or "nil"))
 end
 function FCM:CraftPriceEstimate(recipe,ch)
     if not recipe then return nil end

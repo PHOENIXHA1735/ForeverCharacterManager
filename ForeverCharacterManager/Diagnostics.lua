@@ -37,16 +37,15 @@ end
 function FCM:DataQuality(ch)
     if not ch then return {} end
     local fields = {
-        {"Equipment", "gearStamp"}, {"Bags", "bagsStamp"},
-        {"Bank", "bankStamp"}, {"Recipes", "recipeStamp"},
-        {"Reputation", "reputationStamp"}, {"Talents", "talentStamp"}
+        {"Equipment", "gear"}, {"Bags", "bags"}, {"Bank", "bank"},
+        {"Professions", "professions"}, {"Recipes", "recipes"},
+        {"Reputation", "reputation"}, {"Talents", "talents"}
     }
     local result = {}
     for _, f in ipairs(fields) do
-        local stamp = ch[f[2]]
-        local age = stamp and self:Now() - stamp or nil
-        local state = not age and "Unscanned" or (age > 7 * 86400 and "Old" or (age > 86400 and "Stale" or "Recent"))
-        result[#result + 1] = {name=f[1], timestamp=stamp, age=age, state=state}
+        local status=self:ScanFreshness(ch,f[2])
+        result[#result + 1] = {name=f[1], category=f[2],timestamp=status.timestamp,
+            age=status.age,state=status.status,label=status.label}
     end
     return result
 end
@@ -57,7 +56,7 @@ function FCM:DiagnosticsReport()
         local ok, a,b,c,d=pcall(GetBuildInfo)
         if ok and d then interface=tostring(d) end
     end
-    local rows = {"FCM v" .. tostring(self.version), "Interface: " .. interface, ""}
+    local rows = {"FCM v" .. tostring(self.version), "Build: " .. tostring(self.build or "unlabeled"), "Interface: " .. interface, ""}
     local count = 0
     for _ in pairs((self.db and self.db.characters) or {}) do count = count + 1 end
     rows[#rows+1] = "Saved characters: " .. count
@@ -68,7 +67,7 @@ function FCM:DiagnosticsReport()
     rows[#rows+1] = ""
     rows[#rows+1] = "Current character data:"
     for _, item in ipairs(self:DataQuality(own)) do
-        rows[#rows+1] = "  " .. item.name .. ": " .. item.state .. " (" .. self:Age(item.timestamp) .. ")"
+        rows[#rows+1] = "  " .. item.name .. ": " .. item.label
     end
     local errors = self.db.diagnostics and self.db.diagnostics.errors or {}
     rows[#rows+1] = ""

@@ -175,3 +175,74 @@ function FCM:DungeonItemEligibility(itemID, ch)
     if itemScore then return "candidate","possible class item; estimated score "..self.Gear:ScoreLabel(itemScore) end
     return "candidate","potential class item; verify equip rules"
 end
+
+-- v0.9.0: stat-pattern filter for a character's selected specialization.
+-- This is deliberately NOT a BIS list or authoritative class restriction.
+-- Unknown stats stay unknown, rather than being silently excluded from the
+-- normal class filter. For hybrids, an explicitly selected specialization
+-- determines whether we expect a caster or physical offensive stat pattern.
+local casterClasses={MAGE=true,WARLOCK=true,PRIEST=true}
+local casterSpecs={
+    SHAMAN={Elemental=true,Restoration=true},
+    DRUID={Balance=true,Restoration=true},
+    PALADIN={Holy=true},
+}
+local physicalSpecs={
+    SHAMAN={Enhancement=true},DRUID={Feral=true,Guardian=true},
+    PALADIN={Retribution=true,Protection=true},
+}
+function FCM:DungeonSpecFit(itemID,ch)
+    if not ch then return "unknown","select a character" end
+    local eligibility=self:DungeonItemEligibility(itemID,ch)
+    if eligibility=="other" or eligibility=="future" then
+        return "unknown","not currently eligible equipment"
+    end
+    local st=self.Gear and self.Gear.StatValues and self.Gear:StatValues(tonumber(itemID))
+    if not st then return "unknown","live item stats unavailable" end
+    local spec=ch.talentSpec or ""
+    local caster=casterClasses[ch.class] or (casterSpecs[ch.class] and casterSpecs[ch.class][spec])
+    local physical=not caster and ((physicalSpecs[ch.class] and physicalSpecs[ch.class][spec]) or
+        (ch.class=="WARRIOR" or ch.class=="ROGUE" or ch.class=="HUNTER"))
+    if not caster and not physical then return "unknown","specification not established" end
+    local magic=(st.spell or 0)
+    local martial=(st.ap or 0)+(st.dps or 0)
+    -- Strength/agility alone is not definitive for every build, but does
+    -- provide a conservative physical/caster clue when spell/AP is absent.
+    local ability=(st.str or 0)+(st.agi or 0)
+    if caster then
+        if magic>0 and martial==0 then return "match","spell-oriented stat pattern" end
+        if martial>0 and magic==0 then return "offspec","physical offensive stat pattern" end
+    else
+        if martial>0 and magic==0 then return "match","physical offensive stat pattern" end
+        if magic>0 and martial==0 then return "offspec","spell-oriented stat pattern" end
+        if ability>0 and magic==0 then return "match","physical attribute stat pattern" end
+    end
+    return "unknown","mixed or role-neutral stats"
+end
+
+-- An old ForeverDB index can contain item IDs without a boss object or a
+-- dungeon-level loot row. Do NOT assign these to a particular boss. The
+-- detail view uses this function both for selection and for row rendering.
+function FCM:DungeonAssociatedDrops(r)
+    local unassigned={}
+    local attributed,existing={},{}
+    for _,boss in ipairs((r and r.bosses) or {}) do
+        for _,drop in ipairs(boss.loot or {}) do
+            local id=tonumber(drop.id)
+            if id then attributed[id]=true end
+        end
+    end
+    for _,drop in ipairs((r and r.dungeonLoot) or {}) do
+        unassigned[#unassigned+1]=drop
+        local id=tonumber(drop.id)
+        if id then existing[id]=true end
+    end
+    for _,key in ipairs((r and r.lootIDs) or {}) do
+        local id=tonumber(key)
+        if id and id>0 and not attributed[id] and not existing[id] then
+            unassigned[#unassigned+1]={id=id,name="Item #"..id,sourceType="legacy-index"}
+            existing[id]=true
+        end
+    end
+    return unassigned
+end

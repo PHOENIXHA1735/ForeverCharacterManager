@@ -1,7 +1,7 @@
 Sources and licensing
 - ForeverDB.net: https://foreverdb.net/developers ; requires personal approved API key.
-  60 requests/minute and 10,000/day; our client caps its calls, waits between calls,
-  and shows visible attribution. Some sources reflect Classic, beta or speculation.
+  Free tier: 30 requests/minute and 5,000/day. Paid tier: 10,000/day.
+  FCM throttles its calls, observes remaining allowance and gives visible attribution. Some sources reflect Classic, beta or speculation.
 - AHledger: https://ahledger.com/developers ; no key required. Credit AHledger
   wherever prices are displayed; data is a historical snapshot from player scans.
 - TheWoWDB: https://thewowdb.com/developers ; item reference provider.
@@ -14,3 +14,17 @@ if you choose Remember. Never paste it into chat.
 FCM v0.7.9: GitHub release checks use HTTPS GET against the public FCM repository.
 The companion only downloads program ZIPs from that repo after user consent and verifies SHA-256.
 Local character records and ForeverDB credentials are never sent to GitHub.
+
+FCM unified v0.9.0: ReferenceAudit.ps1 audits local reference-cache.json and produces
+reference-audit.json with counts only (no paths, credentials or player data).
+A source-reported 'seen in Forever' flag is not independent live verification.
+Source timestamps record companion import time, not server data freshness.
+
+ForeverDB policy clarified 2026-11-12:
+- For FCM as a local, no-website Windows app, request an exemption for the
+  developer's personal API key (90-day renewal); the key is NOT for distribution.
+- Ship only appropriately attributed selected reference records; never mirror the
+  whole database. Preserve Classic/Seen in Forever/provenance labels.
+- Check build metadata before full imports and prefer paged list endpoints.
+- The scheduled metadata checker does not itself download a whole catalog.
+- AHledger uses a separate API and separate limits. Its data are not ForeverDB calls.

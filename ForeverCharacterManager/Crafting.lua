@@ -24,6 +24,7 @@ function FCM:ScanRecipes()
         ch.professions[profession] = { name = profession, skill = skill,
             maxSkill = child.maxSkillLevel or professionInfo.maxSkillLevel,
             line = professionInfo.professionID, scan = self:Now() }
+        ch.professionsStamp = self:Now()
     end
     local learnedCount = 0
     ch.unlearnedRecipes=ch.unlearnedRecipes or {}
@@ -158,7 +159,7 @@ function FCM:MaterialLocations(itemID, receivingChar)
                     -- Different faction/ruleset stock is visible for accounting,
                     -- but NEVER counted as usable for this recipient.
                     local sameSide = receivingChar and self:CanCollaborate(ch,receivingChar)
-                    local transferable = sameCharacter or ((not item.bound) and sameSide == true)
+                    local transferable = sameCharacter or (item.bound == false and sameSide == true)
                     if transferable then accessible = accessible + count end
                     locations[#locations + 1] = { name = self:DisplayCharacter(ch),
                         where = source, count = count, bound = item.bound, usable = transferable,
@@ -276,11 +277,11 @@ function FCM:QueueCraft(recipeID, recipientKey, crafterKey)
         for _,c in ipairs(eligible) do
             if c.key==crafterKey then valid=true;break end
         end
-        if not valid then return false,"Crafter is unlearned, opposing-faction, or on another realm/ruleset." end
+        if not valid then return false,"Crafter is unlearned, opposing-faction, or on another ruleset." end
     elseif #eligible==1 then
         crafterKey=eligible[1].key
     elseif #eligible==0 then
-        return false,"No same-faction, same-realm crafter is recorded for this recipe."
+        return false,"No same-faction, same-ruleset crafter is recorded for this recipe."
     end
     local info = recipe.outputID and self.Gear and self.Gear:Info(recipe.outputLink or recipe.outputID)
     if info and info.bindType == 1 and crafterKey ~= recipientKey then
@@ -303,7 +304,7 @@ function FCM:AssignQueuedCraft(request, crafterKey)
     if not valid then return false, "Crafter has not learned that recipe." end
     local recipient=self.db.characters[request.recipientKey]
     local can,reason=self:CanCollaborate(crafter,recipient)
-    if not can then return false,"Cannot assign a cross-faction/realm craft: "..reason end
+    if not can then return false,"Cannot assign a cross-faction/ruleset craft: "..reason end
     local info = recipe.outputID and self.Gear and self.Gear:Info(recipe.outputLink or recipe.outputID)
     if info and info.bindType == 1 and crafterKey ~= request.recipientKey then
         return false, "A bind-on-pickup result cannot be assigned to another character."

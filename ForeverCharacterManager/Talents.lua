@@ -120,6 +120,18 @@ function FCM:SetTalentOverride(ch,level,name)
     return true
 end
 
+-- Optional rank-aware custom plan. Legacy /fcm talentadd entries remain
+-- valid strings and are not converted into guessed talent ranks.
+function FCM:SetTalentOverrideRank(ch,level,rank,name)
+    level,rank=tonumber(level),tonumber(rank)
+    if not ch or not level or not rank or level<10 or level>60 or
+       rank<1 or rank>10 or rank~=math.floor(rank) or
+       type(name)~="string" or name:match("^%s*$") then return false end
+    local custom=self:TalentOverrides(ch)
+    custom[level]={name=name,rank=rank,manual=true}
+    return true
+end
+
 function FCM:TalentReport(ch)
     if not ch then return {status="Select a character",rows={}} end
     local guide=self:TalentGuide(ch)
@@ -155,8 +167,15 @@ function FCM:TalentReport(ch)
         local override=custom[pointLevel]
         local step=nil
         if override then
-            step={name=override,level=pointLevel,custom=true}
-            customCount=customCount+1
+            -- Manual entries may be a legacy talent-name string or the new
+            -- {name,rank} form. Neither is represented as verified Icy Veins.
+            local entry=type(override)=="table" and override or {name=override}
+            if type(entry.name)=="string" and entry.name~="" then
+                local rank=tonumber(entry.rank)
+                if rank and (rank<1 or rank>10 or rank~=math.floor(rank)) then rank=nil end
+                step={name=entry.name,rank=rank,level=pointLevel,custom=true}
+                customCount=customCount+1
+            end
         elseif source=="icy" and base and base.name and base.rank then
             step={name=base.name,rank=base.rank,level=pointLevel,
                 verified=true,reason=base.reason}

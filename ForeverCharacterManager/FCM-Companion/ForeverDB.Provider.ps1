@@ -1,8 +1,9 @@
-﻿# Optional ForeverDB.net read-only provider for FCM Data Companion.
+# Optional ForeverDB.net read-only provider for FCM Data Companion.
 # The API key is never written to game addon files, cache exports, or logs.
 $script:ForeverDBKeyFile = Join-Path $script:Base 'foreverdb-key.dpapi'
 $script:ForeverDBRequests = 0
 $script:ForeverDBLimit = 45
+$script:ForeverDBDailyRemaining = $null
 $script:ForeverDBItemsImported = 0
 $script:ForeverDBRecipesImported = 0
 $script:DungeonCache = @{}
@@ -43,19 +44,26 @@ function Fetch-ForeverDB([string]$relative) {
     if ($relative -notmatch '^/[a-z0-9/?=&%._-]+$') { throw 'Unsafe ForeverDB route.' }
     # Only use ForeverDB's documented official host and GET paths.
     $url = 'https://foreverdb.net/api/v1' + $relative
-    if ($script:ForeverDBRequests -gt 0) { Wait-FcmResponsive 1100 }
+    # ForeverDB free tier: 30 requests per minute; be conservative across retries.
+    if ($null -ne $script:ForeverDBDailyRemaining -and $script:ForeverDBDailyRemaining -le 0) { throw 'ForeverDB daily API allowance exhausted; no more requests will be sent.' }
+    if ($script:ForeverDBRequests -gt 0) { Wait-FcmResponsive 2200 }
     $script:ForeverDBRequests++
     try {
-        return Invoke-FcmHttpJson $url @{
+        $result = Invoke-FcmHttpJson $url @{
             'X-API-Key'=$key;
             'Accept'='application/json';
-            'User-Agent'='FCMDataCompanion/0.8.9'
+            'User-Agent'='FCM/0.9.0 (+https://github.com/PHOENIXHA1735/ForeverCharacterManager)'
         }
+        if ($script:FcmLastHttpDailyRemaining -match '^\d+$') { $script:ForeverDBDailyRemaining=[int]$script:FcmLastHttpDailyRemaining }
+        return $result
     } catch {
         # Include status only. Exceptions may contain sensitive request headers.
         $status = ''
         $status = Get-FcmHttpStatus $_
-        if ($status -eq 429) { throw 'ForeverDB rate limit reached (429); try again later.' }
+        if ($status -eq 429) {
+            $seconds = [int]$script:FcmLastHttpRetryAfter
+            throw ('ForeverDB rate limited (429); Retry-After '+[Math]::Max(1,$seconds)+' seconds. Scan stopped; cached records retained.')
+        }
         if ($status -eq 401 -or $status -eq 403) { throw 'ForeverDB authentication failed. Check your approved API key.' }
         if ($status) { throw "ForeverDB request failed: HTTP $status" }
         throw 'ForeverDB could not be reached or returned an unreadable response.'
@@ -212,11 +220,20 @@ function FDB-SaveDungeonSummary($entry,[int]$id) {
     $name=FDB-DungeonName $entry
     if (-not $name) {return}
     $key=[string]$id
-    if ($script:DungeonCache.ContainsKey($key) -and $script:DungeonCache[$key].bossCount -gt 0) {return}
+    # An index summary must not replace cached loot, even for an instance
+    # whose boss names have not been imported yet.
+    if ($script:DungeonCache.ContainsKey($key)) {
+        $previous=$script:DungeonCache[$key]
+        if ([int]$previous.bossCount -gt 0 -or
+                @($previous.dungeonLoot | Where-Object { $_ }).Count -gt 0 -or
+                @($previous.lootIDs | Where-Object { $_ }).Count -gt 0) {return}
+    }
     $levelText='Not supplied'
     if ($entry.levelRange) { $levelText=[string]$entry.levelRange }
     elseif ($entry.minLevel -and $entry.maxLevel) {$levelText=([string]$entry.minLevel)+'-'+([string]$entry.maxLevel)}
-    $script:DungeonCache[$key]=@{name=$name;levels=$levelText;kind=(FDB-InstanceKind $entry);bossCount=0;lines=@('Dungeon listed by ForeverDB; detailed boss/loot data not yet imported');lootIDs=@()}
+    $script:DungeonCache[$key]=@{name=$name;levels=$levelText;kind=(FDB-InstanceKind $entry);bossCount=0;lines=@('Dungeon listed by ForeverDB; detailed boss/loot data not yet imported');lootIDs=@();
+        sourceProvider='ForeverDB';referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o');
+        sourceEvidence='Index-only reference; boss/loot details not yet imported'}
 }
 
 function FDB-CacheItem([string]$key) {
@@ -230,6 +247,126 @@ function FDB-CacheItem([string]$key) {
     }
     return $result
 }
+function FDB-AppendReference([string]$current,[string]$addition) {
+    if (-not $addition) {return $current}
+    $entries=New-Object 'System.Collections.Generic.List[string]'
+    foreach ($part in @($current -split ';')) {
+        $value=$part.Trim()
+        if ($value -and -not $entries.Contains($value)) {$entries.Add($value)}
+    }
+    if (-not $entries.Contains($addition)) {$entries.Add($addition)}
+    # Keep bounded strings in local cache and generated Lua; never silently replace old sources.
+    while ($entries.Count -gt 1 -and (($entries -join '; ').Length -gt 550 -or $entries.Count -gt 12)) {
+        $entries.RemoveAt(0)
+    }
+    return ($entries -join '; ')
+}
+# Append only source records actually returned by the provider. A zone-only
+# record has NO implied drop percentage; keep richer cached observations.
+function FDB-AddFarmSource($item,[string]$kind,[string]$name,[string]$zone,$record) {
+    $name=[string]$name;$zone=[string]$zone
+    if (-not $name -and -not $zone) {return}
+    if ($name.Length -gt 120) {$name=$name.Substring(0,120)}
+    if ($zone.Length -gt 180) {$zone=$zone.Substring(0,180)}
+    $row=@{kind=$kind;name=$name;zone=$zone;source='ForeverDB.net';evidence='Imported reference; verify in game'}
+    if ($null -ne $record) {
+        foreach ($prop in @('dropRatePercent','chancePercent','ratePct')) {
+            $rate=$null
+            try {if ($null -ne $record.$prop) {$rate=[double]$record.$prop}} catch { }
+            if ($null -ne $rate -and $rate -gt 0 -and $rate -le 100) {
+                $row.dropRatePct=[Math]::Round($rate,5);break
+            }
+        }
+        foreach ($prop in @('sampleSize','observations','killCount')) {
+            $n=0
+            try {if ($null -ne $record.$prop) {$n=[int]$record.$prop}} catch { }
+            if ($n -gt 0) {$row.sampleSize=$n;break}
+        }
+        # NO inferred kills/hr; this requires actual per-hour observations.
+        if ($record.seenInForever -eq $true) {
+            $row.evidence='Provider reports in-client observation; not independently verified by FCM'
+        }
+    }
+    $rows=New-Object 'System.Collections.Generic.List[object]'
+    $matched=$false
+    foreach ($old in @($item.farmSources | Where-Object { $_ })) {
+        if ([string]$old.kind -ieq $kind -and [string]$old.name -ieq $name -and
+                [string]$old.zone -ieq $zone) {
+            if (-not $row.dropRatePct -and $null -ne $old.dropRatePct) {$row.dropRatePct=$old.dropRatePct}
+            if (-not $row.sampleSize -and $null -ne $old.sampleSize) {$row.sampleSize=$old.sampleSize}
+            $rows.Add($row);$matched=$true
+        } else {$rows.Add($old)}
+    }
+    if (-not $matched) {$rows.Add($row)}
+    # Limit generated payload and avoid unbounded reference caches.
+    while ($rows.Count -gt 30) {$rows.RemoveAt(0)}
+    $item.farmSources=@($rows.ToArray())
+}
+function FDB-ReadFarmDrops($item,$record) {
+    if ($null -eq $record) {return}
+    foreach ($field in @('droppedBy','dropSources','lootSources')) {
+        foreach ($source in @(FDB-List $record $field)) {
+            if ($null -eq $source -or $source -is [string]) {continue}
+            $name=''
+            foreach ($k in @('name','creatureName','npcName','mobName')) {
+                if ($source.$k -is [string] -and $source.$k.Trim()) {$name=[string]$source.$k;break}
+            }
+            if (-not $name -and $source.creature -and $source.creature.name) {$name=[string]$source.creature.name}
+            if (-not $name -and $source.npc -and $source.npc.name) {$name=[string]$source.npc.name}
+            $zone=''
+            foreach ($k in @('zoneName','areaName','zone')) {
+                if ($source.$k -is [string]) {$zone=[string]$source.$k;break}
+            }
+            if (-not $zone -and $source.location -and $source.location.zone -is [string]) {$zone=[string]$source.location.zone}
+            if ($name) {FDB-AddFarmSource $item 'mob' $name $zone $source}
+        }
+    }
+}
+
+function FDB-MergeBossRecords($fresh,$cached) {
+    # Merge by stable NPC ID or boss name, not array index. Preserve old loot if
+    # a partial API response omits a boss or a particular linked item.
+    $merged=New-Object 'System.Collections.Generic.List[object]'
+    $used=@{}
+    foreach ($b in @($fresh | Where-Object { $_ })) {
+        $oldMatch=$null;$matchIndex=-1
+        for ($i=0;$i -lt @($cached).Count;$i++) {
+            if ($used.ContainsKey([string]$i)) {continue}
+            $previous=@($cached)[$i]
+            if ($null -eq $previous) {continue}
+            $sameID=([int]$b.id -gt 0 -and [int]$b.id -eq [int]$previous.id)
+            $sameName=($b.name -and $previous.name -and
+                [string]$b.name -notmatch 'name not supplied|name unavailable' -and
+                [string]$previous.name -notmatch 'name not supplied|name unavailable' -and
+                [string]$b.name -ieq [string]$previous.name)
+            if ($sameID -or $sameName) { $oldMatch=$previous; $matchIndex=$i;break }
+        }
+        $id=[int]$b.id;$name=[string]$b.name
+        $drops=@($b.loot | Where-Object { $_ -and [int]$_.id -gt 0 })
+        if ($oldMatch) {
+            $used[[string]$matchIndex]=$true
+            if ($id -le 0) {$id=[int]$oldMatch.id}
+            if ($name -match 'name not supplied|name unavailable' -and $oldMatch.name -and
+                    [string]$oldMatch.name -notmatch 'name not supplied|name unavailable') {$name=[string]$oldMatch.name}
+            $seen=@{}
+            foreach ($drop in $drops) {$seen[[string]$drop.id]=$true}
+            foreach ($drop in @($oldMatch.loot | Where-Object { $_ -and [int]$_.id -gt 0 })) {
+                if (-not $seen.ContainsKey([string]$drop.id) -and $drops.Count -lt 65) {
+                    $drops+= $drop; $seen[[string]$drop.id]=$true
+                }
+            }
+        }
+        $merged.Add(@{id=$id;name=$name;loot=@($drops)})
+        if ($merged.Count -ge 90) {break}
+    }
+    for ($i=0;$i -lt @($cached).Count;$i++) {
+        if ($merged.Count -ge 90) {break}
+        $old=@($cached)[$i]
+        if ($old -and -not $used.ContainsKey([string]$i)) {$merged.Add($old)}
+    }
+    return $merged.ToArray()
+}
+
 function FDB-SaveItem($item) {
     if ($null -eq $item) { return }
     $id = FDB-ItemId $item
@@ -249,8 +386,13 @@ function FDB-SaveItem($item) {
     if (-not $info.name -or $name -notmatch '^Item #\d+$') { $info.name = [string]$name }
     if (-not $info.category) { $info.category = 'WoW Forever item' }
     $info.metadataSource = 'Data from ForeverDB.net (https://foreverdb.net)'
+    $info.sourceProvider = 'ForeverDB'
+    $info.referenceCheckedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $info.sourceEvidence = $(if ($item.seenInForever -eq $true) {
+        'ForeverDB reports in-client observation; not independently verified by FCM'
+    } else { 'External reference only; live availability not confirmed' })
     $info.link = 'https://foreverdb.net/items/' + $id
-    if ($name -match '^Item #\d+$') {
+    if ($name -match '^Item #\d+$' -and [string]$info.name -match '^Item #\d+$') {
         $info.sourceStatus = 'Catalog ID only; name and details not yet verified'
     } elseif ($item.betaEvent -eq $true) {
         $info.sourceStatus = 'Historical beta event item; not a standard launch recommendation'
@@ -290,8 +432,9 @@ function FDB-SaveItem($item) {
     if ($item.quality -and $item.quality.name -and -not $info.quality) { $info.quality=[string]$item.quality.name }
     if ($item.subclass -and $item.subclass.name) { $info.subclass=[string]$item.subclass.name }
     if ($item.equipLoc -and $item.equipLoc.name) { $info.equipLoc=[string]$item.equipLoc.name }
-    $info.betaEvent=($item.betaEvent -eq $true)
-    $info.speculation=($item.speculation -eq $true)
+    # Sparse list pages may omit these flags. Absence is not evidence of false.
+    if ($null -ne $item.betaEvent) {$info.betaEvent=($item.betaEvent -eq $true)}
+    if ($null -ne $item.speculation) {$info.speculation=($item.speculation -eq $true)}
     if ($item.speculationReasons) { $info.availabilityNote = 'ForeverDB flags uncertain availability; inspect the item page.' }
     if ($item.liveClient) { $info.liveClientNote='Client changes reported; compare with the live in-game tooltip.' }
     if ($item.effects) {
@@ -306,6 +449,9 @@ function FDB-SaveItem($item) {
         if ($effectSummary.Count) {$info.effects=$effectSummary -join '; '}
         else { $info.effects='Effect records present; review item in game' }
     }
+    # Incorporate only structured drop-source records supplied by this response.
+    # Absence of chance metadata must never be converted into a guessed rate.
+    FDB-ReadFarmDrops $info $item
     $script:ItemCache[$key] = $info
     $script:ForeverDBItemsImported++
 }
@@ -351,9 +497,23 @@ function FDB-SaveRecipe($recipe,[string]$profession) {
         resultID=$resultID; reagents=$mats;
         acquisition=(FDB-SourceSummary $recipe);
         source='Recipe data from ForeverDB.net (https://foreverdb.net); acquisition confidence varies'
+        sourceProvider='ForeverDB'
+        referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o')
+        sourceEvidence='External reference: verify source, output and reagents in current game client'
     }
-    # If recipe is missing a verified output or reagent list, keep it in the
-    # Item Explorer reference library only; do not make craft-ready claims.
+    # Incomplete updates must not erase previously imported detailed outputs
+    # or reagents. Retaining a source claim is NOT a live-game verification.
+    $prior=$script:RecipeCache[[string]$id]
+    if ($prior) {
+        if ($r.resultID -le 0 -and [int]$prior.resultID -gt 0) {$r.resultID=[int]$prior.resultID}
+        if ($mats.Count -eq 0 -and @($prior.reagents | Where-Object { $_ }).Count -gt 0) {
+            $r.reagents=@($prior.reagents | Where-Object { $_ })
+        }
+        if ([string]$r.acquisition -match 'not specified|could not be resolved' -and $prior.acquisition) {
+            $r.acquisition=[string]$prior.acquisition
+        }
+    }
+    # Without a known output or reagents, the record remains advisory only.
     $script:RecipeCache[[string]$id]=$r
     $script:ForeverDBRecipesImported++
     if ($resultID -gt 0) {
@@ -380,12 +540,13 @@ function FDB-FishingLocations($response) {
             if ($id -le 0) { continue }
             $key=[string]$id
             $info=FDB-CacheItem $key
-            $old=[string]$info.where
-            if ($old -notlike "*$zoneName*") {
-                if ($old) { $info.where = $old + '; ' + $zoneName }
-                else { $info.where = 'Fishing zone: ' + $zoneName }
-            }
+            $info.where=FDB-AppendReference ([string]$info.where) ('Fishing zone: ' + $zoneName)
+            FDB-AddFarmSource $info 'fishing' 'Fishing waters' $zoneName $catch
             $info.metadataSource = 'Fishing reference: ForeverDB.net (https://foreverdb.net); check source confidence'
+            $info.sourceProvider='ForeverDB'
+            $info.referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o')
+            $info.gatheringEvidence='Reported fishing zone; catch rate and live availability not verified'
+            if (-not $info.sourceEvidence) {$info.sourceEvidence='External reference only; no independent live verification'}
             $script:ItemCache[$key]=$info
         }
     }
@@ -407,9 +568,16 @@ function FDB-Gathering($response,[string]$kind) {
         }
         if ($zones.Count -gt 0) {
             $where=$kind + ': ' + (($zones | Select-Object -Unique | Select-Object -First 14) -join ', ')
-            if ($item.where -and $item.where -ne $where) { $item.where += '; ' + $where }
-            else { $item.where=$where }
+            $item.where=FDB-AppendReference ([string]$item.where) $where
+            foreach ($z in @($zones | Select-Object -Unique | Select-Object -First 14)) {
+                $farmKind=([string]$kind).ToLowerInvariant()
+                FDB-AddFarmSource $item $farmKind 'Gathering node' ([string]$z) $null
+            }
             $item.metadataSource='Gathering reference: ForeverDB.net (https://foreverdb.net)'
+            $item.sourceProvider='ForeverDB'
+            $item.referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o')
+            $item.gatheringEvidence='Reported gathering area; route and availability not verified in game'
+            if (-not $item.sourceEvidence) {$item.sourceEvidence='External reference only; no independent live verification'}
             $script:ItemCache[$key]=$item
         }
     }
@@ -487,18 +655,25 @@ function FDB-DropBossName($drop) {
     if ($drop.source -and $drop.source.bossName) {return [string]$drop.source.bossName}
     return ''
 }
-function FDB-DropEntry($drop) {
+function FDB-DropEntry($drop,[string]$sourceType='dungeon-associated') {
     $itemId=FDB-ItemId $drop
     if ($itemId -le 0) {return $null}
     $name=FDB-ItemName $drop
     if (-not $name) {$name='Item #'+$itemId}
-    return @{id=$itemId;name=$name}
+    return @{id=$itemId;name=$name;sourceType=$sourceType}
 }
 function FDB-RecordDungeonItem([int]$itemId,[string]$itemName,[string]$dungeon,[string]$bossName) {
     $ref=FDB-CacheItem ([string]$itemId)
     if (-not $ref.name -or $ref.name -match '^Item #\d+$') {$ref.name=$itemName}
-    $ref.dungeon=$dungeon + $(if ($bossName) {' / ' + $bossName} else {' (boss unconfirmed)'})
-    $ref.metadataSource='Data from ForeverDB.net (https://foreverdb.net); dungeon association only, not confirmed live drop'
+    $location=$dungeon + $(if ($bossName) {' / ' + $bossName} else {' (boss unconfirmed)'})
+    $existingSources=[string]$ref.dungeonSources
+    if (-not $existingSources) {$existingSources=[string]$ref.dungeon}
+    $ref.dungeonSources=FDB-AppendReference $existingSources $location
+    $ref.dungeon=$ref.dungeonSources
+    $ref.metadataSource='Imported from ForeverDB.net (https://foreverdb.net); not confirmed by observed live drops'
+    $ref.sourceProvider='ForeverDB'
+    $ref.referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o')
+    $ref.sourceEvidence='Boss/dungeon association from external reference; live drop not confirmed'
     $script:ItemCache[[string]$itemId]=$ref
 }
 function FDB-SaveDungeon($detail) {
@@ -516,7 +691,7 @@ function FDB-SaveDungeon($detail) {
         $drops=@();$bossSeen=@{}
         foreach ($drop in @(FDB-BossLoot $boss)) {
             if ($null -eq $drop -or $drops.Count -ge 65) {continue}
-            $entry=FDB-DropEntry $drop
+            $entry=FDB-DropEntry $drop 'boss-direct'
             if (-not $entry -or $bossSeen.ContainsKey([string]$entry.id)) {continue}
             $bossSeen[[string]$entry.id]=$true
             $drops+= $entry
@@ -541,6 +716,7 @@ function FDB-SaveDungeon($detail) {
             }
         }
         if ($matched -ge 0) {
+            $entry.sourceType='boss-explicit'
             $seen=@($bossRecords[$matched].loot | Where-Object {[int]$_.id -eq [int]$entry.id})
             if ($seen.Count -eq 0 -and $bossRecords[$matched].loot.Count -lt 65) {
                 $bossRecords[$matched].loot+= $entry
@@ -572,29 +748,18 @@ function FDB-SaveDungeon($detail) {
     # Retain better cached details when the API temporarily returns less data.
     $oldBosses=@()
     if ($old -and $old.bosses) {$oldBosses=@($old.bosses | Where-Object {$_})}
-    if ($bossRecords.Count -eq 0 -and $oldBosses.Count -gt 0) {
-        $bossRecords=$oldBosses
+    if ($oldBosses.Count -gt 0) {
+        $bossRecords=@(FDB-MergeBossRecords $bossRecords $oldBosses)
     }
     if ($dungeonLoot.Count -eq 0 -and $old -and $old.dungeonLoot) {
         $dungeonLoot=@($old.dungeonLoot | Where-Object {$_})
     }
-    if ($oldBosses.Count -gt 0 -and $bossRecords.Count -eq $oldBosses.Count) {
-        for ($i=0;$i -lt $bossRecords.Count;$i++) {
-            $before=$oldBosses[$i]
-            if ($before.name -and ([string]$before.name) -notmatch 'name not supplied|name unavailable' -and
-                    ([string]$bossRecords[$i].name) -match 'name not supplied|name unavailable') {
-                $bossRecords[$i].name=[string]$before.name
-            }
-            $newDrops=@($bossRecords[$i].loot | Where-Object {$_})
-            if ($newDrops.Count -eq 0 -and $before.loot) {
-                $bossRecords[$i].loot=@($before.loot | Where-Object {$_})
-            }
-        }
-    }
     foreach ($b in $bossRecords) {foreach ($drop in @($b.loot)) {if ([int]$drop.id -gt 0) {[void]$lootIDs.Add([int]$drop.id)}}}
     foreach ($drop in $dungeonLoot) {if ([int]$drop.id -gt 0) {[void]$lootIDs.Add([int]$drop.id)}}
     $script:DungeonCache[[string]$id]=@{name=$dungeonName;levels=$levelText;kind=$kind;
-        bossCount=$bossRecords.Count;bosses=@($bossRecords);dungeonLoot=@($dungeonLoot);lines=$lines;lootIDs=@($lootIDs)}
+        bossCount=$bossRecords.Count;bosses=@($bossRecords);dungeonLoot=@($dungeonLoot);lines=$lines;lootIDs=@($lootIDs);
+        sourceProvider='ForeverDB';referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o');
+        sourceEvidence='External dungeon/boss reference; loot is not confirmed in the live game'}
 }
 function FDB-SaveVendor($vendor) {
     if ($null -eq $vendor -or -not $vendor.name) { return 0 }
@@ -619,6 +784,10 @@ function FDB-SaveVendor($vendor) {
             else { $entry.soldBy = $tag }
         }
         $entry.vendorSource='Vendor records from ForeverDB.net (https://foreverdb.net)'
+        $entry.sourceProvider='ForeverDB'
+        $entry.referenceCheckedAt=(Get-Date).ToUniversalTime().ToString('o')
+        $entry.vendorEvidence=$(if ($seen) { 'Vendor marked seen by source; price/stock still unverified by FCM' } else { 'Reference vendor only; verify availability in the live game' })
+        if (-not $entry.sourceEvidence) {$entry.sourceEvidence='External reference only; no independent live verification'}
         $script:ItemCache[$key]=$entry
         $count++
     }
@@ -641,6 +810,7 @@ function Sync-ForeverDB {
         Log ('ForeverDB skipped: ' + $_.Exception.Message)
         return
     }
+    if ($build) { $script:Config.fdbLastBuild=[string]$build }
     # First repaired run goes back to page zero: older versions advanced the
     # cursor even when item rows could not be decoded and saved.
     if ((FDB-Int $script:Config.fdbCatalogImporter) -lt 2) {

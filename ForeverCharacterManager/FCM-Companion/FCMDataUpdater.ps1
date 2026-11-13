@@ -1,4 +1,4 @@
-﻿# Forever Character Manager - Windows Data Companion v0.8.9
+# Forever Character Manager - Windows Data Companion v0.9.0
 # Open-source PowerShell 5.1 Windows Forms tool; no installation, modules, or
 # administrator privileges required. Internet requests are GET only.
 # Reads FCM's SavedVariables locally for item IDs. Never uploads them.
@@ -13,6 +13,8 @@ $script:CachePath = Join-Path $script:Base 'reference-cache.json'
 $script:ReportPath = Join-Path $script:Base 'last-sync-report.json'
 $script:OperationRunning = $false
 $script:ScanRunning = $false
+$script:FcmLastHttpDailyRemaining = $null
+$script:FcmLastHttpRetryAfter = $null
 $script:CancelRequested = $false
 $script:ActiveRequestCancellation = $null
 # HttpClient requests execute asynchronously while the WinForms event loop stays
@@ -39,6 +41,7 @@ $script:Config = @{ gameRoot=''; terms='Raw Brilliant Smallfish'; market='foreve
 
 # Optional ForeverDB provider: loaded as a source file, not executed as web content.
 . (Join-Path $script:Base 'ForeverDB.Provider.ps1')
+. (Join-Path $script:Base 'ReferenceAudit.ps1')
 . (Join-Path $script:Base 'GitHubUpdates.ps1')
 
 function Get-Config {
@@ -117,6 +120,8 @@ function Invoke-FcmHttpJson([string]$uri,[hashtable]$headers) {
     $script:ActiveRequestCancellation = $cts
     $cts.CancelAfter(25000)
     $response = $null
+    $script:FcmLastHttpDailyRemaining = $null
+    $script:FcmLastHttpRetryAfter = $null
     try {
         $task = $script:HttpClient.SendAsync($request,[System.Net.Http.HttpCompletionOption]::ResponseContentRead,$cts.Token)
         while (-not $task.IsCompleted) {
@@ -129,10 +134,17 @@ function Invoke-FcmHttpJson([string]$uri,[hashtable]$headers) {
         }
         Check-FcmCancel
         $response = $task.GetAwaiter().GetResult()
+        if ($response.Headers.Contains('X-Daily-Remaining')) {
+            $script:FcmLastHttpDailyRemaining=(@($response.Headers.GetValues('X-Daily-Remaining')) | Select-Object -First 1)
+        }
+        if ($response.Headers.RetryAfter) {
+            try { $script:FcmLastHttpRetryAfter=[int][Math]::Ceiling($response.Headers.RetryAfter.Delta.TotalSeconds) } catch {}
+        }
         if (-not $response.IsSuccessStatusCode) {
             $status = [int]$response.StatusCode
             $failure = [System.Exception]::new("HTTP $status from reference provider")
             $failure.Data['HttpStatus'] = $status
+            if ($script:FcmLastHttpRetryAfter) { $failure.Data['RetryAfterSeconds']=$script:FcmLastHttpRetryAfter }
             throw $failure
         }
         $payload = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
@@ -206,7 +218,7 @@ function Install-Addon {
     if (-not (Test-Path -LiteralPath $dest)) { New-Item -Path $dest -ItemType Directory | Out-Null }
     foreach ($src in @(Get-ChildItem -LiteralPath $script:SourceAddon -File)) {
         # Never overwrite reference data created by an earlier successful update.
-        if ($src.Name -eq 'ExternalData.generated.lua' -and
+        if ($src.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua') -and
                 (Test-Path -LiteralPath (Join-Path $dest $src.Name))) { continue }
         Copy-Item -LiteralPath $src.FullName -Destination (Join-Path $dest $src.Name) -Force
     }
@@ -224,7 +236,7 @@ function Install-Addon {
     $destCompanion = Join-Path $dest 'FCM-Companion'
     if (-not (Test-Path -LiteralPath $destCompanion)) { New-Item -Path $destCompanion -ItemType Directory | Out-Null }
     # Only copy static scripts and documentation; NEVER copy credentials, settings or caches.
-    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1')) {
+    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt')) {
         $companionSource = Join-Path $script:Base $filename
         if (Test-Path -LiteralPath $companionSource) {
             Copy-Item -LiteralPath $companionSource -Destination (Join-Path $destCompanion $filename) -Force
@@ -243,7 +255,7 @@ function Get-Remote([string]$uri) {
     for ($attempt = 1; $attempt -le 2; $attempt++) {
         Check-FcmCancel
         try {
-            return Invoke-FcmHttpJson $uri @{'User-Agent'='FCMDataCompanion/0.8.9';'Accept'='application/json'}
+            return Invoke-FcmHttpJson $uri @{'User-Agent'='FCM/0.9.0 (+https://github.com/PHOENIXHA1735/ForeverCharacterManager)';'Accept'='application/json'}
         } catch {
             Check-FcmCancel
             $httpStatus = Get-FcmHttpStatus $_
@@ -290,6 +302,9 @@ function Normalize-Item($item) {
         sourceStatus = 'Public API record; acquisition locations may not be included'
         metadataSource = 'Data from TheWoWDB (thewowdb.com)'
         link = "https://thewowdb.com/wow-forever/item/$id/"
+        sourceProvider = 'TheWoWDB'
+        referenceCheckedAt = (Get-Date).ToUniversalTime().ToString('o')
+        sourceEvidence = 'Public reference item; not independently verified in the game client'
     }
     if ($item.links -and $item.links.html) { $info.link = [string]$item.links.html }
     if ($item.class_name) { $info.category = [string]$item.class_name }
@@ -307,6 +322,9 @@ function Save-Item($item) {
         if ($current -is [System.Collections.IDictionary]) {
             foreach ($field in $normalized.info.Keys) {
                 if (-not $current[$field]) { $current[$field] = $normalized.info[$field] }
+                if ($field -eq 'referenceCheckedAt' -and [string]$current.sourceProvider -eq 'TheWoWDB') {
+                    $current[$field] = $normalized.info[$field]
+                }
             }
             $script:ItemCache[$key] = $current
             return
@@ -444,6 +462,9 @@ function Sync-Recipes {
                     resultID = $(if ($r.result -and $r.result.id) {[int]$r.result.id} else {0})
                     reagents = $mats
                     source = 'Recipe data from AHledger (ahledger.com); verify live availability'
+                    sourceProvider = 'AHledger'
+                    referenceCheckedAt = (Get-Date).ToUniversalTime().ToString('o')
+                    sourceEvidence = 'Public recipe reference; reagent and acquisition claims not independently verified'
                 }
                 # Do not replace richer ForeverDB acquisition records with a
                 # thinner AHledger recipe summary on subsequent refreshes.
@@ -462,7 +483,9 @@ function Sync-Recipes {
 }
 function LuaQ($value) {
     $s = [string]$value
-    $s = $s.Replace('\','\\').Replace('"','\"').Replace("`r",'').Replace("`n",'\n')
+    # Lua 5.1 cannot embed raw control characters in quoted strings.
+    $s=[regex]::Replace($s,'[\x00-\x08\x0B\x0C\x0E-\x1F]',' ')
+    $s = $s.Replace('\','\\').Replace('"','\"').Replace("`r",'').Replace("`n",'\n').Replace("`t",'\t')
     # WoW Lua can display UTF-8; trim exceptionally long untrusted fields.
     if ($s.Length -gt 600) { $s = $s.Substring(0,600) }
     return '"' + $s + '"'
@@ -522,7 +545,7 @@ function Write-LuaFile {
         $id=[int]$key
         $item=$script:ItemCache[$key]
         [void]$sb.AppendLine("do local r = FCM.externalData.items[$id] or {}")
-        foreach ($name in @('name','category','link','where','uses','recipes','source','sourceStatus','metadataSource','dungeon','confidence','stats','effects','quality','itemLevel','requiredLevel','classID','subclass','equipLoc','slotID','binding','sellPrice','soldBy','vendorSource','availabilityNote','liveClientNote')) {
+        foreach ($name in @('name','category','link','where','uses','recipes','source','sourceStatus','metadataSource','sourceProvider','sourceEvidence','referenceCheckedAt','gatheringEvidence','vendorEvidence','dungeon','dungeonSources','confidence','stats','effects','quality','itemLevel','requiredLevel','classID','subclass','equipLoc','slotID','binding','sellPrice','soldBy','vendorSource','availabilityNote','liveClientNote')) {
             $value=$item.$name
             if ($null -ne $value -and [string]$value -ne '') {
                 [void]$sb.AppendLine('r.' + $name + ' = ' + (LuaQ $value))
@@ -530,6 +553,28 @@ function Write-LuaFile {
         }
         foreach ($name in @('betaEvent','speculation')) {
             if ($item.$name -eq $true) { [void]$sb.AppendLine('r.'+$name+'=true') }
+        }
+        # Structured, attributed farm sources; values validated before being
+        # emitted as Lua. No guessed rates, no API key, no personal character data.
+        $farmRows=@($item.farmSources | Where-Object {$_})
+        if ($farmRows.Count -gt 0) {
+            [void]$sb.AppendLine('r.farmSources = {')
+            foreach ($farm in @($farmRows | Select-Object -First 30)) {
+                $name=([string]$farm.name);$zone=([string]$farm.zone)
+                if (-not $name -and -not $zone) {continue}
+                [void]$sb.Append('{kind='+(LuaQ $farm.kind)+',name='+(LuaQ $name)+',zone='+(LuaQ $zone)+
+                    ',source='+(LuaQ $farm.source)+',evidence='+(LuaQ $farm.evidence))
+                foreach ($prop in @('dropRatePct','sampleSize','killsPerHour','levelMin','levelMax')) {
+                    $v=0.0
+                    try {if ($null -ne $farm.$prop) {$v=[double]$farm.$prop}} catch {}
+                    if ($v -gt 0 -and $v -lt 1000000000 -and
+                        ($prop -ne 'dropRatePct' -or $v -le 100)) {
+                        [void]$sb.Append(','+$prop+'='+$v.ToString('0.#####',[Globalization.CultureInfo]::InvariantCulture))
+                    }
+                }
+                [void]$sb.AppendLine('},')
+            }
+            [void]$sb.AppendLine('}')
         }
         [void]$sb.AppendLine("FCM.externalData.items[$id]=r end")
         $itemWritten++
@@ -540,7 +585,7 @@ function Write-LuaFile {
         if ($key -notmatch '^\d{1,8}$') { continue }
         $r=$script:RecipeCache[$key]
         [void]$sb.Append("FCM.externalData.recipes[$key]={")
-        foreach ($name in @('name','profession','acquisition','source')) {
+        foreach ($name in @('name','profession','acquisition','source','sourceProvider','sourceEvidence','referenceCheckedAt')) {
             [void]$sb.Append($name + '=' + (LuaQ $r.$name) + ',')
         }
         [void]$sb.Append('resultID=' + [int]$r.resultID + ',skill=' + [int]$r.skill + ',reagents={')
@@ -572,7 +617,7 @@ function Write-LuaFile {
     Check-FcmCancel
     foreach ($key in @($script:DungeonCache.Keys | Where-Object {$_ -match '^\d{1,8}$'} | Sort-Object {[int]$_} | Select-Object -First 1000)) {
         $d=$script:DungeonCache[$key]
-        [void]$sb.Append('FCM.externalData.dungeons[' + $key + '] = {name=' + (LuaQ $d.name) + ',levels='+(LuaQ $d.levels)+',kind='+(LuaQ $d.kind)+',bossCount=' + [int]$d.bossCount + ',lootIDs={')
+        [void]$sb.Append('FCM.externalData.dungeons[' + $key + '] = {name=' + (LuaQ $d.name) + ',levels='+(LuaQ $d.levels)+',kind='+(LuaQ $d.kind)+',sourceProvider='+(LuaQ $d.sourceProvider)+',referenceCheckedAt='+(LuaQ $d.referenceCheckedAt)+',sourceEvidence='+(LuaQ $d.sourceEvidence)+',bossCount=' + [int]$d.bossCount + ',lootIDs={')
         foreach ($itemID in @($d.lootIDs | Select-Object -First 100)) { if ([int]$itemID -gt 0) { [void]$sb.Append(([int]$itemID).ToString() + ',') } }
         [void]$sb.Append('},bosses={')
         foreach ($boss in @($d.bosses | Select-Object -First 90)) {
@@ -580,14 +625,14 @@ function Write-LuaFile {
             [void]$sb.Append('{id=' + [int]$boss.id + ',name='+(LuaQ $boss.name)+',loot={')
             foreach ($drop in @($boss.loot | Select-Object -First 65)) {
                 if (-not $drop -or [int]$drop.id -le 0) {continue}
-                [void]$sb.Append('{id=' + [int]$drop.id + ',name='+(LuaQ $drop.name)+'},')
+                [void]$sb.Append('{id=' + [int]$drop.id + ',name='+(LuaQ $drop.name)+',sourceType='+(LuaQ $drop.sourceType)+'},')
             }
             [void]$sb.Append('}},')
         }
         [void]$sb.Append('},dungeonLoot={')
         foreach ($drop in @($d.dungeonLoot | Select-Object -First 100)) {
             if (-not $drop -or [int]$drop.id -le 0) {continue}
-            [void]$sb.Append('{id=' + [int]$drop.id + ',name='+(LuaQ $drop.name)+'},')
+            [void]$sb.Append('{id=' + [int]$drop.id + ',name='+(LuaQ $drop.name)+',sourceType='+(LuaQ $drop.sourceType)+'},')
         }
         [void]$sb.Append('},lines={')
         foreach ($line in @($d.lines | Select-Object -First 100)) { [void]$sb.Append((LuaQ $line) + ',') }
@@ -596,6 +641,9 @@ function Write-LuaFile {
     $text=$sb.ToString()
     if ($text.Length -gt 24000000) { throw 'Catalog exceeded the 24MB Lua safety limit; the previous version was preserved. Reduce imported fields or split the catalog.' }
     Check-FcmCancel
+    $backup = [ordered]@{ savedAt=(Get-Date -Format o);items=$script:ItemCache;recipes=$script:RecipeCache;prices=$script:PriceCache;dungeons=$script:DungeonCache }
+    $json = $backup | ConvertTo-Json -Depth 9 -Compress
+    $null = ConvertFrom-Json -InputObject $json
     $tmp="$file.tmp"
     # Lua files in WoW are read as UTF-8 with no BOM.
     [IO.File]::WriteAllText($tmp,$text,(New-Object System.Text.UTF8Encoding($false)))
@@ -603,8 +651,6 @@ function Write-LuaFile {
         Copy-Item -LiteralPath $file -Destination "$file.bak" -Force
     }
     Move-Item -LiteralPath $tmp -Destination $file -Force
-    $backup = [ordered]@{ savedAt=(Get-Date -Format o);items=$script:ItemCache;recipes=$script:RecipeCache;prices=$script:PriceCache;dungeons=$script:DungeonCache }
-    $json = $backup | ConvertTo-Json -Depth 9 -Compress
     $cacheTemp = "$($script:CachePath).tmp"
     [IO.File]::WriteAllText($cacheTemp,$json,(New-Object System.Text.UTF8Encoding($false)))
     # Check generated JSON parses before replacing the last known-good cache.
@@ -631,11 +677,12 @@ function Sync-All {
     Sync-AuctionPrices
     Check-FcmCancel
     Write-LuaFile
+    $audit=Write-FCMReferenceAudit
     $script:Config.lastSync = (Get-Date).ToString('o')
     Save-Config
     # Local-only progress report; NEVER include the ForeverDB key or player data.
     $summary = [ordered]@{
-        version = '0.8.9'
+        version = '0.9.0'
         lastSync = $script:Config.lastSync
         items = $script:ItemCache.Count
         nextForeverDBItemOffset = $script:Config.fdbItemOffset
@@ -644,8 +691,11 @@ function Sync-All {
         prices = $script:PriceCache.Count
         dungeons = $script:DungeonCache.Count
         foreverDBRequests = $script:ForeverDBRequests
-        gameRoot = $script:gameBox.Text.Trim()
+        # Do not write local path or account names into a report intended for sharing.
         market = [string]$script:marketBox.SelectedItem
+        referenceAudit = 'reference-audit.json'
+        incompleteRecipes = $audit.recipes.withoutOutput + $audit.recipes.withoutReagents
+        dungeonOnlyLootLinks = $audit.dungeons.dungeonOnlyLinks
         note = 'Reference data from external sources; source confidence varies. Character saves are not uploaded.'
     }
     $reportTemp = "$($script:ReportPath).tmp"
@@ -669,7 +719,7 @@ function Action($operation,[bool]$isScan=$false) {
     $script:syncButton.Enabled = $false
     $script:installButton.Enabled = $false
     $script:stopButton.Enabled = $isScan
-    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox)) {
+    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox,$script:auditButton)) {
         if ($null -ne $ctrl) {$ctrl.Enabled=$false}
     }
     $script:stopButton.Text = 'Stop Scan'
@@ -708,6 +758,7 @@ function Action($operation,[bool]$isScan=$false) {
         if ($script:githubUpdateButton) {$script:githubUpdateButton.Enabled=($null -ne $script:LatestFCMAsset)}
         if ($script:githubRestoreButton) {$script:githubRestoreButton.Enabled=$true}
         if ($script:checkUpdatesBox) {$script:checkUpdatesBox.Enabled=$true}
+        if ($script:auditButton) {$script:auditButton.Enabled=$true}
         $script:statusLabel.Text = $(if ($script:CancelRequested) {'Stopped'} else {'Idle'})
         $script:CancelRequested = $false
         foreach ($control in @($script:gameBox,$script:termsBox,$script:marketBox,$script:autoBox,$script:fdbKeyBox,$script:fdbRememberBox,$script:browseButton)) {
@@ -718,7 +769,7 @@ function Action($operation,[bool]$isScan=$false) {
 
 Get-Config
 $form=New-Object System.Windows.Forms.Form
-$form.Text='Forever Character Manager - Data Companion v0.8.9'
+$form.Text='Forever Character Manager - Data Companion v0.9.0'
 $form.Size=New-Object System.Drawing.Size(800,850)
 $form.StartPosition='CenterScreen'
 $form.MinimumSize=New-Object System.Drawing.Size(800,850)
@@ -839,9 +890,15 @@ $form.Controls.Add($script:githubRestoreButton)
 $script:checkUpdatesBox=New-Object System.Windows.Forms.CheckBox
 $script:checkUpdatesBox.Text='Check for new FCM releases when the companion opens (no automatic installation)'
 $script:checkUpdatesBox.Location=New-Object System.Drawing.Point(20,415)
-$script:checkUpdatesBox.Size=New-Object System.Drawing.Size(740,26)
+$script:checkUpdatesBox.Size=New-Object System.Drawing.Size(520,26)
 $script:checkUpdatesBox.Checked=($script:Config.autoUpdateCheck -ne $false)
 $form.Controls.Add($script:checkUpdatesBox)
+$script:auditButton=New-Object System.Windows.Forms.Button
+$script:auditButton.Text='Audit Reference Data'
+$script:auditButton.Location=New-Object System.Drawing.Point(548,414)
+$script:auditButton.Size=New-Object System.Drawing.Size(220,29)
+$script:auditButton.Add_Click({Action {$null=Write-FCMReferenceAudit}})
+$form.Controls.Add($script:auditButton)
 $null=New-Label 'Sync activity and data sources' 20 444 470 25
 $script:statusLabel=New-Label 'Idle' 650 444 118 25
 $script:logBox=New-Object System.Windows.Forms.TextBox
@@ -852,7 +909,16 @@ $script:logBox.BackColor=[System.Drawing.Color]::FromArgb(12,18,25)
 $script:logBox.ForeColor=[System.Drawing.Color]::FromArgb(185,225,210)
 $script:logBox.Font=New-Object System.Drawing.Font('Consolas',9)
 $form.Controls.Add($script:logBox)
-$null=New-Label 'Sources: ForeverDB.net (optional key), TheWoWDB and AHledger.' 20 713 748 20
+# ForeverDB requires a visible, clickable link in the Windows companion.
+$script:fdbCreditLink=New-Object System.Windows.Forms.LinkLabel
+$script:fdbCreditLink.Text='Data from ForeverDB.net — https://foreverdb.net'
+$script:fdbCreditLink.Location=New-Object System.Drawing.Point(20,713)
+$script:fdbCreditLink.Size=New-Object System.Drawing.Size(460,20)
+$script:fdbCreditLink.LinkColor=[System.Drawing.Color]::FromArgb(93,170,245)
+[void]$script:fdbCreditLink.Links.Add(0,$script:fdbCreditLink.Text.Length,'https://foreverdb.net')
+$script:fdbCreditLink.Add_LinkClicked({Start-Process 'https://foreverdb.net'})
+$form.Controls.Add($script:fdbCreditLink)
+$null=New-Label 'Also: AHledger and TheWoWDB.' 490 713 278 20
 $null=New-Label 'Only item IDs/search terms go to data providers. No character records uploaded.' 20 733 748 20
 $null=New-Label 'ForeverDB data may be Classic or speculative. Legacy point automation remains deferred.' 20 753 748 20
 $form.Add_Shown({

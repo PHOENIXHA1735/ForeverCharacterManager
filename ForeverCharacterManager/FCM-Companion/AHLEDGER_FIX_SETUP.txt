@@ -1,0 +1,39 @@
+FCM v0.9.0 - Auction House price provider integration (testing build)
+=======================================================================
+
+ISSUE
+The previous FCM scheduled-price export fails if AHledger Cache-Control
+max-age is 60 seconds or less. Do not change that safeguard or retain a
+price table beyond the source's permitted lifetime.
+
+SOLUTION
+1. Install the official AHledger WoW Forever addon (0.9.8 or newer):
+   https://www.curseforge.com/wow/addons/ahledger
+2. Install the official AHledger Sync desktop application:
+   https://ahledger.com/addon
+   The provider's sync app handles 30-minute price updates while Windows is
+   running. WoW still needs the normal login/reload to ingest disk updates.
+3. Install this unified FCM v0.9.0 test build after backing up FCM and its
+   account-wide SavedVariables. This build adds OptionalDeps: AHledger and
+   uses AHledgerAPI.GetPrice(item, market) for explicitly selected faction markets.
+4. In PowerShell at FCM-Companion run the installer below. It removes the
+   previous failing FCM AH scheduled task while preserving the 12-hour
+   ForeverDB check:
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-ScheduledRefresh.ps1 -ForeverDBHours 12 -RunNow
+5. Check Get-ScheduledTask -TaskName 'FCM*' to confirm only the ForeverDB task
+   remains. Verify AHledger Sync has successfully obtained a price table.
+6. Log in to WoW and test an item tooltip. Prices and their 7d/30d medians
+   are read directly from AHledgerAPI and are not saved by FCM.
+
+IMPORTANT
+- AHledgerAPI.GetPrice(item, market) can request Alliance or Horde within
+  the logged-in realm ruleset/region for any known character. Missing prices
+  remain missing; FCM never substitutes the wrong faction or market.
+- AHledger's bundled snapshot prices may be shown as informational estimates
+  without triggering FCM's white-item high-value warning.
+- If AHledger is not installed, FCM safely falls back to any still-unexpired
+  existing FCM price import (which your current job has failed to produce).
+- The ForeverDB scheduled task is independent, and remains active.
+- This change is not yet verified inside the live WoW Forever client or
+  AHledger Sync on Windows. It needs testing before promoting to stable.
+- Credit: Prices from AHledger (ahledger.com), https://ahledger.com

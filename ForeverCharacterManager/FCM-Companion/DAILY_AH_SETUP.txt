@@ -1,0 +1,54 @@
+This is the legacy once-daily AH scheduler. The recommended new scheduler
+supporting 30/60-minute AH refreshes and 12/24-hour ForeverDB build checks
+is documented in AUTO_REFRESH_SETUP.txt.
+
+FCM v0.9.0 - Scheduled Auction House Refresh (test feature)
+==============================================================
+
+WHAT IT DOES
+- Every day, with your Windows account signed in, reads the current AHledger
+  full price table for Alliance and Horde on the SAME selected ruleset/region.
+- Retrieves public market prices, not direct in-game AH listings or private data.
+- Updates AHPrices.generated.lua with a short-lived snapshot; it honors the
+  provider's Cache-Control expiration and schedules a purge at expiration.
+- It DOES NOT keep an indefinite archive of AHledger data: their free API terms
+  prohibit storing answers beyond cache time without an appropriate licence.
+- AHledger's own 7-day and 30-day medians can still provide a trend comparison.
+- Separate long-term history can be implemented for your OWN captured AH scans,
+  or a licensed provider. No invented or guessed scan dates or price changes.
+- Prices can show in FCM item tooltips (including white items) after relogging
+  or reloading WoW while a valid snapshot exists. Installed AHledgerAPI can
+  also supply prices live when its addon is present.
+
+INSTALL ONCE (Windows PowerShell, no administrator needed)
+1. Close WoW and back up the current ForeverCharacterManager folder and WTF
+   SavedVariables. Install this v0.9.0 test addon, including FCM-Companion.
+2. In File Explorer, open the INSTALLED addon folder:
+     ...\Interface\AddOns\ForeverCharacterManager\FCM-Companion
+3. Click the address bar, type powershell and press Enter.
+4. Execute:
+     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-DailyAH.ps1 -RunNow
+5. This registers 'FCM Daily Auction House Refresh' at 9:00 AM local time,
+   every day with no end date. It also starts the first run now.
+6. Check ah-refresh-status.json in the same companion folder. The source can
+   be unavailable; a failed day is NOT recorded as a successful scan.
+
+OPTIONAL: to change daily time to 7:30 AM:
+     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-DailyAH.ps1 -Hour 7 -Minute 30
+
+TO STOP:
+     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Disable-FCM-DailyAH.ps1
+
+NOTES
+- Your PC must be ON and your Windows account logged in to run the task.
+  Task Scheduler starts missed jobs when available, not as if past data existed.
+- After any refresh, WoW needs /reload or a new login to load generated data.
+- A game login is not needed to perform the Windows market-data refresh.
+- Price data automatically expires per source cache headers, so if you launch
+  hours later and have no AHledger addon running you may see unavailable values.
+- No scripts are installed until you explicitly run Enable-FCM-DailyAH.ps1.
+- Only the public AHledger API domain is used. No credentials or personal
+  character data are sent to AHledger, and no purchases or sales are automated.
+- Credit: AHledger, https://ahledger.com/developers and https://ahledger.com/terms
+
+LIVE WINDOWS AND GAME TESTING REQUIRED. This is an offline-tested build.

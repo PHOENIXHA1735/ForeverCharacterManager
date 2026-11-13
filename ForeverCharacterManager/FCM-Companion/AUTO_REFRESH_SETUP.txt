@@ -1,0 +1,44 @@
+FCM v0.9.0 - Automated Data Checks (TEST; not yet Windows-verified)
+===================================================================
+
+Data providers are INDEPENDENT:
+- AHledger price tables: 30 minutes by default, or 60 minutes. Two requests
+  per run for Alliance and Horde, on the selected ruleset/region. Does not
+  make ForeverDB API requests. Prices are provider-supplied market snapshots.
+- ForeverDB build check: every 12 hours by default, or every 24 hours.
+  Only requests build metadata with your private, user-encrypted key.
+  A change is recorded in fdb-build-status.json; FULL catalog downloads are
+  still performed through the regular Windows Data Companion by the user.
+  This is intentional until safe unattended imports are validated on Windows.
+- Character scans: in the WoW addon after login, not related to provider APIs.
+
+INSTALL ONCE, after you install the TEST version of FCM and save your approved
+ForeverDB key through the Data Companion:
+  Open ...\Interface\AddOns\ForeverCharacterManager\FCM-Companion
+  Enter powershell in File Explorer's location bar.
+  Execute:
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-ScheduledRefresh.ps1 -AuctionMinutes 30 -ForeverDBHours 12 -RunNow
+
+For 60-minute AH prices and once-daily ForeverDB checks:
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-ScheduledRefresh.ps1 -AuctionMinutes 60 -ForeverDBHours 24 -RunNow
+
+To disable both:
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Disable-FCM-ScheduledRefresh.ps1
+
+NOTES
+- These jobs are not installed until YOU execute the enable script on Windows.
+- PC must be powered on, account signed in, internet available. Scheduled
+  triggers are renewed when the setup script runs again (10-year duration).
+- The current-price cache honors the provider's Cache-Control, and may expire
+  BEFORE the next scheduled update. A new fetch does not guarantee a new AH
+  listing or data from an unscanned market. AHledger's own sync can supply
+  its addon with market data more continuously.
+- Reload or relog in WoW to load externally generated price data.
+- Do NOT publish your ForeverDB personal key, DPAPI key file, settings.json,
+  reference-cache.json or in-game saved character data on GitHub/CurseForge.
+- A ForeverDB key exemption is required for your local Windows companion and
+  must be renewed every 90 days. Free tier: 5000/day, 30/min.
+- Attribution: Data from ForeverDB.net — https://foreverdb.net
+  Prices from AHledger — https://ahledger.com
+- The Windows companion does not remotely alter characters or spend gold.
+- WINDOWS TASK REGISTRATION AND LIVE SERVER TESTING STILL REQUIRED.

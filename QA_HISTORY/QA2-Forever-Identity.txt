@@ -1,0 +1,41 @@
+FOREVER CHARACTER MANAGER v0.9.2 — QA2 TEST BUILD
+Build: QA2-20261112-ForeverIdentity
+Date: 2026-11-12
+
+PURPOSE
+Fix WoW Forever first-name + surname identity and ruleset handling without deleting existing user data. Supersedes the experimental v0.9.1 QA1 build. GitHub main/release remains untouched.
+
+KEY CHANGES
+- Core.lua: identifies first and surname as separate values from UnitFullName. Keeps stable GUID-based character keys; no character records are deleted.
+- Core.lua: migrates known old `realm` surname fields into `surname` when safe, without rewriting legacy fields or equipment/profession data.
+- Core.lua: detects the ruleset (Normal, PvP, RP, RP-PvP, Hardcore) from an available identity library when present, else from recognized suffixes in the game's backend server label. A backend server label is never treated as a user-visible realm or transfer key.
+- Core.lua/Scan.lua: saves rule set and region per character at login; distinguishes unknown ruleset from mismatched ruleset. It never infers a ruleset from a surname.
+- Core.lua/BoEProtection.lua/Crafting.lua: verified direct transfer requires matching faction, ruleset and region, with the item itself unbound. Unverified/offline characters cannot cause a confirmed KEEP recommendation; opposite-faction/different-ruleset characters cannot drive KEEP.
+- UI.lua: shows each character's full two-part name plus ruleset and region information, including 'not verified' where appropriate.
+- ExternalData.lua: rejects ambiguous or mismatched faction/ruleset/region prices instead of reusing the companion's last market for unrelated characters.
+- Previous v0.9.1 binding safety fix retained; current companion scripts and all addon features are retained.
+
+QA COMPLETED
+- 23 Lua source modules parsed with texlua.
+- 16 prior QA1 regressions rerun against updated logic, all passed.
+- 17 new identity/ruleset/migration/market/BoE offline regressions passed.
+- 33 total deterministic regressions passed.
+- Not tested in live WoW client; API ruleset recognition, actual mail/trade permissions and UI need in-game confirmation.
+
+INSTALL
+1. Exit WoW and companion application.
+2. Backup the existing `Interface/AddOns/ForeverCharacterManager` folder and the WoW `WTF/Account/.../SavedVariables/FCM_DB.lua` file (if present).
+3. Extract the v0.9.2 ZIP in a temporary location, not directly over your files.
+4. Merge/copy its `ForeverCharacterManager` folder into your existing `Interface/AddOns` folder, replacing matching addon files only. Do not delete the destination folder.
+5. Do not remove `FCM_DB.lua`, `ExternalData.generated.lua`, `AHPrices.generated.lua`, or any companion-generated files. The ZIP does not include these generated files.
+6. Log in to Spotty Dotty, then Itty Bittydots, then Frosty Bit so every character's ruleset/region is newly recorded. Logout normally between logins so all saved data persists.
+7. In-game FCM Diagnostics should read `v0.9.2` and `Build: QA2-20261112-ForeverIdentity`.
+8. In FCM Overview, verify the displayed names are `Frosty Bit`, `Spotty Dotty`, `Itty Bittydots`, plus their actual rulesets. 'Not yet verified' indicates API detection unavailable or the toon needs a new login.
+9. On Frosty, re-hover Reinforced Linen Cape. Itty (Horde) should be excluded; Spotty (Alliance) should be transfer-eligible only after her ruleset/region has been verified as matching Frosty's. A stale level-1 snapshot is not a guarantee of the current best gear.
+
+ROLLBACK
+Restore the backed-up addon folder; preserve all SavedVariables and generated data. No modification to the companion's Windows files or GitHub repository is part of this ZIP.
+
+KNOWN LIMITATIONS
+- The game's documented in-game client API for the ruleset is not stable. Ruleset is inferred only from recognized explicit labels, or from an optional installed identity library; unrecognized labels produce 'Not yet verified' rather than guesswork.
+- Offline tests do not prove that the client permits every theoretically matching-faction/ruleset item transfer; confirm game mail and binding restrictions before sending valuable items.

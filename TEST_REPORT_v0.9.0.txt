@@ -1,0 +1,8 @@
+FCM v0.9.0 CONSOLIDATED — QA SUMMARY
+2026-11-12
+
+Prior QA2 tests: 23 Lua modules parsed, 33 offline regression checks passed.
+Observed live screenshots: v0.9.2 QA2 loaded, faction filtering for Spotty and Itty corrected, API error log zero after clear/re-scan. Release v0.9.0 code changes only version/build labels from the QA2 source.
+
+NOTE: Offline test passes cannot establish all client API compatibility. Live v0.9.0 requires a version/build smoke test after installing the consolidated release.
+No private user character files or local generated market data included.

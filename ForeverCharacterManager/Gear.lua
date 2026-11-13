@@ -93,6 +93,69 @@ local specFactors={
 }
 -- Only treat absent stats as zero when BOTH equipped and candidate items have
 -- successfully returned an actual client stats table. A missing table is unknown.
+-- Classic/Forever GetItemStats can collapse school-only bonuses into generic
+-- spell damage, or omit an item's equip effect entirely. Inspect the actual
+-- tooltip *for this exact item link* before comparing spell-school gear.
+-- Do not infer school-specific values from an item ID (which loses suffixes).
+local spellSchools={frost=true,fire=true,shadow=true,arcane=true,nature=true,holy=true}
+local suffixSchools={
+    ["of frozen wrath"]="frost", ["of fiery wrath"]="fire",
+    ["of shadow wrath"]="shadow", ["of arcane wrath"]="arcane",
+    ["of nature's wrath"]="nature", ["of holy wrath"]="holy",
+}
+local function spellTooltip(item)
+    local lines={}
+    if C_TooltipInfo and type(C_TooltipInfo.GetHyperlink)=="function" then
+        local reference=type(item)=="number" and ("item:"..item) or item
+        local info=safe(C_TooltipInfo.GetHyperlink,reference)
+        if info and type(info.lines)=="table" then
+            for _,row in ipairs(info.lines) do
+                local content=row.leftText or row.text
+                if type(content)=="string" then lines[#lines+1]=content end
+            end
+        end
+    end
+    return lines
+end
+local function scanSpellEffects(item)
+    local effects={specific={},generic=0,hasExplicit=false,hasTooltip=false}
+    local lines=spellTooltip(item)
+    effects.hasTooltip=#lines>0
+    for _,line in ipairs(lines) do
+        local cleaned=line:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            :gsub("|T.-|t", ""):lower()
+        local school,amount=cleaned:match("damage done by%s+(%a+)%s+spells.-by up to%s+([%d,]+)")
+        if school and spellSchools[school] and amount then
+            effects.specific[school]=math.max(effects.specific[school] or 0,
+                tonumber((amount:gsub(",", ""))) or 0)
+            effects.hasExplicit=true
+        else
+            local general=cleaned:match("damage and healing done by magical spells.-by up to%s+([%d,]+)") or
+                cleaned:match("damage done by magical spells.-by up to%s+([%d,]+)") or
+                cleaned:match("spell damage.-by up to%s+([%d,]+)")
+            if general then
+                effects.generic=effects.generic+(tonumber((general:gsub(",", ""))) or 0)
+                effects.hasExplicit=true
+            end
+        end
+    end
+    return effects
+end
+local function suffixSchool(item)
+    local name
+    if C_Item and type(C_Item.GetItemInfo)=="function" then
+        name=safe(C_Item.GetItemInfo,item)
+    end
+    if not name and type(item)=="string" then
+        name=item:match("%[([^%]]+)%]")
+    end
+    name=type(name)=="string" and name:lower() or ""
+    for suffix,school in pairs(suffixSchools) do
+        if name:sub(-#suffix)==suffix then return school end
+    end
+    return nil
+end
+
 function G:StatValues(item)
     if not item then return nil end
     local raw=nil
@@ -108,7 +171,7 @@ function G:StatValues(item)
     end
     if C_Item then raw=getStats(C_Item.GetItemStats) end
     if type(raw)~="table" then raw=getStats(GetItemStats) end
-    if type(raw)~="table" then return nil end
+    if type(raw)~="table" then raw={} end
     local result={}
     -- Fields in these groups are alternate client representations for the
     -- same bonus, not independent stats.  Taking the greatest magnitude
@@ -129,6 +192,24 @@ function G:StatValues(item)
         end
         if value~=0 then result[category]=value end
     end
+    local effects=scanSpellEffects(item)
+    if effects.hasExplicit then
+        -- Explicit tooltip effects are more reliable than the generic stats API:
+        -- the latter often labels +4 Frost damage as +4 generic spell power.
+        result.spell=effects.generic~=0 and effects.generic or nil
+        for school,amount in pairs(effects.specific) do
+            if amount~=0 then result["spell_"..school]=amount end
+        end
+    else
+        local school=suffixSchool(item)
+        if school then
+            -- Without readable tooltip text, do not pretend a suffix item's
+            -- school-restricted bonus works for every spell school.
+            if not result.spell then return nil end
+            result["spell_"..school]=result.spell
+            result.spell=nil
+        end
+    end
     -- Empty or unrecognized API data does NOT establish a real zero-stat item.
     if not next(result) then return nil end
     return result
@@ -137,14 +218,33 @@ end
 G.statLabels={str="Strength",agi="Agility",int="Intellect",stam="Stamina",
     spi="Spirit",spell="Spell Power",ap="Attack Power",crit="Critical Strike",
     hit="Hit Rating",haste="Haste Rating",dps="Weapon DPS",mp5="Mana Regeneration",
-    armor="Armor",def="Defense",resist="Resistance"}
+    armor="Armor",def="Defense",resist="Resistance",
+    spell_frost="Frost Spell Damage",spell_fire="Fire Spell Damage",
+    spell_shadow="Shadow Spell Damage",spell_arcane="Arcane Spell Damage",
+    spell_nature="Nature Spell Damage",spell_holy="Holy Spell Damage"}
 G.statAliases={intellect="int",stamina="stam",strength="str",agility="agi",
     spirit="spi",spellpower="spell",attackpower="ap",critical="crit",
     criticalstrike="crit",hitrate="hit",hitrating="hit",
     haste_rating="haste"}
 -- Users can set custom baseline weights per character and activity with
 -- /fcm gearweight spell 5 (or reset). Specialization/activity factors still apply.
+local schoolBySpec={
+    MAGE={Frost={frost=true},Fire={fire=true},Arcane={arcane=true}},
+    PRIEST={Shadow={shadow=true},Holy={holy=true},Discipline={holy=true}},
+    WARLOCK={Affliction={shadow=true},Demonology={shadow=true,fire=true},Destruction={fire=true,shadow=true}},
+    DRUID={Balance={nature=true,arcane=true},Restoration={nature=true}},
+    SHAMAN={Elemental={nature=true,fire=true},Restoration={nature=true}},
+    PALADIN={Holy={holy=true}},
+}
 function G:Weight(category,ch,mode,activity)
+    local school=type(category)=="string" and category:match("^spell_(%a+)$")
+    if school then
+        local class=type(ch)=="table" and ch.class or ch
+        local spec=type(ch)=="table" and ch.talentSpec or nil
+        local specMap=schoolBySpec[class] and schoolBySpec[class][spec or ""]
+        -- Unconfirmed spec is not enough evidence for a school-only upgrade.
+        return (specMap and specMap[school]) and self:Weight("spell",ch,mode,activity) or 0
+    end
     local class=type(ch)=="table" and ch.class or ch
     local spec=type(ch)=="table" and ch.talentSpec or nil
     local profile=(caster[class] or (casterSpecs[class] and casterSpecs[class][spec])) and "caster" or "physical"
@@ -245,13 +345,21 @@ G.slots = slots
 -- All item-backed modules share this comparison. For two rings or trinkets,
 -- select the best legitimate replacement (largest weighted improvement), not
 -- simply the first occupied slot. Two-handed weapons include removed offhand.
-function G:CompareItem(item,ch,preferredSlot)
+function G:CompareItem(item,ch,preferredSlot,options)
     if not ch then return {status="unknown",reason="Select a character to compare equipment."} end
     local info=self:Info(item)
     if not info or not info.equip or not slots[info.equip] then
         return {status="not-equipment"}
     end
-    if not self:IsPotentiallyWearable(info,ch) then
+    -- Future-upgrade assessments are explicitly opt-in. Normal gear screens
+    -- continue to reject items above the recipient's current level.
+    -- Even in future mode, armor/class restrictions are still enforced.
+    local wearableAs=ch
+    if options and options.allowFutureLevel and tonumber(info.level) and
+            tonumber(ch.level) and info.level>ch.level then
+        wearableAs={class=ch.class,level=info.level}
+    end
+    if not self:IsPotentiallyWearable(info,wearableAs) then
         return {status="ineligible",reason="Item level, armor type, or equipment restrictions may prevent use."}
     end
     if not ch.gearStamp or type(ch.gear)~="table" then
@@ -262,6 +370,19 @@ function G:CompareItem(item,ch,preferredSlot)
         return {status="unknown",reason="Candidate stats are not available from the game client."}
     end
     local activity=FCM:GearActivity(ch)
+    -- Don't rank school-specific gear without knowing the character's
+    -- specialization: a bonus that works for Frost may be worthless for Fire.
+    local function unknownSchool(v)
+        if schoolBySpec[ch.class] and not (schoolBySpec[ch.class][ch.talentSpec or ""]) then
+            for key in pairs(v or {}) do
+                if type(key)=="string" and key:match("^spell_%a+$") then return true end
+            end
+        end
+        return false
+    end
+    if unknownSchool(candidateStats) then
+        return {status="unknown",reason="Character spell specialization is not confirmed for this school-specific item."}
+    end
     local mode=FCM:Mode(ch,activity)
     local newScore=self:Score(item,ch,mode,activity)
     if type(newScore)~="number" then return {status="unknown",reason="Candidate score is unavailable."} end
@@ -278,6 +399,16 @@ function G:CompareItem(item,ch,preferredSlot)
                 if mainInfo and mainInfo.equip=="INVTYPE_2HWEAPON" then valid=false end
             end
             local old=ch.gear[slot]
+            -- Current character: a live equipped item link takes precedence over
+            -- the SavedVariables snapshot. Otherwise a stale empty-slot record
+            -- can produce a false +score when an item is already equipped.
+            if ch.key and FCM.currentKey and ch.key==FCM.currentKey and
+                    type(GetInventoryItemLink)=="function" then
+                local actual=safe(GetInventoryItemLink,"player",slot)
+                if type(actual)=="string" and actual:find("item:",1,true) then
+                    old={link=actual,itemID=tonumber(actual:match("item:(%d+)")),slot=slot}
+                end
+            end
             local oldRef=old and (old.link or old.itemID)
             local oldStats,oldScore={},0
             local oldName="Empty slot"
@@ -286,7 +417,7 @@ function G:CompareItem(item,ch,preferredSlot)
                 oldScore=self:Score(oldRef,ch,mode,activity)
                 local oldInfo=self:Info(oldRef)
                 oldName=(oldInfo and oldInfo.name) or old.name or ("Item #"..tostring(old.itemID or "?"))
-                if not oldStats or type(oldScore)~="number" then valid=false end
+                if not oldStats or type(oldScore)~="number" or unknownSchool(oldStats) then valid=false end
             end
             if info.equip=="INVTYPE_2HWEAPON" and slot==16 then
                 local off=ch.gear[17]
@@ -544,28 +675,67 @@ function G:DungeonUpgradeAssessment(itemID,ch)
         delta=comparison.delta,slot=comparison.slot,mode=comparison.style}
 end
 
--- Dungeon recommendations use source-reported loot IDs but only recommend an
--- item when the installed WoW client provides both equip info and item stats.
--- They do NOT assume that every ForeverDB record is obtainable at launch.
+-- v0.9.0: retain every source association for a possible upgrade, rather
+-- than discarding the second dungeon (or second boss) with the same item ID.
+-- Boss labels come only from ForeverDB-linked rows. Flat legacy indices are
+-- called "boss unknown"; no association is fabricated or verified in-game.
 function G:DungeonCandidates(ch)
-    local results,seen={},{}
+    local results,allSources={},{}
     if not ch then return results end
-    local dungeons=FCM.externalData and FCM.externalData.dungeons or {}
-    for _,dungeon in pairs(dungeons) do
-        for _,lootID in ipairs(dungeon.lootIDs or {}) do
-            local id=tonumber(lootID)
-            if id and not seen[id] then
-                seen[id]=true
-                local comparison=self:CompareItem(id,ch)
-                local threshold=FCM.db and FCM.db.settings and FCM.db.settings.minimumUpgrade or 1
-                if comparison.status=="ok" and comparison.delta>threshold then
-                    results[#results+1]={itemID=id,info=comparison.info,
-                        delta=comparison.delta,slot=comparison.slot,
-                        source=dungeon.name or "Unknown dungeon"}
+    local function addSource(id,name,boss)
+        id=tonumber(id)
+        if not id or id<=0 then return end
+        local entry=allSources[id]
+        if not entry then entry={labels={},seen={}};allSources[id]=entry end
+        local label=tostring(name or "Unknown dungeon")..
+            (boss and (" / "..tostring(boss).." (source-linked)") or " (boss unknown)")
+        if not entry.seen[label] then
+            entry.seen[label]=true
+            entry.labels[#entry.labels+1]=label
+        end
+    end
+    for _,dungeon in pairs((FCM.externalData and FCM.externalData.dungeons) or {}) do
+        if type(dungeon)=="table" then
+            local name=dungeon.name or "Unknown dungeon"
+            local mapped={}
+            for _,boss in ipairs(dungeon.bosses or {}) do
+                local bossName=tostring(boss.name or "")
+                local validName=bossName~="" and not bossName:find("name unavailable",1,true)
+                    and not bossName:find("name not supplied",1,true)
+                for _,drop in ipairs(boss.loot or {}) do
+                    local id=tonumber(drop.id)
+                    if id then
+                        addSource(id,name,validName and bossName or nil)
+                        mapped[id]=true
+                    end
                 end
+            end
+            for _,drop in ipairs(dungeon.dungeonLoot or {}) do
+                local id=tonumber(drop.id)
+                if id then addSource(id,name,nil);mapped[id]=true end
+            end
+            for _,itemID in ipairs(dungeon.lootIDs or {}) do
+                local id=tonumber(itemID)
+                if id and not mapped[id] then addSource(id,name,nil) end
             end
         end
     end
-    table.sort(results,function(x,y)return x.delta>y.delta end)
+    local minimum=(FCM.db and FCM.db.settings and tonumber(FCM.db.settings.minimumUpgrade)) or 1
+    for id,sourceData in pairs(allSources) do
+        local comp=self:CompareItem(id,ch)
+        if comp.status=="ok" and comp.delta>minimum then
+            table.sort(sourceData.labels)
+            local preview={}
+            for i=1,math.min(#sourceData.labels,2) do preview[#preview+1]=sourceData.labels[i] end
+            local brief=table.concat(preview,"; ")
+            if #sourceData.labels>2 then brief=brief.." (and "..(#sourceData.labels-2).." more)" end
+            results[#results+1]={itemID=id,info=comp.info,delta=comp.delta,
+                slot=comp.slot,source=brief,sources=sourceData.labels}
+        end
+    end
+    table.sort(results,function(a,b)
+        if a.delta~=b.delta then return a.delta>b.delta end
+        return a.itemID<b.itemID
+    end)
     return results
 end

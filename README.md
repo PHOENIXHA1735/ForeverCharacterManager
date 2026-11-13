@@ -1,40 +1,40 @@
 # Forever Character Manager (FCM)
 
-An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data synchronization.
+An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Source version
+## Current source: v0.9.0 (consolidated)
 
-This repository tracks the **v0.8.8 Smart Gear Comparison** source as its initial checked-in release. The matching downloadable ZIP and checksum are available in [GitHub Releases](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases/tag/v0.8.8).
+The **v0.9.0** release combines the v0.9.0 development work and subsequent QA1 / QA2 corrections in one source revision. Older v0.8.x source versions, tags, and releases remain in Git history.
 
 ## Features
 
-- Character scans and account-wide inventory, professions, recipes, gold, and crafting requests
-- Leveling / PvP / Endgame PvE gear priorities with DPS, Balanced, and Survivability styles
-- Weighted stat comparisons, per-stat changes and visual gear recommendations (not simulated DPS)
-- Dungeon Explorer with imported boss names and dungeon-associated loot references
-- Global search, item catalog, auction-price snapshots, reputation, and talent reference views
-- Windows Data Companion for ForeverDB reference synchronization and release updates
+- Account-wide character, inventory, professions, recipes, gold and crafting tracking.
+- First names and surnames recorded separately, stable character IDs, and non-destructive saved-data migrations.
+- Faction, ruleset and region-aware evaluation of transfer eligibility; unknown item binding and rulesets stay unverified.
+- Gear scoring, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
+- Windows companion scripts for read-only public reference import, auction reference updates and local tooling.
 
-## Install
+## Installation
 
-1. Download the [v0.8.8 release ZIP](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases/tag/v0.8.8).
-2. Exit WoW Forever and the Windows companion; back up your FCM addon and character SavedVariables.
-3. Extract `ForeverCharacterManager` into your game's `Interface\AddOns` directory.
-4. Preserve local `ExternalData.generated.lua` and all `WTF/SavedVariables` files. The source repository intentionally does not include these.
-5. Launch WoW and type `/fcm`.
+1. Back up the existing addon folder and your WoW SavedVariables before replacing code.
+2. Exit World of Warcraft and the Windows companion.
+3. Copy `ForeverCharacterManager/` into the game's `Interface\AddOns` directory, **merging** with the existing folder and replacing matching source files only.
+4. Preserve the game's `WTF`/SavedVariables, `ExternalData.generated.lua`, `AHPrices.generated.lua` and companion-generated data.
+5. Launch WoW, open `/fcm`, and check the version and diagnostics.
 
-Use `ForeverCharacterManager/FCM-Companion/OPEN-FCM-DATA-UPDATER.cmd` to launch the Windows companion. Run the updater locally to generate a new `ExternalData.generated.lua` rather than placing private or generated records in Git.
+Windows companion entry point: `ForeverCharacterManager/FCM-Companion/OPEN-FCM-DATA-UPDATER.cmd`.
 
-## Layout
+## Files and verification
 
-- `ForeverCharacterManager/*.lua` — core addon and UI
-- `ForeverCharacterManager/*.toc` — WoW addon manifests
-- `ForeverCharacterManager/FCM-Companion/` — PowerShell companion and documentation
-- `ForeverCharacterManager/Media/` — addon images
-- `.github/workflows/verify-source.yml` — syntax and source-integrity check
+- `ForeverCharacterManager/*.lua`, `*.toc`: addon source and manifests.
+- `ForeverCharacterManager/FCM-Companion/`: Windows companion scripts, instructions and local tooling.
+- `ForeverCharacterManager/Media/`: emblem and preview.
+- `tests/`: portable offline Lua regressions (`texlua` from repository root).
+- `SOURCE_MANIFEST_SHA256.txt`: release-source file hashes.
+- `FCM_v090_RELEASE_NOTES.md`, `INSTALL_v0.9.0.txt`, `TEST_REPORT_v0.9.0.txt`: release documentation.
 
-## Development and limitations
+## Important limitations
 
-The checked-in source corresponds to **v0.8.8**. Gameplay and companion changes should be committed to branches and verified in a running WoW client before a new release. Gear scores are **estimated weighted-stat comparisons**, not measured DPS; some proc effects, set bonuses, and hit caps are not modeled. Public external data may be incomplete and should be verified in game.
+Gear scores are weighted estimates, **not** simulated or measured DPS. Some procs, caps and set bonuses may not be modeled. In-game transfer permissions still must be confirmed before mailing valuable items. Recognizing rulesets depends on the game's available identity API and can remain unverified. Screenshot validation covered the faction correction and zero API errors after rescanning; not every WoW interaction was tested.
 
-The repository deliberately excludes generated game data, private character saves, passwords, API tokens, and local configuration. No open-source license has been selected yet; do not assume redistribution rights from the source being publicly accessible.
+The public repository excludes personal character SavedVariables, local reference snapshots, passwords, tokens and credentials. Existing source is public, but no open-source license has been selected; do not assume redistribution rights beyond those expressly granted.
