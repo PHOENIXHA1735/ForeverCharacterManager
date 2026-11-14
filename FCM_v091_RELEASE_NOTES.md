@@ -2,6 +2,12 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4b icon refinement:** Gathering minimap nodes use resource-item icons
+  where possible. Wilted Peacebloom and Silverleaf now have distinct flower
+  and herb icons, even without a warm client item cache; other gathering
+  nodes use a client icon or profession-specific fallback. The FCM launcher
+  emblem remains unchanged.
+
 - Crafting replaces its quantity popup with a compact `Qty` field beside the
   Reach Total / Craft More goal selector. Edits refresh the right-hand preview
   after a short debounce; typing never creates or alters a saved request.
@@ -16,7 +22,7 @@
 - The Crafting footer `Request Craft` is the submission step; for recipes
   already queued, it becomes `Update Craft Request`. Cancel from Requests.
   The legacy quantity popup remains available in Requests and Gear.
-- Nearby personally gathered and imported nodes now appear as small, colored
+- Nearby personally gathered and imported nodes now appear as small resource
   markers inside the minimap, positioned from actual world coordinates and
   view radius. This display uses FCM-owned saved node data and remains after
   GatherMate2 is removed. Node markers are historical, not live spawn signals.

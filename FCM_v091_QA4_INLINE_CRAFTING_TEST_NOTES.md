@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4 — Inline crafting and gathering minimap pins
+# FCM v0.9.1 QA4b — Inline crafting and gathering minimap icons
 
-Build `QA4-20261114-Inline-Crafting-Gathering-Pins` (not a GitHub release).
+Build `QA4b-20261114-Distinct-Gathering-Icons` (not a GitHub release).
 
 ## Install
 
@@ -66,7 +66,10 @@ Build `QA4-20261114-Inline-Crafting-Gathering-Pins` (not a GitHub release).
    **55.19, 45.94**. You do not have to import GatherMate2 again.
 2. Stand near the first saved location. Look **inside the minimap**, distinct
    from the large round FCM launcher button outside the minimap edge. You
-   should see small green-tinted FCM markers for nodes currently in view.
+   should see a small **flower icon for Wilted Peacebloom** and a different
+   **leaf icon for Silverleaf**, rather than the same green FCM emblem on both.
+   Other resource names use their known client item icons when available,
+   otherwise a profession-specific fallback image.
 3. Walk away and return. Markers should enter/leave view based on distance;
    hovering them shows the recorded herb name and saved location. Rotating
    the minimap should rotate the pins with the scene.

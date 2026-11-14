@@ -73,6 +73,10 @@ eq(FCM:GatherMinimapOffset(550,460,350,450,100,nil,false),nil,'hide distant node
 local rx,ry=FCM:GatherMinimapOffset(550,460,540,460,100,math.pi/2,true)
 eq(math.abs(rx)<0.0001,true,'rotating minimap rotates x')
 eq(math.floor(ry*100+.5),-10,'rotating minimap rotates y')
+eq(FCM:GatherNodeIcon('herbalism','Wilted Peacebloom'),
+    'Interface\\Icons\\INV_Misc_Flower_02','uncached Wilted Peacebloom has recognizable flower icon')
+eq(FCM:GatherNodeIcon('herbalism','Stunted Silverleaf'),
+    'Interface\\Icons\\INV_Misc_Herb_10','uncached Silverleaf has recognizable leaf icon')
 
 local function frame()
     local f={shown=true,scripts={}}
@@ -83,7 +87,8 @@ local function frame()
     function f:SetPoint(_,_,_,x,y) self.x,self.y=x,y end
     function f:ClearAllPoints() end
     function f:CreateTexture()
-        return {SetTexture=function()end,SetAllPoints=function()end,SetVertexColor=function()end}
+        return {SetTexture=function(texture,path)texture.path=path end,
+            SetAllPoints=function()end,SetVertexColor=function()end}
     end
     function f:Show() self.shown=true end
     function f:Hide() self.shown=false end
@@ -110,11 +115,14 @@ C_Map={
 FCM.db.settings={gatherPins=true}
 FCM:AddGatherNode('herbalism',1438,5438,4635,'Wilted Peacebloom','personal')
 FCM:AddGatherNode('herbalism',1438,5519,4594,'Wilted Peacebloom','personal')
+FCM:AddGatherNode('herbalism',1438,5440,4650,'Silverleaf','personal')
 FCM:StartGatherMinimap()
 FCM._gatherMiniController.scripts.OnUpdate(FCM._gatherMiniController,0.40)
-eq(#FCM._gatherMiniPins,2,'both recorded Peacebloom nodes render')
+eq(#FCM._gatherMiniPins,3,'both Peacebloom nodes and Silverleaf render')
 eq(FCM._gatherMiniPins[1]:IsShown(),true,'nearest saved node shown')
-eq(FCM._gatherMiniPins[1].nodeName,'Wilted Peacebloom','saved FCM data drives pins')
+local textures={}
+for _,pin in ipairs(FCM._gatherMiniPins) do textures[pin.nodeName]=pin.icon.path end
+eq(textures['Wilted Peacebloom']~=textures['Silverleaf'],true,'different herb icons on minimap')
 FCM.db.settings.gatherPins=false
 FCM:UpdateGatherMinimap()
 eq(FCM._gatherMiniPins[1]:IsShown(),false,'off toggle hides FCM nodes')

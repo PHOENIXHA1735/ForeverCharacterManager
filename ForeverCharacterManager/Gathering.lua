@@ -149,10 +149,44 @@ function FCM:GatherMinimapOffset(playerX,playerY,nodeX,nodeY,radius,facing,rotat
     return dx/radius,-dy/radius,distance
 end
 
-local gatherPinColors={
-    herbalism={0.48,1,0.45}, mining={1,0.83,0.35},
-    fishing={0.45,0.78,1}, treasure={1,0.55,0.4},
+-- Node names can differ from the item they yield (e.g. "Wilted Peacebloom").
+-- Prefer the client's native item image and keep a known native texture path
+-- for when that item has not yet entered the local item cache.
+local herbItemIcons={
+    peacebloom={2447,"Interface\\Icons\\INV_Misc_Flower_02"},
+    silverleaf={765,"Interface\\Icons\\INV_Misc_Herb_10"},
 }
+local gatherDefaultIcons={
+    herbalism="Interface\\Icons\\INV_Misc_Herb_01",
+    mining="Interface\\Icons\\INV_Ore_Copper_01",
+    fishing="Interface\\Icons\\INV_Misc_Fish_02",
+    treasure="Interface\\Icons\\INV_Misc_Bag_08",
+}
+
+function FCM:GatherNodeIcon(kind,name)
+    local lower=type(name)=="string" and name:lower() or ""
+    if kind=="herbalism" then
+        for key,info in pairs(herbItemIcons) do
+            if lower:find(key,1,true) then
+                local itemID,fallback=info[1],info[2]
+                local icon=C_Item and self:Try(C_Item.GetItemIconByID,itemID) or nil
+                if not icon and type(GetItemIcon)=="function" then
+                    icon=self:Try(GetItemIcon,itemID)
+                end
+                return icon or fallback
+            end
+        end
+    end
+    -- For other herbs and resources, WoW may know the yielded item by name.
+    -- This is only a display lookup, never a source of gathering coordinates.
+    if lower~="" and type(GetItemInfo)=="function" then
+        local _,_,_,_,_,_,_,_,_,icon=self:Try(GetItemInfo,name)
+        if type(icon)=="number" or (type(icon)=="string" and icon~="") then
+            return icon
+        end
+    end
+    return gatherDefaultIcons[kind] or "Interface\\Icons\\INV_Misc_QuestionMark"
+end
 
 local function gatherWorldPosition(mapID,x,y)
     if not C_Map or type(C_Map.GetWorldPosFromMapPos)~="function" then return nil end
@@ -174,13 +208,12 @@ function FCM:HideGatherMinimapPins()
     for _,pin in ipairs(self._gatherMiniPins or {}) do pin:Hide() end
 end
 
-local function gatherPin(index)
+local function gatherPin()
     local pin=CreateFrame("Button",nil,Minimap)
-    pin:SetSize(13,13)
+    pin:SetSize(16,16)
     pin:SetFrameStrata(Minimap:GetFrameStrata())
     pin:SetFrameLevel(Minimap:GetFrameLevel()+6)
     local icon=pin:CreateTexture(nil,"ARTWORK")
-    icon:SetTexture("Interface\\AddOns\\ForeverCharacterManager\\Media\\FCM_Emblem")
     icon:SetAllPoints(pin)
     pin.icon=icon
     pin:SetScript("OnEnter",function(btn)
@@ -282,12 +315,17 @@ function FCM:UpdateGatherMinimap()
     for i=1,maxPins do
         local node=matches[i]
         local pin=self._gatherMiniPins[i]
-        if not pin then pin=gatherPin(i); self._gatherMiniPins[i]=pin end
+        if not pin then pin=gatherPin(); self._gatherMiniPins[i]=pin end
         pin.nodeName,pin.nodeKind=node.name,node.kind
         pin.nodeX,pin.nodeY=node.x,node.y
         pin.nodePersonal=node.personal
-        local tint=gatherPinColors[node.kind] or {1,1,1}
-        pin.icon:SetVertexColor(tint[1],tint[2],tint[3],1)
+        if pin.iconName~=node.name or pin.iconKind~=node.kind then
+            pin.icon:SetTexture(self:GatherNodeIcon(node.kind,node.name))
+            pin.iconName,pin.iconKind=node.name,node.kind
+        end
+        -- Known item icons retain their original coloration. Other resource
+        -- types still remain distinct by their fallback category artwork.
+        pin.icon:SetVertexColor(1,1,1,1)
         pin:ClearAllPoints()
         pin:SetPoint("CENTER",Minimap,"CENTER",node.ox*width,node.oy*height)
         pin:Show()

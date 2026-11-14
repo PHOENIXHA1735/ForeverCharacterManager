@@ -2059,7 +2059,7 @@ local function buildRows(ui)
             "No character data is uploaded; community contributions are manual for now.\n\n"..
             "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
-            "Saved nodes appear as small colored minimap markers when nearby. "..
+            "Saved nodes appear as small resource icons on the minimap when nearby. "..
             "Use /fcm gatherpins off|on to toggle markers; they are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
