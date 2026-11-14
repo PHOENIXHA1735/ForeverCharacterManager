@@ -327,6 +327,21 @@ function FCM:CraftRequestRuns(recipe,request,recipient)
     local runs,produced,yield=self:CraftRuns(recipe,needed)
     return runs,produced,yield,needed,owned,known,mode
 end
+
+-- Read-only calculation for the Crafting tab's inline quantity field. This
+-- does not change any saved request and is safe to run on every edit.
+function FCM:CraftQuantityPreview(recipe,recipient,rawQuantity,mode)
+    local quantity=self:ValidCraftQuantity(rawQuantity)
+    if not quantity then return nil,"Enter a whole number of finished items from 1 to 999." end
+    if not recipe or not recipient then return nil,"Select a recipe and recipient first." end
+    if mode~="total" and mode~="additional" then
+        return nil,"Choose Reach Total or Craft Additional."
+    end
+    local draft={quantity=quantity,quantityMode=mode}
+    local casts,produced,yield,needed,owned,known=self:CraftRequestRuns(recipe,draft,recipient)
+    return {quantity=quantity,mode=mode,casts=casts,produced=produced,
+        yield=yield,needed=needed,owned=owned,ownedKnown=known}
+end
 function FCM:CraftRuns(recipe, requestedQuantity)
     local quantity=self:ValidCraftQuantity(requestedQuantity) or 1
     local yield=math.max(1,math.floor(tonumber(recipe and recipe.quantity) or 1))

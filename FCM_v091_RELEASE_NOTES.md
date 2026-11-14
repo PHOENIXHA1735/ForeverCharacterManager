@@ -1,5 +1,29 @@
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
+## QA4 inline crafting and gathering minimap preview (November 14; not published)
+
+- Crafting replaces its quantity popup with a compact `Qty` field beside the
+  Reach Total / Craft More goal selector. Edits refresh the right-hand preview
+  after a short debounce; typing never creates or alters a saved request.
+- Preview shows finished output already owned by the selected recipient,
+  additional items required, actual recipe casts/yield, and reagent quantities
+  adjusted for that need. Reaching a target of zero more produces zero material
+  requirements instead of an artificial one-craft estimate.
+- Show recorded material locations and safe candidate sends to the selected
+  eligible crafter. Cross-faction/ruleset, unknown-binding, and soulbound
+  character stock never becomes an automatic transfer suggestion. Snapshot,
+  bank withdrawal and in-game trade restrictions remain explicit.
+- The Crafting footer `Request Craft` is the submission step; for recipes
+  already queued, it becomes `Update Craft Request`. Cancel from Requests.
+  The legacy quantity popup remains available in Requests and Gear.
+- Nearby personally gathered and imported nodes now appear as small, colored
+  markers inside the minimap, positioned from actual world coordinates and
+  view radius. This display uses FCM-owned saved node data and remains after
+  GatherMate2 is removed. Node markers are historical, not live spawn signals.
+  `/fcm gatherpins off|on` toggles them without affecting the round launcher.
+  If the client lacks necessary map/radius APIs, the markers safely hide.
+- See `FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md` for live verification.
+
 ## QA3 companion hotfix preview (November 14; not published)
 
 - Correct the shared ForeverDB quota-ledger atomic rewrite path after live
@@ -74,7 +98,8 @@ GitHub; the release workflow is manual-only until those tests pass.
 ## Important caveats
 
 1. Tested under offline Lua simulation only. Live WoW Forever events may omit or secret node names, which FCM intentionally refuses to guess. Verify on real characters before uninstalling GatherMate2.
-2. No resource map overlays, route optimizer or automatic crafting-queue-to-resource navigation yet. These are follow-up phases.
+2. QA4 adds nearby saved markers on the minimap. Full world-map overlays,
+   route optimization and crafting-queue-to-resource navigation remain follow-up phases.
 3. A freshly published snapshot contains zero nodes; community submissions must be reviewed and merged, and `CommunityData/manifest.json` version incremented, before other users receive them.
 4. The Windows companion is Windows PowerShell 5.1/WinForms code. It requires testing on an actual Windows machine; a Linux Lua regression suite cannot verify Windows controls.
 5. For updates, always close WoW before the companion installs generated Lua. Restart the game to load the new data.

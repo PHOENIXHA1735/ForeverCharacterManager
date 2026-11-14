@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA3-20261114-Quota-Ledger-Repair"
+FCM.build = "QA4-20261114-Inline-Crafting-Gathering-Pins"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -68,6 +68,7 @@ function FCM:InitDB()
     -- Minimap coordinates are saved as offsets from the minimap center.
     -- An existing v0.1.0 SavedVariables file remains compatible.
     db.settings.minimap = db.settings.minimap or { x = -66, y = 66 }
+    db.settings.gatherPins = db.settings.gatherPins ~= false
     db.craftingQueue = db.craftingQueue or {}
     db.gates = db.gates or {} -- User-entered recipe ID -> { factionID, standing, note }
     db.notes = db.notes or {}
@@ -440,6 +441,7 @@ f:SetScript("OnEvent", function(_, event, ...)
         if FCM.TrackSession then FCM:TrackSession() end
         -- Initialize the minimap button at login; opening the main window is optional.
         if FCM.UI and FCM.UI.CreateMinimap then FCM.UI:CreateMinimap() end
+        if FCM.StartGatherMinimap then FCM:StartGatherMinimap() end
         if C_Timer and C_Timer.After then
             C_Timer.After(3, function()
                 FCM:ScanBasic(); FCM:ScanProfessions(); FCM:ScanReputations(); FCM:ScanTalents()
@@ -692,6 +694,14 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     elseif cmd == "respec" then
         if FCM.UI then FCM.UI.tab="Talents" end
         if FCM.Toggle and (not FCM.window or not FCM.window:IsShown()) then FCM:Toggle() end
+    elseif cmd == "gatherpins" then
+        local requested=string.lower(rest or "")
+        if requested=="on" or requested=="off" then
+            FCM.db.settings.gatherPins=(requested=="on")
+            FCM._gatherMinimapDirty=true
+            if requested=="off" and FCM.HideGatherMinimapPins then FCM:HideGatherMinimapPins() end
+            FCM:Say("Saved gathering markers on minimap: "..requested)
+        else FCM:Say("Usage: /fcm gatherpins on|off") end
     elseif cmd == "minimap" then
         if string.lower(rest or "") == "reset" then
             if FCM.UI and FCM.UI.ResetMinimap then FCM.UI:ResetMinimap() end

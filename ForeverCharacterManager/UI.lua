@@ -768,6 +768,55 @@ function UI:QueueCraftRecipeSearch()
         self.selectedRow=nil;self:Refresh()
     end
 end
+
+-- One unsaved quantity draft per recipient/recipe. Editing never queues a
+-- craft: the footer button remains the explicit submission step.
+function UI:CraftDraftKey(recipe,recipient)
+    if not recipe or not recipient then return nil end
+    return tostring(recipient.key)..":"..tostring(recipe.id)
+end
+function UI:CraftDraftText(recipe,recipient)
+    local key=self:CraftDraftKey(recipe,recipient)
+    if not key then return "" end
+    self.craftQuantityDrafts=self.craftQuantityDrafts or {}
+    if self.craftQuantityDrafts[key]==nil then
+        local queued=FCM:FindQueuedCraft(recipe.id,recipient.key)
+        local owned=FCM:OwnedFinishedItems(recipient,recipe.outputID)
+        local initial=queued and FCM:CraftRequestQuantity(queued) or
+            (FCM:DefaultCraftRequestMode()=="total" and math.min(999,owned+1) or 1)
+        self.craftQuantityDrafts[key]=tostring(initial)
+    end
+    return self.craftQuantityDrafts[key]
+end
+function UI:SyncCraftQuantityBox(recipe,recipient)
+    if not self.craftQuantityEdit then return end
+    local key=self:CraftDraftKey(recipe,recipient)
+    local value=self:CraftDraftText(recipe,recipient)
+    self.craftDraftKey=key
+    if (self.craftQuantityEdit:GetText() or "")~=value then
+        self.suppressCraftQuantity=true
+        self.craftQuantityEdit:SetText(value)
+        self.suppressCraftQuantity=false
+    end
+end
+function UI:QueueCraftQuantityPreview()
+    if self.suppressCraftQuantity or self.tab~="Crafting" then return end
+    if self.craftDraftKey and self.craftQuantityEdit then
+        self.craftQuantityDrafts=self.craftQuantityDrafts or {}
+        self.craftQuantityDrafts[self.craftDraftKey]=self.craftQuantityEdit:GetText() or ""
+    end
+    self.craftQuantityRevision=(self.craftQuantityRevision or 0)+1
+    local revision=self.craftQuantityRevision
+    if C_Timer and type(C_Timer.After)=="function" then
+        C_Timer.After(0.12,function()
+            if revision==self.craftQuantityRevision and self.tab=="Crafting" and
+                self.frame and self.frame:IsShown() then self:Refresh() end
+        end)
+    elseif self.frame and self.frame:IsShown() then
+        self:Refresh()
+    end
+end
+
 function UI:RefreshProfessionTabs(ch)
     if not self.sidebar or not self.sidebarTabs then return end
     local names=self:CharacterRecipeProfessions(ch)
@@ -1029,6 +1078,19 @@ function UI:Create()
     end)
     self.craftModeButton:SetPoint("LEFT",self.craftSearchClearButton,"RIGHT",12,0)
     self.craftModeButton:Hide()
+    self.craftQuantityLabel=text(panel,"Qty:","GameFontHighlightSmall",0,0,34)
+    self.craftQuantityLabel:ClearAllPoints()
+    self.craftQuantityLabel:SetPoint("LEFT",self.craftModeButton,"RIGHT",9,0)
+    self.craftQuantityLabel:Hide()
+    self.craftQuantityEdit=CreateFrame("EditBox",nil,panel,"InputBoxTemplate")
+    self.craftQuantityEdit:SetSize(55,24)
+    self.craftQuantityEdit:SetAutoFocus(false)
+    self.craftQuantityEdit:SetMaxLetters(3)
+    self.craftQuantityEdit:SetPoint("LEFT",self.craftQuantityLabel,"RIGHT",3,0)
+    self.craftQuantityEdit:SetScript("OnTextChanged",function() self:QueueCraftQuantityPreview() end)
+    self.craftQuantityEdit:SetScript("OnEnterPressed",function(edit) edit:ClearFocus();self:Refresh() end)
+    self.craftQuantityEdit:SetScript("OnEscapePressed",function(edit) edit:ClearFocus() end)
+    self.craftQuantityEdit:Hide()
 
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
@@ -1119,6 +1181,23 @@ function UI:Create()
         local recipient=(self.activeRecipientKey and FCM.db.characters[self.activeRecipientKey]) or self:GetCharacter()
         if not recipient then return end
         local current=FCM:FindQueuedCraft(self.activeRecipe.id, recipient.key)
+        if self.tab=="Crafting" then
+            local raw=self:CraftDraftText(self.activeRecipe,recipient)
+            local desired=FCM:ValidCraftQuantity(raw)
+            if not desired then
+                FCM:Say("Enter a whole-number quantity from 1 to 999. No request was changed.")
+                return
+            end
+            local goal=FCM:DefaultCraftRequestMode()
+            if current then
+                local ok,why=FCM:UpdateQueuedCraftQuantity(current,desired,goal)
+                FCM:Say(why or (ok and "Craft request updated." or "Could not update craft request."))
+                if ok then self:Refresh() end
+            else
+                self:ShowCrafterMenu(self.activeRecipe,recipient.key,nil,self.activeCrafters,desired,goal)
+            end
+            return
+        end
         if current then
             FCM:RemoveQueuedCraft(self.activeRecipe.id, recipient.key)
             FCM:Say("Cancelled craft request for " .. recipient.name .. ".")
@@ -1314,10 +1393,10 @@ function UI:ShowCraftRequestModeMenu()
     if not (FCM.db and FCM.db.settings) then return end
     self:MakeMenu(self.craftModeButton,{
         {label="Reach Total (default): subtract recipient's saved stock",run=function()
-            FCM.db.settings.craftQuantityMode="total";self.selectedRow=nil
+            FCM.db.settings.craftQuantityMode="total"
         end},
         {label="Craft Additional: do not subtract existing items",run=function()
-            FCM.db.settings.craftQuantityMode="additional";self.selectedRow=nil
+            FCM.db.settings.craftQuantityMode="additional"
         end},
     },292,false)
 end
@@ -1980,6 +2059,8 @@ local function buildRows(ui)
             "No character data is uploaded; community contributions are manual for now.\n\n"..
             "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
+            "Saved nodes appear as small colored minimap markers when nearby. "..
+            "Use /fcm gatherpins off|on to toggle markers; they are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
         local categories={"herbalism","mining","fishing","treasure"}
@@ -2481,27 +2562,72 @@ local function buildRows(ui)
                 local d={"|cffffd983"..r.name.."|r","","Recipe ID: "..r.id,
                     "Profession: "..(r.profession or "Unknown"),
                     "Output per craft: "..tostring(math.max(1,math.floor(tonumber(r.quantity) or 1))),
-                    "Request Craft asks for the quantity of finished items (1-999).",
-                    "Material and shopping estimates scale to the number of recipe casts.","","Known by:"}
+                    "Edit Qty above to preview before requesting. Nothing is sent automatically.",
+                    "Material estimates scale to the required recipe casts.","","Known by:"}
                 for _,c in ipairs(r.crafters or {}) do
                     d[#d+1]="  "..FCM:DisplayCharacter(c)..
                         ((ch and not FCM:CanCollaborate(c,ch)) and " (different faction/ruleset)" or "")
                 end
-                local crafter=listedCrafter
-                local plan=FCM:CraftAvailability(r,crafter)
-                local mats,ready=plan.lines,plan.ready
+                local crafter=eligible[1]
+                local mode=FCM:DefaultCraftRequestMode()
+                local draft=ui:CraftDraftText(r,ch)
+                local preview,why=FCM:CraftQuantityPreview(r,ch,draft,mode)
                 d[#d+1]=""
-                d[#d+1]=ready and "Recorded materials sufficient after existing reservations*" or "Missing / reserved / unverified materials"
-                for _,m in ipairs(mats) do
-                    local missing=m.missing
-                    d[#d+1]=m.name..": "..m.unreserved.."/"..m.required.." (reserved "..m.reserved..")"
-                    if missing>0 then d[#d+1]="  Still needed: "..missing end
-                    for _,location in ipairs(m.locations) do
-                        d[#d+1]="  "..short(location.name,21).." "..location.where..": "..location.count..(location.usable and "" or " [bound or different faction/ruleset]")
+                d[#d+1]="|cffffd983LIVE QUANTITY PREVIEW|r"
+                if not preview then
+                    d[#d+1]=color(why or "Invalid quantity","ff8888")
+                    d[#d+1]="No request has been changed."
+                    return table.concat(d,"\n")
+                end
+                d[#d+1]="Goal: "..(mode=="total" and "Reach Total" or "Craft Additional")
+                d[#d+1]=(mode=="total" and "Target finished items: " or "New finished items: ")..preview.quantity
+                d[#d+1]="Recipient already owns: "..(preview.ownedKnown and tostring(preview.owned) or "unknown (not subtracted)")
+                d[#d+1]="Additional output needed: "..preview.needed
+                d[#d+1]="Recipe casts needed: "..preview.casts..
+                    " | Produces: "..preview.produced
+                local queued=ch and FCM:FindQueuedCraft(r.id,ch.key)
+                if queued then
+                    d[#d+1]=color("Saved request: "..FCM:CraftRequestQuantity(queued).." "..
+                        (FCM:CraftRequestMode(queued)=="total" and "total" or "additional")..
+                        "; click Update to apply this preview.","f4c86b")
+                end
+                if not crafter then
+                    d[#d+1]="No compatible crafter; cannot calculate safe transfers."
+                    return table.concat(d,"\n")
+                end
+                d[#d+1]=""
+                d[#d+1]="Preview crafter: "..FCM:DisplayCharacter(crafter)
+                if preview.casts==0 then
+                    d[#d+1]=color("Target already met: no crafts or materials needed.","77e2a0")
+                    d[#d+1]="No transfers required for this target."
+                    return table.concat(d,"\n")
+                end
+                local excludeKey=queued and queued.key or nil
+                local plan=FCM:CraftAvailability(r,crafter,excludeKey,preview.needed)
+                d[#d+1]=plan.ready and "Recorded materials sufficient after reservations*" or
+                    "REAGENTS AND STOCK (recorded snapshots)"
+                for _,m in ipairs(plan.lines or {}) do
+                    d[#d+1]=m.name..": need "..m.required..", accessible "..m.unreserved..
+                        ", missing "..m.missing.." (reserved "..m.reserved..")"
+                    for _,loc in ipairs(m.locations or {}) do
+                        local state=(loc.ownerKey==crafter.key and "crafter stock") or
+                            (loc.usable and "possible transfer" or "not transferable/verify")
+                        d[#d+1]="  "..short(loc.name,18).." "..loc.where..": "..loc.count.." ["..state.."]"
                     end
                 end
                 d[#d+1]=""
-                local expanded=FCM:SmartCraftingPlan(r,ch,crafter,1)
+                local expanded=FCM:SmartCraftingPlan(r,ch,crafter,preview.casts,excludeKey)
+                d[#d+1]="|cffffd983POSSIBLE MATERIAL TRANSFERS|r"
+                if #(expanded.transfers or {})==0 then
+                    d[#d+1]="No cross-character transfers identified from usable recorded stock."
+                else
+                    for _,transfer in ipairs(expanded.transfers) do
+                        d[#d+1]=transfer.count.."x "..transfer.name.." from "..
+                            transfer.from.." ("..transfer.where..") to "..transfer.to
+                    end
+                end
+                d[#d+1]="Withdraw bank materials before mailing; verify binding and same faction/ruleset."
+                d[#d+1]=""
                 for _,line in ipairs(FCM:SmartCraftingPlanLines(expanded)) do
                     d[#d+1]=line
                 end
@@ -3016,7 +3142,7 @@ local function buildRows(ui)
         add("weighting","Gear weight sources and imports","Use /fcm pawnimport to paste your Pawn v1 numerical scale.",
             "On the Talents tab, select the class specialization. Set activity and style at the top, then use /fcm pawnimport to paste a complete Pawn export.\n\nFCM validates all nonzero fields. If a stat cannot be scanned, it rejects the entire import rather than pretending that stat has zero importance. The new scale applies only to this character/spec/activity/style/level bracket; other toons keep their own settings.\n\nFrost Mage Leveling/PvE DPS includes a user-recorded Zygor numerical reference preset. Spell Hit % and Spell Crit % are scanned as tooltip percentages, never confused with rating. Other builds remain provisional.\n\nUse /fcm weightprofile to confirm the active source, or /fcm weightprofile reset to remove a user import. Your earlier /fcm gearweight custom values are not deleted.\n\nIcy Veins guides are useful stat-priority references but do not provide universal numeric Pawn values for every Forever level and spec. This is not a DPS simulation or official Zygor integration.")
         add("requests", "Cross-character crafting requests", "Open Requests to see work assigned to the crafter.",
-            "On Crafting, filter by profession and search learned recipes. Choose a recipient, select a recipe, and set Goal: Reach Total (default) or Goal: Craft More, then click Request Craft. Reach Total subtracts finished items in that recipient's last-scanned bags and bank. Craft More always requests additional items. Other toons' finished items are not assumed transferred. The popup accepts a desired output quantity (1-999), rounded by recipe yield.\n\nLog into that crafter: FCM announces pending assignments. Requests lists the item, mode, owned count, remaining quantity and materials. Status / Qty edits the quantity or changes between total/additional modes. Existing requests saved before this change keep their original Craft Additional meaning. Delivered or Cancelled archives requests. Verify saved bank/bag counts before relying on a zero shortage; nothing is crafted or mailed automatically.")
+            "On Crafting, filter by profession and search learned recipes. Choose a recipient, select a recipe, set Goal: Reach Total (default) or Goal: Craft More, then enter Qty in the permanent field. The right side updates live with owned finished items, needed output, casts, materials, and possible cross-character transfers. Nothing is saved until you click Request Craft (or Update Craft Request for an existing request). Reach Total subtracts finished items in the recipient's last-scanned bags and bank. Craft More always requests additional items. Other toons' finished items are not assumed delivered.\n\nTransfer suggestions come only from last-scanned bags/banks; cross-faction/ruleset and bound materials are excluded. Bank stock must be withdrawn before mailing, and eligibility still needs in-game verification. Log into the assigned crafter to see requests. Requests lists the mode, owned count, remaining quantity and materials. Status / Qty can also edit or cancel an existing request. Older requests retain Craft Additional semantics until explicitly changed. Nothing is crafted, moved or mailed automatically.")
         add("delete", "Removing a saved character", "Characters tab > select a toon > Remove Saved Character",
             "You must be logged into a different toon than the record being removed. Select its row in Characters, then press Remove Saved Character and confirm the prompt.\n\nOnly FCM's saved data and that character's queued crafts are removed. The actual WoW character is untouched. Log into the removed character again if you want to re-add it.\n\nOther characters' records remain intact.")
         add("factions","Horde and Alliance support","Use Faction: All / Alliance / Horde above the list.",
@@ -3144,7 +3270,7 @@ function UI:Refresh()
     elseif tab=="Item Explorer" then
         self.status:SetText(tostring(self.itemExplorerTotal or 0).." matches; first "..tostring(math.max(0,matchedCount-1)).." listed (max 190) | Filter by name or ID")
     elseif tab=="Crafting" then
-        self.status:SetText(tostring(self.craftRecipeCount or 0).." matching recipes | Search stays on Crafting")
+        self.status:SetText(tostring(self.craftRecipeCount or 0).." recipes | Qty updates the preview; Request saves it")
     elseif tab=="Dungeons" then
         local dungeonMatches=0
         for _,row in ipairs(entries) do if row.id:sub(1,8)=="dungeon:" then dungeonMatches=dungeonMatches+1 end end
@@ -3178,6 +3304,8 @@ function UI:Refresh()
         self.craftSearch:SetShown(crafting)
         self.craftSearchClearButton:SetShown(crafting)
         self.craftModeButton:SetShown(crafting)
+        self.craftQuantityLabel:SetShown(crafting)
+        self.craftQuantityEdit:SetShown(crafting)
         if crafting then
             local selectedProfession=FCM.db.settings.craftProfession or "all"
             local name=selectedProfession=="all" and "All" or "Unknown"
@@ -3194,6 +3322,7 @@ function UI:Refresh()
             self.craftProfessionButton:SetText("Profession: "..short(name,14))
             self.craftModeButton:SetText(FCM:DefaultCraftRequestMode()=="total" and
                 "Goal: Reach Total" or "Goal: Craft More")
+            self:SyncCraftQuantityBox(selected and selected.recipe,ch)
         end
         self.filterButton:SetShown(show)
         self.sortButton:SetShown(show or browsing or tab=="Inventory")
@@ -3258,6 +3387,7 @@ function UI:Refresh()
         end
     end
     self.action:Hide()
+    self.action:SetEnabled(true)
     self.cancelRequestButton:Hide()
     self.talentSpecButton:Hide()
     self.talentBuildButton:Hide()
@@ -3324,7 +3454,12 @@ function UI:Refresh()
             self.action:SetWidth(260)
             local rch=(self.activeRecipientKey and FCM.db.characters[self.activeRecipientKey]) or ch
             local queued=FCM:FindQueuedCraft(selected.recipe.id,rch.key)
-            self.action:SetText(queued and "Cancel Craft Request" or "Request Craft for "..short(rch.name,15))
+            if tab=="Crafting" then
+                self.action:SetText(queued and "Update Craft Request" or "Request Craft for "..short(rch.name,15))
+                self.action:SetEnabled(FCM:ValidCraftQuantity(self:CraftDraftText(selected.recipe,rch))~=nil)
+            else
+                self.action:SetText(queued and "Cancel Craft Request" or "Request Craft for "..short(rch.name,15))
+            end
             self.action:Show()
         end
     else

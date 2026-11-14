@@ -2,9 +2,9 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA3 (combined test candidate)
+## Current source: v0.9.1 QA4 (combined test candidate)
 
-The **v0.9.1 QA3 preview** includes all QA2 features (local gathering tracking, optional GatherMate2 import, tree-specific Legacy advisor, Frost Mage weight profiles, the crafting quantity fix, profession dropdown, recipe-only search, and both request quantity modes) plus a Windows companion quota-ledger repair after the November 14 live scan error. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
+The **v0.9.1 QA4 preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box, with a live right-side estimate of owned items, crafts, reagents, stock by character and possible eligible material transfers. The Crafting request button saves the draft explicitly; the Requests quantity editor retains its popup for editing existing requests. Gathering now draws nearby saved nodes inside the minimap using FCM's own account-wide records; `/fcm gatherpins on|off` controls those pins independently of the minimap launcher. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -47,7 +47,7 @@ On the Windows PC, save the approved key with **Remember encrypted**, then doubl
 
 The community snapshot contains no character IDs, inventory, accounts, passwords or GatherMate2 proprietary data. Never upload `WTF` files or complete FCM SavedVariables. The local private data and imported nodes survive removal of GatherMate2; **do not remove GatherMate2 until the in-game tests confirm import and independent recording**.
 
-The next phases (precise map markers, optimized routes, and automatically connecting crafting queues to gathering spots) are not enabled in this preview. No server or NAS hosting is required.
+Nearby historical gathering markers are now available on the minimap, subject to the WoW client exposing world-coordinate and minimap-radius APIs. Full world-map overlays, optimized routes, and automatically connecting crafting queues to gathering spots are not enabled in this preview. No server or NAS hosting is required.
 
 ## ForeverDB API key (optional)
 
@@ -65,6 +65,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `FCM_v091_QA1_COMBINED_TEST_NOTES.md`: the QA6e/Gathering merge and first combined in-game test checklist.
 - `FCM_v091_QA2_CRAFTING_TEST_NOTES.md`: follow-up profession-search and Reach Total QA checklist.
 - `FCM_v091_QA3_COMPANION_TEST_NOTES.md`: focused companion quota-ledger repair and Clam Meat search checks.
+- `FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md`: inline quantity, candidate material-transfer, and nearby gathering-minimap live tests.
 
 ## Important limitations
 

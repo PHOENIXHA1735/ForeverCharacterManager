@@ -62,4 +62,67 @@ FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Rich Thorium Vein','cast45',2575
 FCM:GatherEvent('UNIT_SPELLCAST_INTERRUPTED','player','cast45',2575)
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','cast45',2575)
 eq(FCM:GatherCounts().mining,1,'interrupted cast not recorded')
-print('PASS: FCM local discovery, GatherMate import, GitHub snapshot merge and sanitized export')
+
+-- Minimap node positions must be based on client-supplied world coordinates,
+-- not map percentages or the location of FCM's round launcher icon.
+local ax,ay,distance=FCM:GatherMinimapOffset(550,460,540,450,100,nil,false)
+eq(math.floor(ax*100+.5),10,'right of player minimap position')
+eq(math.floor(ay*100+.5),-10,'above/below map axis orientation')
+eq(math.floor(distance+.5),14,'world distance')
+eq(FCM:GatherMinimapOffset(550,460,350,450,100,nil,false),nil,'hide distant node')
+local rx,ry=FCM:GatherMinimapOffset(550,460,540,460,100,math.pi/2,true)
+eq(math.abs(rx)<0.0001,true,'rotating minimap rotates x')
+eq(math.floor(ry*100+.5),-10,'rotating minimap rotates y')
+
+local function frame()
+    local f={shown=true,scripts={}}
+    function f:SetSize() end
+    function f:SetFrameStrata() end
+    function f:SetFrameLevel() end
+    function f:SetScript(event,fn) self.scripts[event]=fn end
+    function f:SetPoint(_,_,_,x,y) self.x,self.y=x,y end
+    function f:ClearAllPoints() end
+    function f:CreateTexture()
+        return {SetTexture=function()end,SetAllPoints=function()end,SetVertexColor=function()end}
+    end
+    function f:Show() self.shown=true end
+    function f:Hide() self.shown=false end
+    function f:IsShown() return self.shown end
+    function f:GetFrameStrata() return 'MEDIUM' end
+    function f:GetFrameLevel() return 3 end
+    function f:GetWidth() return 180 end
+    function f:GetHeight() return 180 end
+    return f
+end
+Minimap=frame()
+CreateFrame=function() return frame() end
+GetCVar=function() return '0' end
+C_Minimap={GetViewRadius=function() return 100 end}
+C_Map={
+    GetBestMapForUnit=function() return 1438 end,
+    GetPlayerMapPosition=function() return {GetXY=function() return 0.544,0.464 end} end,
+    GetWorldPosFromMapPos=function(mapID,p)
+        eq(mapID,1438,'same map for player and saved node')
+        return 1,{x=p.x*1000,y=p.y*1000}
+    end,
+    GetMapWorldSize=function() return 1000,1000 end,
+}
+FCM.db.settings={gatherPins=true}
+FCM:AddGatherNode('herbalism',1438,5438,4635,'Wilted Peacebloom','personal')
+FCM:AddGatherNode('herbalism',1438,5519,4594,'Wilted Peacebloom','personal')
+FCM:StartGatherMinimap()
+FCM._gatherMiniController.scripts.OnUpdate(FCM._gatherMiniController,0.40)
+eq(#FCM._gatherMiniPins,2,'both recorded Peacebloom nodes render')
+eq(FCM._gatherMiniPins[1]:IsShown(),true,'nearest saved node shown')
+eq(FCM._gatherMiniPins[1].nodeName,'Wilted Peacebloom','saved FCM data drives pins')
+FCM.db.settings.gatherPins=false
+FCM:UpdateGatherMinimap()
+eq(FCM._gatherMiniPins[1]:IsShown(),false,'off toggle hides FCM nodes')
+FCM.db.settings.gatherPins=true
+C_Minimap=nil
+FCM:UpdateGatherMinimap()
+eq(FCM._gatherMiniPins[2]:IsShown(),false,'missing radius API hides rather than misplaces nodes')
+Minimap.GetViewRadius=function() return 100 end
+FCM:UpdateGatherMinimap()
+eq(FCM._gatherMiniPins[2]:IsShown(),true,'Ascension-style Minimap:GetViewRadius fallback')
+print('PASS: FCM discovery, independent storage, saved minimap pins, map rotation and safety')
