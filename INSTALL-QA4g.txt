@@ -1,0 +1,43 @@
+FCM v0.9.1 QA4g — Adjustable minimap gathering icon sizes
+============================================================
+
+PREVIEW: Live WoW Forever testing required; not published to GitHub.
+
+1. Fully close WoW Forever and the FCM Windows companion.
+2. Back up the existing ForeverCharacterManager addon folder and the game's
+   WTF/Account SavedVariables before updating.
+3. Extract FCM-v0.9.1-QA4g-Gathering-Icon-Sizes.zip.
+4. Copy its ForeverCharacterManager folder into:
+
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+
+   Merge folders and replace matching source files. Do not nest the folder.
+   Do not delete the installed addon directory, encrypted companion key,
+   generated references, SavedVariables or account data. The ZIP includes
+   none of those personal or generated files.
+
+5. Check the installed build in PowerShell:
+
+   Select-String -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua" -Pattern "FCM.build"
+
+   Expected: QA4g-20261114-Adjustable-Gathering-Icons
+
+6. Launch WoW, enter /fcm, and select Gathering. The toolbar offers:
+
+   Hide within: 15 yd      Close-range hiding distance
+   Pins: On                Toggle historical gathering markers
+   Rim beyond: 45 yd      Send farther icons outside the minimap
+   Size: 16 px             Size of all gathering node icons
+
+   Choose 10, 12, 14, 16, 18, 20, 24 or 28 pixels in Size menu.
+   For exact whole-pixel sizes from 8 to 32, use:
+
+      /fcm gatherpins size 12
+      /fcm gatherpins size 20
+
+   Marker size applies to all characters and persists after relogging.
+   Both nearby and rim icons resize; the FCM launcher is not affected.
+
+7. Test switching between 12, 16 and 24 pixels while viewing saved herbs
+   on and around the minimap. Confirm each resource keeps its own artwork
+   and tooltip. See FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md for more tests.

@@ -1112,6 +1112,11 @@ function UI:Create()
     end)
     self.gatherRimButton:SetPoint("LEFT",self.gatherPinsButton,"RIGHT",8,0)
     self.gatherRimButton:Hide()
+    self.gatherSizeButton=button(panel,"Size: 16 px",140,25,function()
+        self:ShowGatherSizeMenu()
+    end)
+    self.gatherSizeButton:SetPoint("LEFT",self.gatherRimButton,"RIGHT",8,0)
+    self.gatherSizeButton:Hide()
 
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
@@ -1459,6 +1464,24 @@ function UI:ShowGatherRimMenu()
         }
     end
     self:MakeMenu(self.gatherRimButton,options,290,false)
+end
+function UI:ShowGatherSizeMenu()
+    if not self.gatherSizeButton or not FCM.db or not FCM.db.settings then return end
+    local options={}
+    -- One page of sizes; precise whole-pixel choices 8..32 are also available
+    -- through /fcm gatherpins size <number>.
+    for _,pixels in ipairs({10,12,14,16,18,20,24,28}) do
+        local size=pixels
+        options[#options+1]={
+            label=size.." pixels"..(size==16 and " (default)" or ""),
+            run=function()
+                FCM.db.settings.gatherPinSize=size
+                FCM._gatherMinimapDirty=true
+                self:Refresh()
+            end,
+        }
+    end
+    self:MakeMenu(self.gatherSizeButton,options,180,false)
 end
 function UI:ShowAdvisorSortMenu()
     local browsing=self.tab=="Item Explorer" or self.tab=="Global Search"
@@ -2121,12 +2144,14 @@ local function buildRows(ui)
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
             "Saved nodes appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
             "The Gathering tab has a Hide within distance dropdown (15 yards recommended), "..
-                "a Pins On/Off toggle and a Rim beyond dropdown (45 yards by default). "..
+                "a Pins On/Off toggle, a Rim beyond dropdown (45 yards by default), "..
+                "and a Size dropdown (16 pixels by default; 8-32 by command). "..
                 "Distant resource markers move outside the minimap; nearby markers use their "..
                 "actual positions, then hide at the close-range cutoff to expose live tracking dots. "..
                 "Rim sectors group nodes in the same direction and show a count. "..
                 "0 disables either distance behavior independently. "..
-            "Alternatively use /fcm gatherpins near <0-50>, rim <0-100>, or on|off. "..
+            "Alternatively use /fcm gatherpins near <0-50>, rim <0-100>, "..
+                "size <8-32>, or on|off. "..
                 "They are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
@@ -3379,6 +3404,7 @@ function UI:Refresh()
         self.gatherDistanceButton:SetShown(gathering)
         self.gatherPinsButton:SetShown(gathering)
         self.gatherRimButton:SetShown(gathering)
+        self.gatherSizeButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or
@@ -3387,6 +3413,8 @@ function UI:Refresh()
             local rim=tonumber(FCM.db.settings.gatherPinRimYards) or 45
             self.gatherRimButton:SetText(rim==0 and "Rim: Off" or
                 ("Rim beyond: "..rim.." yd"))
+            self.gatherSizeButton:SetText("Size: "..
+                tostring(tonumber(FCM.db.settings.gatherPinSize) or 16).." px")
         end
         if crafting then
             local selectedProfession=FCM.db.settings.craftProfession or "all"

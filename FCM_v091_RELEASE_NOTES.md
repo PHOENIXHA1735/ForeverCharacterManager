@@ -2,6 +2,13 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4g adjustable gathering-marker size:** FCM > Gathering now has a
+  **Size: 16 px** menu for historical herb, ore, fishing and chest icons
+  both inside the minimap and on its outer rim. Presets are 10, 12, 14,
+  16 (default), 18, 20, 24 and 28 pixels. For precise whole-pixel control,
+  `/fcm gatherpins size <8-32>` accepts any size in that range. Item art,
+  optional round masks and rim grouping remain intact. The separate round
+  launcher button is not resized; sizes persist across characters.
 - **QA4f minimap rim compass:** Saved herb, mining, fishing and treasure pins
   farther than **45 yards** (default) now appear along the outer edge of the
   minimap, in their actual relative direction. Within that distance, pins

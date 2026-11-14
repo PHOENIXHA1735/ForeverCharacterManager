@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4f — Inline crafting and gathering minimap QA
+# FCM v0.9.1 QA4g — Inline crafting and gathering minimap QA
 
-Build `QA4f-20261114-Gathering-Rim-Compass` (not a GitHub release).
+Build `QA4g-20261114-Adjustable-Gathering-Icons` (not a GitHub release).
 
 ## Install
 
@@ -176,13 +176,28 @@ from the chest, not a client-provided coordinate for the chest object.
 6. Pan or rotate the minimap and change zoom to check bearings. If icons
    appear in the wrong direction, provide a screenshot and current zoom.
 
+## Test 10 — gathering marker size control
+
+1. Open `/fcm` > Gathering. Set **Pins: On**, **Rim beyond: 45 yd** and
+   **Size: 16 px** (the original marker size).
+2. Select 12 pixels. Both visible in-map herb symbols and grouped outer-rim
+   resource symbols should shrink immediately, while retaining their
+   individual pictures and hover details.
+3. Select 24 pixels. Markers should grow without changing their saved
+   locations, current grouping or close-range hiding behavior. Larger rim
+   symbols should move slightly farther outside the map to avoid overlap.
+4. Try `/fcm gatherpins size 19` for an exact size not in the preset menu.
+   The control should update to 19 px and markers should resize accordingly.
+5. Relog a different character. The size should remain saved account-wide;
+   the separate FCM launcher emblem must not change dimensions.
+
 ## Confirm that the installed files actually updated
 
 The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
 still installed, which is older than QA4b/QA4c and explains the identical
-emblem markers. See `INSTALL-QA4f.txt` and check the installed `Core.lua` after
+emblem markers. See `INSTALL-QA4g.txt` and check the installed `Core.lua` after
 merging this release. The expected build marker is
-`QA4f-20261114-Gathering-Rim-Compass`.
+`QA4g-20261114-Adjustable-Gathering-Icons`.
 
 ## Offline regressions
 

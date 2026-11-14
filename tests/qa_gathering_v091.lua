@@ -122,7 +122,7 @@ eq(FCM:GatherNodeIcon('herbalism','Stunted Silverleaf'),
 
 local function frame()
     local f={shown=true,scripts={}}
-    function f:SetSize() end
+    function f:SetSize(width,height) self.width,self.height=width,height end
     function f:SetFrameStrata() end
     function f:SetFrameLevel() end
     function f:SetScript(event,fn) self.scripts[event]=fn end
@@ -170,6 +170,7 @@ FCM:StartGatherMinimap()
 FCM._gatherMiniController.scripts.OnUpdate(FCM._gatherMiniController,0.40)
 eq(#FCM._gatherMiniPins,3,'both Peacebloom nodes and Silverleaf render')
 eq(FCM._gatherMiniPins[1]:IsShown(),true,'nearest saved node shown')
+eq(FCM._gatherMiniPins[1].width,16,'original default marker is 16 pixels')
 eq(FCM._gatherMiniPins[1].icon.mask.path,
     'Interface\\AddOns\\ForeverCharacterManager\\Media\\FCM_GatherCircleMask',
     'gathering item icons are clipped with circular mask, not replaced by emblem')
@@ -269,4 +270,23 @@ eq(restored~=nil,true,'herb remains displayed after disabling rim mode')
 eq(restored.nodeRim,nil,'turning rim mode off restores normal in-map placement')
 eq(math.abs(restored.x)<90 and math.abs(restored.y)<90,true,
     'restored saved herb is inside the minimap area')
-print('PASS: FCM gathering counts, circular icons, treasure chest loot and rim compass')
+FCM.db.settings.gatherPinRimYards=45
+FCM.db.settings.gatherPinSize=24
+FCM:UpdateGatherMinimap()
+local resized
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then resized=pin end
+end
+eq(resized.width,24,'saved resource icon grows to selected 24-pixel size')
+eq(resized.height,24,'height tracks selected marker width')
+eq(resized.nodeRim,true,'icon remains on the rim when resized')
+eq(math.abs(resized.x)>100 or math.abs(resized.y)>100,true,
+    'larger rim icon is offset farther outward to keep the map clear')
+FCM.db.settings.gatherPinSize=10
+FCM:UpdateGatherMinimap()
+local smaller
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then smaller=pin end
+end
+eq(smaller.width,10,'resource icon shrinks when user picks 10 pixels')
+print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure and rim compass')

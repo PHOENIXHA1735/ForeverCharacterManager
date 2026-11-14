@@ -455,10 +455,16 @@ function FCM:UpdateGatherMinimap()
     self._gatherMiniPins=self._gatherMiniPins or {}
     local maxPins=math.min(#matches,60)
     local width,height=Minimap:GetWidth()/2,Minimap:GetHeight()/2
+    local iconSize=math.max(8,math.min(32,
+        math.floor(tonumber(self.db.settings and self.db.settings.gatherPinSize) or 16)))
     for i=1,maxPins do
         local node=matches[i]
         local pin=self._gatherMiniPins[i]
         if not pin then pin=gatherPin(); self._gatherMiniPins[i]=pin end
+        if pin.nodeIconSize~=iconSize then
+            pin:SetSize(iconSize,iconSize)
+            pin.nodeIconSize=iconSize
+        end
         pin.nodeName,pin.nodeKind=node.name,node.kind
         pin.nodeX,pin.nodeY=node.x,node.y
         pin.nodePersonal=node.personal
@@ -480,7 +486,7 @@ function FCM:UpdateGatherMinimap()
             else pin.clusterBadge:Hide() end
         end
         pin:ClearAllPoints()
-        local rimOffset=node.rim and 12 or 0
+        local rimOffset=node.rim and (iconSize/2+4) or 0
         pin:SetPoint("CENTER",Minimap,"CENTER",
             node.ox*(width+rimOffset),node.oy*(height+rimOffset))
         pin:Show()
