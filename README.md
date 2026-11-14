@@ -2,9 +2,9 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA2 (combined test candidate)
+## Current source: v0.9.1 QA3 (combined test candidate)
 
-The **v0.9.1 QA2 preview** combines local gathering tracking, optional GatherMate2 import, tree-specific Legacy advisor, Frost Mage weight profiles, the QA6e quantity-entry fix, and a new Crafting profession dropdown, recipe-only search, and two request quantity modes. Live WoW Forever gathering events and the Windows companion UI still require player testing. This candidate is not a published GitHub release.
+The **v0.9.1 QA3 preview** includes all QA2 features (local gathering tracking, optional GatherMate2 import, tree-specific Legacy advisor, Frost Mage weight profiles, the crafting quantity fix, profession dropdown, recipe-only search, and both request quantity modes) plus a Windows companion quota-ledger repair after the November 14 live scan error. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -64,6 +64,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `FCM_v091_RELEASE_NOTES.md`: gathering preview and manual test notes; older release documentation retained.
 - `FCM_v091_QA1_COMBINED_TEST_NOTES.md`: the QA6e/Gathering merge and first combined in-game test checklist.
 - `FCM_v091_QA2_CRAFTING_TEST_NOTES.md`: follow-up profession-search and Reach Total QA checklist.
+- `FCM_v091_QA3_COMPANION_TEST_NOTES.md`: focused companion quota-ledger repair and Clam Meat search checks.
 
 ## Important limitations
 

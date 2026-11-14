@@ -14,15 +14,21 @@ $script:ForeverDBDailyCap=4500
 $script:ForeverDBRequestSpacingMs=4000
 
 function Write-FCMForeverDBAtomicJson([string]$path,$record) {
-    $parent=Split-Path -Parent $path
+    if ([string]::IsNullOrWhiteSpace($path)) {throw 'ForeverDB quota ledger path is empty; refusing to change request counts.'}
+    # Ensure that every path given to System.IO.File is absolute. On some
+    # Windows PowerShell/.NET combinations, using a null File.Replace backup
+    # triggered ArgumentException even when the new and existing files were
+    # valid. A real same-directory backup also protects the previous count.
+    $path=[IO.Path]::GetFullPath($path)
+    $parent=[IO.Path]::GetDirectoryName($path)
     if (-not (Test-Path -LiteralPath $parent)) {New-Item -ItemType Directory -Path $parent -Force | Out-Null}
     $temp=$path+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
     try {
         [IO.File]::WriteAllText($temp,($record | ConvertTo-Json -Compress),(New-Object System.Text.UTF8Encoding($false)))
         if (Test-Path -LiteralPath $path) {
-            # Atomic file replacement prevents a crash between unlink/rename
-            # from resetting today's request count back to zero.
-            [IO.File]::Replace($temp,$path,$null)
+            # Atomic replacement avoids a missing ledger window, and the
+            # previous ledger survives in .previous if recovery is needed.
+            [IO.File]::Replace($temp,$path,($path+'.previous'))
         } else {[IO.File]::Move($temp,$path)}
     } finally {
         if (Test-Path -LiteralPath $temp) {Remove-Item -LiteralPath $temp -Force}

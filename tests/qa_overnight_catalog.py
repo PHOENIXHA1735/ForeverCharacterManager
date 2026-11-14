@@ -38,6 +38,9 @@ assert "Write-LuaFile" in updater
 assert "Get-Config" in updater
 assert "ForeverDBDailyCap=4500" in quota
 assert "ForeverDBRequestSpacingMs=4000" in quota
+assert "[IO.Path]::GetFullPath($path)" in quota
+assert "[IO.File]::Replace($temp,$path,($path+'.previous'))" in quota
+assert "[IO.File]::Replace($temp,$path,$null)" not in quota
 assert "$env:LOCALAPPDATA" in quota
 assert "-le 500" in quota
 assert "Local\\FCM-ForeverDB-Shared-Quota" in quota

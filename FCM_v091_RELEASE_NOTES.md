@@ -1,5 +1,18 @@
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
+## QA3 companion hotfix preview (November 14; not published)
+
+- Correct the shared ForeverDB quota-ledger atomic rewrite path after live
+  Windows logs showed `File.Replace` throwing `The path is not of a legal form`
+  on the second request. The ledger now writes using a full path and a valid
+  same-directory `.previous` backup; it never resets or deletes the live count.
+- Include an isolated, zero-network Windows regression test
+  `FCM-Companion/Test-FCMQuotaLedger.ps1` that writes twice and checks the
+  original budget record survives as a backup.
+- No API behavior, request caps, or user-data formats were changed.
+  Run the Windows test before trying another ForeverDB scan. See
+  `FCM_v091_QA3_COMPANION_TEST_NOTES.md`.
+
 ## QA2 crafting preview (November 14; not published)
 
 - The Crafting tab now has a **Profession** dropdown listing only professions
