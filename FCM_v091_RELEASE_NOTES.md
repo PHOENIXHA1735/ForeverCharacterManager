@@ -1,5 +1,30 @@
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
+## QA5 readable item explorer and sourced acquisition preview (November 14)
+
+- Global Search and Item Explorer now use a wider, readable right-hand panel
+  with compact sections for acquiring an item, crafting uses, your characters,
+  auction prices, item facts, and data confidence. Search rows display player-
+  facing item categories instead of `material / unknown` or technical enums.
+  Non-equippable materials say they have no combat stats rather than implying
+  a missing stat record. Gear still shows its combat stats and comparisons.
+- Price snapshot timestamps display as local dates rather than raw Unix seconds;
+  no live price or guaranteed sale is implied. Unverified source paths point
+  users to the public item page instead of pretending the API included routes.
+- A specifically documented Clam Meat source, **Giant Clam**, is shown as
+  **Seen in Forever according to ForeverDB**, with no invented zone or drop
+  chance. Other items never inherit that fallback, and source-less items say
+  so explicitly. Additional structured vendor/dungeon source hints are used
+  when present in imported item records.
+- Companion import recognizes explicitly typed container/vendor/gathering
+  sources, and can attribute dungeon-wide loot to a boss by an explicit NPC or
+  encounter ID as well as an exact name. Anonymous dungeon loot remains
+  dungeon-wide; the 0 boss-linked count cannot be solved by guessing when the
+  API does not provide an association.
+- Offline Lua regression covers the readable panel and source honesty. A
+  separate offline PowerShell 5.1 test verifies explicit boss mapping and
+  keeps unresolved items at the dungeon level. Live in-game QA is pending.
+
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
 - **QA4l world-map positioning and controls:** QA4k's layer change made all

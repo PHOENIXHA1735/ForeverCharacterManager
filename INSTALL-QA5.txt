@@ -1,0 +1,24 @@
+FCM v0.9.1 QA5 — Readable Item Explorer and Explicit Source Mapping
+
+TEST BUILD ONLY. The current published GitHub main is v0.9.1 QA4l until a
+maintainer explicitly publishes this newer candidate.
+
+1. Fully close WoW Forever and the FCM Windows companion.
+2. Back up your installed ForeverCharacterManager addon and WTF SavedVariables.
+3. Extract FCM-v0.9.1-QA5-Addon-and-Companion.zip.
+4. MERGE the contained ForeverCharacterManager folder into your existing
+   WoW Interface\AddOns\ForeverCharacterManager folder. Replace matching
+   source files; DO NOT delete the existing folder first.
+5. Do not delete generated reference Lua files, your Windows companion
+   settings/cache/API key, or character SavedVariables.
+6. Start WoW, open /fcm > Diagnostics, and verify:
+   QA5-20261114-Readable-Item-Sources
+7. Test Clam Meat ID 5503 in Global Search and Item Explorer. See
+   FCM_v091_QA5_ITEM_EXPLORER_TEST_NOTES.md for expected UI details.
+8. With WoW closed, run the zero-network test in the updated installed
+   FCM-Companion folder:
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Test-FCMDungeonSourceMapping.ps1
+9. Share screenshots and the test result. Do not run repeated live ForeverDB
+   scans solely to test a UI improvement.
+
+Data credit: ForeverDB.net (https://foreverdb.net)

@@ -2,7 +2,21 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4l (combined test candidate)
+## Current source: v0.9.1 QA5 (item readability test candidate)
+
+**QA5 makes item search easier to read:** The Item Explorer and Global Search
+right-hand pane is wider, with clear sections explaining **where an item comes
+from**, **what it is used for**, **which characters have it**, **auction
+pricing**, and **data reliability**. Raw inventory codes and Unix timestamps
+are hidden in favor of readable labels. Normal cooking materials no longer
+say their combat stats are missing; equipment still shows actual imported or
+client stats. Clam Meat #5503 now includes ForeverDB's documented **Giant
+Clam** container source, explicitly marked as **Seen in Forever**, with no
+invented drop percentage or zone. Missing source data remains visible as a
+limitation and provides the public item-page path. The Windows companion also
+recognizes explicit boss IDs in loot associations, but never assigns a boss
+when the provider did not identify one. Run the QA5 checklist before treating
+these changes as live-tested.
 
 **QA4l aligns world-map gathering icons and adds map-header filters:** Live
 testing confirmed the QA4k markers finally rendered, but spots recorded in

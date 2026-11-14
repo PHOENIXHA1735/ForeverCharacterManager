@@ -2,6 +2,14 @@ local _, FCM = ...
 -- Source-based advisory. Never invent drop rates, NPC locations or farming speed.
 -- Farm records are reference claims; the game client does not validate them.
 local MAX_SOURCE_ROWS=30
+-- A small, explicitly sourced fallback when the public API supplies item
+-- metadata but omits acquisition fields shown on the provider's public page.
+-- No drop percentage or map location is inferred from these references.
+local documentedSources={
+    [5503]={{kind="container",name="Giant Clam",zone="",
+        source="ForeverDB.net/item/5503",
+        evidence="ForeverDB marks this container source Seen in Forever (checked 2026-11-14)."}},
+}
 local function str(s)
     if type(s)~="string" and type(s)~="number" then return "" end
     local v=tostring(s):gsub("[\r\n]"," ")
@@ -18,8 +26,10 @@ local function kindOf(s)
     if k=="herb" then return "herbalism" end
     if k=="ore" then return "mining" end
     if k=="fish" then return "fishing" end
+    if k=="object" or k=="chest" or k=="clam" or k=="container" then return "container" end
+    if k=="merchant" then return "vendor" end
     if k=="mob" or k=="fishing" or k=="mining" or k=="herbalism" or
-        k=="skinning" or k=="dungeon" or k=="vendor" then return k end
+        k=="skinning" or k=="dungeon" or k=="vendor" or k=="quest" then return k end
     return "reference"
 end
 local function addRow(out,seen,row)
@@ -88,6 +98,25 @@ function FCM:FarmSources(itemID)
     local rows,seen={},{}
     for _,raw in ipairs(item.farmSources or {}) do addRow(rows,seen,raw) end
     dungeonSources(rows,seen,ext.dungeons,id)
+    for _,raw in ipairs(documentedSources[id] or {}) do addRow(rows,seen,raw) end
+    if #rows==0 and type(item.soldBy)=="string" then
+        local count=0
+        for name in item.soldBy:gmatch("[^;]+") do
+            local sourceName=name:gsub("^%s+",""):gsub("%s+$","")
+            if sourceName~="" then
+                addRow(rows,seen,{name=sourceName,kind="vendor",
+                    source=item.sourceProvider or "Imported item record",
+                    evidence="Vendor listed in reference; stock not confirmed live"})
+                count=count+1
+                if count>=4 then break end
+            end
+        end
+    end
+    if #rows==0 and type(item.dungeonSources)=="string" and item.dungeonSources~="" then
+        addRow(rows,seen,{name="Boss not identified",zone=item.dungeonSources:sub(1,180),
+            kind="dungeon",source=item.sourceProvider,
+            evidence="Dungeon association only; boss not confirmed"})
+    end
     -- An unstructured source description is useful but NOT eligible for
     -- drop-rate ranking. Treat it as one unverified reference hint.
     if #rows==0 and type(item.where)=="string" and item.where~="" then
@@ -163,7 +192,10 @@ function FCM:FarmAdviceLines(itemID,quantity,character,maxRows)
             local total=self.MoneyLabel and self:MoneyLabel(median*plan.quantity) or tostring(median*plan.quantity).." copper"
             rows[#rows+1]=""
             rows[#rows+1]="AH median (cached): "..each.." each | approx "..total.." total"
-            rows[#rows+1]="Market data: "..str(plan.price.observedAt or plan.price.updated or "timestamp unknown")..
+            local recorded=plan.price.observedAt or plan.price.updated
+            local formatted=self.ReferenceTimeLabel and self:ReferenceTimeLabel(recorded) or
+                (recorded and "Date recorded" or "Date unknown")
+            rows[#rows+1]="Market snapshot: "..formatted..
                 " | Listings are not guaranteed sales or purchases."
             if type(self.MarketItemAdvice)=="function" then
                 local meta=((self.externalData or {}).items or {})[plan.itemID] or {}

@@ -78,7 +78,10 @@ function FCM:MarketItemAdviceLines(advice)
     if advice.change7 then
         lines[#lines+1]=string.format("  vs. source 7-day median: %+.0f%%",advice.change7)
     end
-    if advice.observedAt then lines[#lines+1]="  Market observation: "..tostring(advice.observedAt) end
+    if advice.observedAt then
+        lines[#lines+1]="  Market observation: "..
+            (self.ReferenceTimeLabel and self:ReferenceTimeLabel(advice.observedAt) or "Date recorded")
+    end
     if advice.promising then lines[#lines+1]="  "..advice.verdict.." (asking prices are not guaranteed sales)" end
     if advice.snapshot then lines[#lines+1]="  AHledger bundled snapshot: verify price before acting" end
     lines[#lines+1]="  Source: AHledger; market estimates, not confirmed sales."

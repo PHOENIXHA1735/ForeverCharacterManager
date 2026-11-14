@@ -306,21 +306,35 @@ function FDB-AddFarmSource($item,[string]$kind,[string]$name,[string]$zone,$reco
 }
 function FDB-ReadFarmDrops($item,$record) {
     if ($null -eq $record) {return}
-    foreach ($field in @('droppedBy','dropSources','lootSources')) {
+    foreach ($field in @('droppedBy','dropSources','lootSources','sources')) {
         foreach ($source in @(FDB-List $record $field)) {
             if ($null -eq $source -or $source -is [string]) {continue}
             $name=''
-            foreach ($k in @('name','creatureName','npcName','mobName')) {
+            foreach ($k in @('name','creatureName','npcName','mobName','objectName','containerName','vendorName')) {
                 if ($source.$k -is [string] -and $source.$k.Trim()) {$name=[string]$source.$k;break}
             }
             if (-not $name -and $source.creature -and $source.creature.name) {$name=[string]$source.creature.name}
             if (-not $name -and $source.npc -and $source.npc.name) {$name=[string]$source.npc.name}
+            if (-not $name -and $source.container -and $source.container.name) {$name=[string]$source.container.name}
+            if (-not $name -and $source.object -and $source.object.name) {$name=[string]$source.object.name}
+            if (-not $name -and $source.vendor -and $source.vendor.name) {$name=[string]$source.vendor.name}
             $zone=''
             foreach ($k in @('zoneName','areaName','zone')) {
                 if ($source.$k -is [string]) {$zone=[string]$source.$k;break}
             }
             if (-not $zone -and $source.location -and $source.location.zone -is [string]) {$zone=[string]$source.location.zone}
-            if ($name) {FDB-AddFarmSource $item 'mob' $name $zone $source}
+            # Use only explicit source type/object data for non-creature sources.
+            # An unlabeled loot reference is not proof of a creature drop.
+            $kind='mob'
+            $declared=([string]$source.kind+' '+[string]$source.type).ToLowerInvariant()
+            if ($declared -match 'container|object|chest|clam' -or $source.container -or $source.object) {$kind='container'}
+            elseif ($declared -match 'vendor|merchant' -or $source.vendor) {$kind='vendor'}
+            elseif ($declared -match 'fishing|fish') {$kind='fishing'}
+            elseif ($declared -match 'mining|ore') {$kind='mining'}
+            elseif ($declared -match 'herbalism|herb') {$kind='herbalism'}
+            elseif ($field -eq 'sources' -and $declared -notmatch 'mob|npc|creature|drop' -and
+                    -not $source.creature -and -not $source.npc) {continue}
+            if ($name) {FDB-AddFarmSource $item $kind $name $zone $source}
         }
     }
 }
@@ -657,6 +671,26 @@ function FDB-DropBossName($drop) {
     if ($drop.source -and $drop.source.bossName) {return [string]$drop.source.bossName}
     return ''
 }
+function FDB-DropBossId($drop) {
+    if ($null -eq $drop) {return 0}
+    foreach ($key in @('bossId','bossID','sourceBossId','sourceBossID','npcId','creatureId','encounterId')) {
+        if ($null -ne $drop.$key) {
+            $value=FDB-Int $drop.$key
+            if ($value -gt 0) {return $value}
+        }
+    }
+    foreach ($key in @('boss','encounter','droppedBy','source')) {
+        $node=$drop.$key
+        if ($null -eq $node -or $node -is [string]) {continue}
+        # A generic source.id is not necessarily an NPC/encounter ID.
+        $identifiers=if ($key -eq 'source') {
+            @('bossId','npcId','creatureId','encounterId')
+        } else {@('bossId','npcId','creatureId','encounterId','id')}
+        $id=FDB-ResourceId $node $identifiers
+        if ($id -gt 0) {return $id}
+    }
+    return 0
+}
 function FDB-DropEntry($drop,[string]$sourceType='dungeon-associated') {
     $itemId=FDB-ItemId $drop
     if ($itemId -le 0) {return $null}
@@ -711,8 +745,14 @@ function FDB-SaveDungeon($detail) {
         if (-not $entry) {continue}
         [void]$lootIDs.Add([int]$entry.id)
         $sourceName=FDB-DropBossName $drop
+        $sourceId=FDB-DropBossId $drop
         $matched=-1
-        if ($sourceName) {
+        if ($sourceId -gt 0) {
+            for ($i=0;$i -lt $bossRecords.Count;$i++) {
+                if ($bossRecords[$i].id -gt 0 -and $bossRecords[$i].id -eq $sourceId) {$matched=$i;break}
+            }
+        }
+        if ($matched -lt 0 -and $sourceName) {
             for ($i=0;$i -lt $bossRecords.Count;$i++) {
                 if ($bossRecords[$i].name -ieq $sourceName) {$matched=$i;break}
             }
@@ -723,7 +763,7 @@ function FDB-SaveDungeon($detail) {
             if ($seen.Count -eq 0 -and $bossRecords[$matched].loot.Count -lt 65) {
                 $bossRecords[$matched].loot+= $entry
             }
-            FDB-RecordDungeonItem $entry.id $entry.name $dungeonName $sourceName
+            FDB-RecordDungeonItem $entry.id $entry.name $dungeonName $bossRecords[$matched].name
         } else {
             $alreadyAttributed=$false
             foreach ($knownBoss in $bossRecords) {

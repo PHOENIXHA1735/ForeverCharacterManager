@@ -174,6 +174,10 @@ end
 local qualityColors={
     [0]="9d9d9d",[1]="ffffff",[2]="1eff00",[3]="0070dd",[4]="a335ee",[5]="ff8000",[6]="e6cc80",
 }
+local friendlyItemCategories={weapon="Weapon",armor="Armor",jewelry="Jewelry",
+    container="Bag",consumable="Consumable",material="Crafting material",
+    recipe="Recipe",quest="Quest item",profession="Profession tool",
+    enchant="Enchanting",special="Miscellaneous"}
 local itemSlotLabels={
     INVTYPE_HEAD="Head",INVTYPE_NECK="Neck",INVTYPE_SHOULDER="Shoulder",INVTYPE_CLOAK="Back",
     INVTYPE_CHEST="Chest",INVTYPE_ROBE="Chest",INVTYPE_WRIST="Wrist",INVTYPE_HAND="Hands",
@@ -210,7 +214,10 @@ local function itemMetadata(id,drop)
     end
     if not icon and type(GetItemIcon)=="function" then icon=FCM:Try(GetItemIcon,id) end
     return {id=id,name=itemName,store=stored,game=game,icon=icon,
-        slot=itemSlotLabels[equip] or equip,
+        -- Internal inventory enums (including INVTYPE_NON_EQUIP_IGNORE) are
+        -- never useful to players and must not appear in the preview.
+        slot=itemSlotLabels[equip] or (type(equip)=="string" and
+            not equip:match("^INVTYPE_") and equip or nil),
         typeName=(game and game.subType) or stored.subclass or stored.category,quality=quality,
         color=qualityColors[quality] or "f0d27b"}
 end
@@ -347,7 +354,7 @@ function UI:RenderItemPreview(row)
     if meta.quality then descriptors[#descriptors+1]=qualityNames[meta.quality] or "Item" end
     local ilvl=tonumber((meta.game and meta.game.ilvl) or store.itemLevel or store.ilvl)
     if ilvl and ilvl>0 then descriptors[#descriptors+1]="iLvl "..ilvl end
-    preview.kind:SetText(short(table.concat(descriptors,"  |  "),43))
+    preview.kind:SetText(short(table.concat(descriptors,"  |  "),64))
     local stats=itemStats(id,store,meta.game)
     if isContainer then
         preview.stats:SetText(capacity and ("Bag capacity: "..capacity.." slots") or
@@ -357,7 +364,12 @@ function UI:RenderItemPreview(row)
         if #stats>1 and #subtitle+#stats[2]<51 then subtitle=subtitle.."  |  "..stats[2] end
         preview.stats:SetText(short(subtitle,58))
     else
-        preview.stats:SetText("Stats unavailable: see details")
+        local category=FCM.ItemCategory and FCM:ItemCategory(store) or nil
+        local withoutStats={material="Crafting material",recipe="Recipe or pattern",
+            quest="Quest item",profession="Profession item",special="Miscellaneous item"}
+        preview.stats:SetText(withoutStats[category] and
+            (withoutStats[category].." - no combat stats") or
+            "No combat stats recorded; see item details")
     end
     preview:Show()
     self.detailText:ClearAllPoints()
@@ -2204,7 +2216,8 @@ local function buildRows(ui)
                 if quote and tonumber(quote.median) then
                     d[#d+1]="Estimated AH cost of missing quantity: "..FCM:MoneyLabel(quote.median*a.missing)
                     d[#d+1]="AHledger snapshot / market: "..tostring(quote.market or "unknown")
-                    d[#d+1]="Last scan: "..tostring(quote.observedAt or "not supplied")
+                    d[#d+1]="Last scan: "..
+                        (FCM.ReferenceTimeLabel and FCM:ReferenceTimeLabel(quote.observedAt) or "Date recorded")
                     d[#d+1]="Prices from AHledger (ahledger.com). Not guaranteed current."
                 else
                     d[#d+1]="No verified imported price for this material on the selected market."
@@ -2347,10 +2360,11 @@ local function buildRows(ui)
             "The companion may need another reference-data sync to fill missing item details.")
         for _,entry in ipairs(filtered) do
             local e=entry
-            add("searchitem:"..e.id,e.name,"#"..e.id.." | "..e.group..
-                (e.itemType~="all" and " / "..e.itemType or "")..
+            add("searchitem:"..e.id,e.name,"#"..e.id.." | "..
+                (friendlyItemCategories[e.group] or e.group).." | "..FCM:ItemQualityName(e.item)..
+                (e.itemType~="all" and e.itemType~="unknown" and " / "..e.itemType or "")..
                 (e.owned and " | Owned" or ""),
-                function() return FCM:CatalogItemDetails(e.id,ch) end)
+                function() return FCM:ReadableItemDetails(e.id,ch) end)
         end
         -- Learned recipe matches are account-wide. The Item Details pane also
         -- performs reverse-reagent lookups through ExpandedItemDetails.
@@ -2393,12 +2407,13 @@ local function buildRows(ui)
             local selected=entry
             local info=entry.item or {}
             local quality=FCM:ItemQualityName(info)
-            local summary="#"..entry.id.."  |  "..selected.group.."  |  "..quality..
+            local summary="#"..entry.id.."  |  "..
+                (friendlyItemCategories[selected.group] or selected.group).."  |  "..quality..
                 (selected.owned and "  |  Owned" or "")..
                 (selected.uncertain and "  |  Review availability" or "")..
                 (not selected.externallySourced and "  |  Reference missing" or "")
             add("item:"..tostring(entry.id),entry.name,summary,
-                function() return FCM:CatalogItemDetails(selected.id,ch) end)
+                function() return FCM:ReadableItemDetails(selected.id,ch) end)
         end
         if total==0 then
             add("item-explorer-help", "No items match these filters", "Clear filters or run the companion's Reference Data sync.",
@@ -3270,7 +3285,12 @@ end
 function UI:Refresh()
     if not self.frame or not self.frame:IsShown() or not FCM.db then return end
     local tab=self.tab or "Overview"
-    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or 285) end
+    if self.detailPanel then
+        -- The searchable item encyclopedia carries longer source and recipe
+        -- notes than the character tabs. Give it room to wrap naturally.
+        self.detailPanel:SetWidth(tab=="Dungeons" and 366 or
+            ((tab=="Item Explorer" or tab=="Global Search") and 390 or 285))
+    end
     self.heading:SetText(tab)
     self.factionButton:SetText(FCM:FactionView()=="all" and "All" or FCM:FactionView())
     local ch=self:GetCharacter()
@@ -3574,6 +3594,16 @@ function UI:Refresh()
         -- The same quick red/green comparison appears wherever a real item is
         -- selected. Non-equipment rows simply retain their existing details.
         local itemID=previewItemID(selected)
+        if itemID and (tab=="Item Explorer" or tab=="Global Search") then
+            local meta=itemMetadata(itemID)
+            local category=FCM:ItemCategory(meta.store or {})
+            if category=="weapon" or category=="armor" or category=="jewelry" then
+                local stats=itemStats(itemID,meta.store,meta.game)
+                if #stats>0 and stats[1]~="Stats unavailable in current records" then
+                    content="|cffffd983COMBAT STATS|r\n"..table.concat(stats,"\n").."\n\n"..tostring(content)
+                end
+            end
+        end
         if itemID and ch and FCM.Gear and FCM.Gear.CompareItem then
             local comparison=FCM.Gear:CompareItem(itemID,ch,selected.compareSlot)
             local comparisonLines=FCM.Gear:ComparisonLines(comparison)

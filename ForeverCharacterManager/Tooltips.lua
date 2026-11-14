@@ -92,7 +92,11 @@ local function extraLines(tooltip,data)
         if market.soldPerDay then
             tooltip:AddLine(string.format("Reported units/day: %.1f (source estimate)",market.soldPerDay),0.72,0.84,0.95)
         end
-        if market.observedAt then tooltip:AddLine("AH observed: "..tostring(market.observedAt),0.69,0.75,0.82) end
+        if market.observedAt then
+            tooltip:AddLine("AH observed: "..
+                (FCM.ReferenceTimeLabel and FCM:ReferenceTimeLabel(market.observedAt) or "Date recorded"),
+                0.69,0.75,0.82)
+        end
         if market.snapshot then tooltip:AddLine("AHledger bundled snapshot - verify prices before acting",1,0.70,0.40,true) end
         if market.promising then tooltip:AddLine("FCM: CHECK AH BEFORE VENDORING",0.5,1,0.62,true) end
         tooltip:AddLine("AHledger (ahledger.com): asking prices are not confirmed sales.",0.60,0.69,0.82,true)
