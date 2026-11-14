@@ -2059,7 +2059,7 @@ local function buildRows(ui)
             "No character data is uploaded; community contributions are manual for now.\n\n"..
             "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
-            "Saved nodes appear as small resource icons on the minimap when nearby. "..
+            "Saved nodes appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
             "Use /fcm gatherpins off|on to toggle markers; they are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
@@ -2073,6 +2073,7 @@ local function buildRows(ui)
                     "|cffffd983"..point.name.."|r\n\n"..place.."\n"..
                     "Gathering: "..kind.."\nSource: "..(point.personal and "Personally gathered" or
                         (point.source=="gathermate" and "Imported from GatherMate2" or "Community database"))..
+                    "\n"..FCM:GatherCountLabel(point)..
                     "\n\nThis is a previously reported location, not a live spawn indicator.")
             end
         end

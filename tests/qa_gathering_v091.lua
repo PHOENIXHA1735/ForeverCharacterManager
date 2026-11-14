@@ -16,6 +16,8 @@ eq(FCM:AddGatherNode('mining',37,-1,6780,'Copper Vein','personal'),false,'invali
 eq(FCM:AddGatherNode('mining',37,4590,6780,'Copper|Vein','personal'),false,'invalid node name')
 eq(FCM:GatherCounts().mining,1,'local count')
 eq(FCM:GatherCounts().personal,1,'personal count')
+eq(FCM:GatherNodes('mining')[1].gatherCount,2,'same saved node counts repeated gathers')
+eq(FCM:GatherCountLabel(FCM:GatherNodes('mining')[1]),'2 personal gathers','repeat count label')
 eq(type(FCM_GatherExport),'table','companion export markers')
 local token=next(FCM_GatherExport)
 eq(token,'FCMG1|mining|37|4590|6780|Copper Vein','export contains only node fields')
@@ -32,6 +34,8 @@ local count=FCM:ImportGatherMate()
 eq(count,1,'gm import')
 eq(FCM:ImportGatherMate(),0,'idempotent import')
 eq(FCM:GatherCounts().herbalism,1,'GM2 herb count')
+eq(FCM:GatherCountLabel(FCM:GatherNodes('herbalism')[1]),
+    'No personal gathers recorded','imported locations have no invented personal count')
 _G.GatherMate2=nil
 eq(FCM:GatherCounts().herbalism,1,'import persists without GM2')
 
@@ -46,12 +50,31 @@ eq(FCM:AddGatherNode('fishing',37,1234,5678,'School of Fish','personal'),false,
     'personal confirmation of existing community point is not a duplicate')
 eq(FCM_GatherExport['FCMG1|fishing|37|1234|5678|School of Fish'],true,
     'personal confirmation is exportable independently of community data')
+eq(FCM:GatherCountLabel(FCM:GatherNodes('fishing')[1]),'1 personal gather',
+    'first actual gather of a previously imported location is count one')
+
+-- Preserve older account-wide nodes without retroactively guessing how often
+-- they were harvested before this build began recording repeats.
+local old={name='Old Herb',x=2500,y=3500,source='personal',personal=true}
+FCM.db.gathering.nodes.herbalism[99]={['2500:3500:old herb']=old}
+eq(FCM:GatherCountLabel(old),'At least 1 personal gather (older history unknown)',
+    'legacy node with no count shows honest lower bound')
+eq(FCM:AddGatherNode('herbalism',99,2500,3500,'Old Herb','personal'),false,'legacy repeat')
+eq(FCM:GatherCountLabel(old),'At least 2 personal gathers (older history unknown)',
+    'legacy repeat advances minimum without claiming exact history')
 
 C_Map={GetBestMapForUnit=function()return 77 end,
     GetPlayerMapPosition=function()return {GetXY=function()return .4421,.7612 end} end}
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Peacebloom','cast42',2366)
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','cast42',2366)
-eq(FCM:GatherCounts().herbalism,2,'independent herbalism recording')
+eq(FCM:GatherCounts().herbalism,3,'independent herbalism recording')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Peacebloom','cast42b',2366)
+FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','cast42b',2366)
+local foundPeacebloom
+for _,node in ipairs(FCM:GatherNodes('herbalism')) do
+    if node.name=='Peacebloom' then foundPeacebloom=node end
+end
+eq(foundPeacebloom.gatherCount,2,'successive successful herb gathers increment saved count')
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'cast43',2575)
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','cast43',2575)
 eq(FCM:GatherCounts().mining,1,'unknown target must not invent a node')
@@ -116,6 +139,9 @@ FCM.db.settings={gatherPins=true}
 FCM:AddGatherNode('herbalism',1438,5438,4635,'Wilted Peacebloom','personal')
 FCM:AddGatherNode('herbalism',1438,5519,4594,'Wilted Peacebloom','personal')
 FCM:AddGatherNode('herbalism',1438,5440,4650,'Silverleaf','personal')
+FCM:AddGatherNode('herbalism',1438,5438,4635,'Wilted Peacebloom','personal')
+eq(FCM:AddGatherNode('herbalism',1438,5439,4636,'Wilted Peacebloom','personal'),false,
+    'same herb from a slightly different standing position counts as same location')
 FCM:StartGatherMinimap()
 FCM._gatherMiniController.scripts.OnUpdate(FCM._gatherMiniController,0.40)
 eq(#FCM._gatherMiniPins,3,'both Peacebloom nodes and Silverleaf render')
@@ -123,6 +149,23 @@ eq(FCM._gatherMiniPins[1]:IsShown(),true,'nearest saved node shown')
 local textures={}
 for _,pin in ipairs(FCM._gatherMiniPins) do textures[pin.nodeName]=pin.icon.path end
 eq(textures['Wilted Peacebloom']~=textures['Silverleaf'],true,'different herb icons on minimap')
+GameTooltip={lines={}}
+function GameTooltip:SetOwner() self.lines={} end
+function GameTooltip:AddLine(line) self.lines[#self.lines+1]=line end
+function GameTooltip:Show() end
+function GameTooltip:Hide() end
+local countedPin
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin.nodeX==5438 and pin.nodeY==4635 then countedPin=pin end
+end
+countedPin.scripts.OnEnter(countedPin)
+local hasCount=false
+for _,line in ipairs(GameTooltip.lines) do
+    if line=='3 personal gathers' then hasCount=true end
+end
+eq(hasCount,true,'minimap hover tooltip shows repeat and nearby gather count')
+eq(FCM_GatherExport['FCMG1|herbalism|1438|5439|4636|Wilted Peacebloom'],nil,
+    'nearby repeated casts do not create duplicate contribution nodes')
 FCM.db.settings.gatherPins=false
 FCM:UpdateGatherMinimap()
 eq(FCM._gatherMiniPins[1]:IsShown(),false,'off toggle hides FCM nodes')
@@ -133,4 +176,4 @@ eq(FCM._gatherMiniPins[2]:IsShown(),false,'missing radius API hides rather than 
 Minimap.GetViewRadius=function() return 100 end
 FCM:UpdateGatherMinimap()
 eq(FCM._gatherMiniPins[2]:IsShown(),true,'Ascension-style Minimap:GetViewRadius fallback')
-print('PASS: FCM discovery, independent storage, saved minimap pins, map rotation and safety')
+print('PASS: FCM discovery, repeated gather counts, legacy honesty, minimap tooltip and safety')

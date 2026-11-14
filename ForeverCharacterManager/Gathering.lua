@@ -59,18 +59,57 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
     byKind[mapID]=byMap
     local key=x..":"..y..":"..name:lower()
     local existing=byMap[key]
+    if not existing and source=="personal" and C_Map and
+       type(C_Map.GetMapWorldSize)=="function" then
+        -- The cast reports the player's position, not the object's GUID.
+        -- Standing a few yards to one side on a later harvest should count
+        -- as the same spot, but nearby different herbs never get merged.
+        local width,height=self:Try(C_Map.GetMapWorldSize,mapID)
+        if type(width)=="number" and width>0 and
+           type(height)=="number" and height>0 then
+            local closest,closestDistance=nil,8*8
+            for _,n in pairs(byMap) do
+                if type(n)=="table" and type(n.name)=="string" and
+                   n.name:lower()==name:lower() and type(n.x)=="number" and
+                   type(n.y)=="number" then
+                    local dx=(x-n.x)*width/10000
+                    local dy=(y-n.y)*height/10000
+                    local squared=dx*dx+dy*dy
+                    if squared<closestDistance then
+                        closest,closestDistance=n,squared
+                    end
+                end
+            end
+            existing=closest
+        end
+    end
     if existing then
         if source=="personal" then
+            -- Old releases recorded discovery but not repeat harvests. Keep
+            -- their earlier unknown frequency honest as a minimum count.
+            local prior=number(existing.gatherCount,1,1000000000)
+            if prior then
+                existing.gatherCount=math.min(1000000000,prior+1)
+            elseif existing.personal then
+                existing.gatherCount=2
+                existing.gatherCountMinimum=true
+            else
+                existing.gatherCount=1
+            end
             existing.personal=true
+            existing.firstSeen=existing.firstSeen or self:Now()
             existing.lastSeen=self:Now()
             self._gatherCounts=nil
             self._gatherMinimapDirty=true
-            rememberPersonal(kind,mapID,x,y,name)
+            rememberPersonal(kind,mapID,existing.x,existing.y,existing.name)
         end
         return false
     end
     byMap[key]={name=name,x=x,y=y,gmID=number(gmID,1,1000000),
-        source=source,personal=(source=="personal"),firstSeen=source=="personal" and self:Now() or nil}
+        source=source,personal=(source=="personal"),
+        gatherCount=source=="personal" and 1 or nil,
+        firstSeen=source=="personal" and self:Now() or nil,
+        lastSeen=source=="personal" and self:Now() or nil}
     self._gatherCounts=nil
     self._gatherMinimapDirty=true
     g.stats[source]=(g.stats[source] or 0)+1
@@ -80,6 +119,19 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
         rememberPersonal(kind,mapID,x,y,name)
     end
     return true
+end
+
+function FCM:GatherCountLabel(node)
+    if type(node)~="table" then return "No personal gathers recorded" end
+    local count=number(node.gatherCount,1,1000000000)
+    local minimum=node.gatherCountMinimum==true
+    if not count and node.personal then
+        count,minimum=1,true
+    end
+    if not count then return "No personal gathers recorded" end
+    return (minimum and "At least " or "")..count..
+        (count==1 and " personal gather" or " personal gathers")..
+        (minimum and " (older history unknown)" or "")
 end
 
 function FCM:GatherNodes(kind, search, maxRows)
@@ -93,7 +145,8 @@ function FCM:GatherNodes(kind, search, maxRows)
                 for _,n in pairs(nodes) do
                     if type(n)=="table" and (q=="" or (n.name or ""):lower():find(q,1,true)) then
                         rows[#rows+1]={kind=category,mapID=tonumber(zone),name=n.name,
-                            x=n.x,y=n.y,source=n.source,personal=n.personal,gmID=n.gmID}
+                            x=n.x,y=n.y,source=n.source,personal=n.personal,gmID=n.gmID,
+                            gatherCount=n.gatherCount,gatherCountMinimum=n.gatherCountMinimum}
                     end
                 end
             end
@@ -223,6 +276,7 @@ local function gatherPin()
         GameTooltip:AddLine((btn.nodeKind or "Node").." | "..
             string.format("%.2f, %.2f",(btn.nodeX or 0)/100,(btn.nodeY or 0)/100),0.75,0.9,1)
         GameTooltip:AddLine(btn.nodePersonal and "Personally gathered" or "Saved reference location",0.65,1,0.65)
+        GameTooltip:AddLine(FCM:GatherCountLabel(btn.nodeCount),0.85,1,0.85)
         GameTooltip:AddLine("Previously reported; spawn not guaranteed",0.9,0.85,0.7)
         GameTooltip:Show()
     end)
@@ -300,7 +354,9 @@ function FCM:UpdateGatherMinimap()
                             local ox,oy,dist=self:GatherMinimapOffset(px,py,wx,wy,radius,facing,turning)
                             if ox then
                                 matches[#matches+1]={ox=ox,oy=oy,dist=dist,kind=kind,
-                                    name=node.name,x=node.x,y=node.y,personal=node.personal}
+                                    name=node.name,x=node.x,y=node.y,personal=node.personal,
+                                    gatherCount=node.gatherCount,
+                                    gatherCountMinimum=node.gatherCountMinimum}
                             end
                         end
                     end
@@ -319,6 +375,7 @@ function FCM:UpdateGatherMinimap()
         pin.nodeName,pin.nodeKind=node.name,node.kind
         pin.nodeX,pin.nodeY=node.x,node.y
         pin.nodePersonal=node.personal
+        pin.nodeCount=node
         if pin.iconName~=node.name or pin.iconKind~=node.kind then
             pin.icon:SetTexture(self:GatherNodeIcon(node.kind,node.name))
             pin.iconName,pin.iconKind=node.name,node.kind

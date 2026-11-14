@@ -2,6 +2,13 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4c repeat-harvest counts:** Hovering a saved minimap node shows how many
+  successful personal gathers FCM has recorded there across characters.
+  Repeated harvests at the same spot (including small standing-position changes
+  within eight yards) increment that count. Imported nodes start with no
+  personal harvests; older personal discoveries show "At least 1" because
+  earlier addon builds did not track repeated gathers. The Gathering tab's
+  details show the same count. No historical totals are invented or uploaded.
 - **QA4b icon refinement:** Gathering minimap nodes use resource-item icons
   where possible. Wilted Peacebloom and Silverleaf now have distinct flower
   and herb icons, even without a warm client item cache; other gathering

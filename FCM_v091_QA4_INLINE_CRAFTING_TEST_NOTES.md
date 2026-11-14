@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4b — Inline crafting and gathering minimap icons
+# FCM v0.9.1 QA4c — Inline crafting and gathering minimap details
 
-Build `QA4b-20261114-Distinct-Gathering-Icons` (not a GitHub release).
+Build `QA4c-20261114-Gathering-Counts` (not a GitHub release).
 
 ## Install
 
@@ -86,6 +86,27 @@ Build `QA4b-20261114-Distinct-Gathering-Icons` (not a GitHub release).
    if unavailable, FCM hides pins instead of drawing inaccurate markers.
    To check, use `/run print(type(C_Map.GetWorldPosFromMapPos),type(Minimap.GetViewRadius),C_Minimap and type(C_Minimap.GetViewRadius))`
    and share what it prints.
+
+## Test 5 — number of times a herb was gathered
+
+1. On Spotty Dotty, hover one of the existing Peacebloom icons. The tooltip
+   should now say `At least 1 personal gather (older history unknown)` if the
+   node came from QA4/QA4b, which recorded discovery but not repeat totals.
+2. When that herb respawns, successfully gather it again from the same spot.
+   Hover its minimap icon and confirm the minimum count increases. Slight
+   position changes of up to eight yards should stay with the saved point.
+3. Check that harvesting Peacebloom does **not** increment Silverleaf's count
+   or another more distant Peacebloom location's count.
+4. Newly found locations in QA4c start at `1 personal gather`; after a second
+   confirmed gather, they show `2 personal gathers` without the "at least"
+   warning. Imported locations not personally gathered say `No personal
+   gathers recorded`.
+5. Open Gathering, select the saved node and confirm its detail panel agrees
+   with the hover tooltip. Relog and make sure the number persists.
+
+Only completed named gathering casts increment a count. Earlier repeat visits
+cannot be reconstructed from saved locations, and different nearby plants with
+the same name may require manual confirmation if they are within eight yards.
 
 ## Offline regressions
 
