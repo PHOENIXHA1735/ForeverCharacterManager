@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4e — Inline crafting and gathering minimap QA
+# FCM v0.9.1 QA4f — Inline crafting and gathering minimap QA
 
-Build `QA4e-20261114-Round-Pins-Treasure` (not a GitHub release).
+Build `QA4f-20261114-Gathering-Rim-Compass` (not a GitHub release).
 
 ## Install
 
@@ -154,13 +154,35 @@ the same name may require manual confirmation if they are within eight yards.
 The map records the character's position while looting; this is a few yards
 from the chest, not a client-provided coordinate for the chest object.
 
+## Test 9 — uncluttered outer gathering compass
+
+1. Log into Spotty Dotty in a location with several saved herb nodes. Open
+   `/fcm` > Gathering and set **Pins: On**, **Hide within: 15 yd**, and
+   **Rim beyond: 45 yd** (the new default).
+2. Look at the minimap: saved nodes farther than 45 yards, but within the
+   game-reported minimap view, should appear just **outside the circular
+   edge**, in the direction of the saved spots. Nodes inside 45 yards should
+   remain positioned on the map; nodes within 15 yards should disappear.
+3. Walk toward a rim icon. It should move onto the minimap when you come
+   within 45 yards, then disappear when you reach the near-hide distance.
+   This must not change the separate FCM launcher button.
+4. When multiple saved spots point in almost the same direction, the outer
+   ring should show one resource icon with a number; hovering it should say
+   how many additional discoveries are grouped there.
+5. Change **Rim beyond** to 25 or 65, then select Off (0). Verify the
+   threshold changes and that Off returns to ordinary in-map placement.
+   The slash alternative `/fcm gatherpins rim 45` accepts any whole number
+   between 0 and 100 yards.
+6. Pan or rotate the minimap and change zoom to check bearings. If icons
+   appear in the wrong direction, provide a screenshot and current zoom.
+
 ## Confirm that the installed files actually updated
 
 The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
 still installed, which is older than QA4b/QA4c and explains the identical
-emblem markers. See `INSTALL-QA4e.txt` and check the installed `Core.lua` after
+emblem markers. See `INSTALL-QA4f.txt` and check the installed `Core.lua` after
 merging this release. The expected build marker is
-`QA4e-20261114-Round-Pins-Treasure`.
+`QA4f-20261114-Gathering-Rim-Compass`.
 
 ## Offline regressions
 

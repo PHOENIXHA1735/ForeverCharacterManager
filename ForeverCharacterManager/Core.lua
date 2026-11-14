@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA4e-20261114-Round-Pins-Treasure"
+FCM.build = "QA4f-20261114-Gathering-Rim-Compass"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -73,6 +73,9 @@ function FCM:InitDB()
     -- game's own tracking dot with FCM's historical location marker.
     db.settings.gatherPinHideYards=math.max(0,math.min(50,
         math.floor(tonumber(db.settings.gatherPinHideYards) or 15)))
+    -- Nodes farther away use the outside minimap ring; 0 disables rim mode.
+    db.settings.gatherPinRimYards=math.max(0,math.min(100,
+        math.floor(tonumber(db.settings.gatherPinRimYards) or 45)))
     db.craftingQueue = db.craftingQueue or {}
     db.gates = db.gates or {} -- User-entered recipe ID -> { factionID, standing, note }
     db.notes = db.notes or {}
@@ -703,7 +706,13 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     elseif cmd == "gatherpins" then
         local requested=string.lower(rest or "")
         local proximity=requested:match("^near%s+(%d+)$")
-        if proximity and tonumber(proximity)<=50 then
+        local rim=requested:match("^rim%s+(%d+)$")
+        if rim and tonumber(rim)<=100 then
+            FCM.db.settings.gatherPinRimYards=tonumber(rim)
+            FCM._gatherMinimapDirty=true
+            FCM:Say(rim=="0" and "Saved gathering markers remain inside the minimap." or
+                ("Saved nodes farther than "..rim.." yards use grouped directional icons on the minimap rim."))
+        elseif proximity and tonumber(proximity)<=50 then
             FCM.db.settings.gatherPinHideYards=tonumber(proximity)
             FCM._gatherMinimapDirty=true
             FCM:Say("Hide saved gathering markers within "..proximity.." yards of your character.")
@@ -712,7 +721,7 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             FCM._gatherMinimapDirty=true
             if requested=="off" and FCM.HideGatherMinimapPins then FCM:HideGatherMinimapPins() end
             FCM:Say("Saved gathering markers on minimap: "..requested)
-        else FCM:Say("Usage: /fcm gatherpins on|off or /fcm gatherpins near <0-50 yards>") end
+        else FCM:Say("Usage: /fcm gatherpins on|off, near <0-50 yards>, or rim <0-100 yards>") end
     elseif cmd == "minimap" then
         if string.lower(rest or "") == "reset" then
             if FCM.UI and FCM.UI.ResetMinimap then FCM.UI:ResetMinimap() end

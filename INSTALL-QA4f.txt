@@ -1,0 +1,46 @@
+FCM v0.9.1 QA4f — Grouped gathering markers on the minimap rim
+================================================================
+
+PREVIEW: Live testing on WoW Forever is still needed. Not a GitHub release.
+
+1. Fully close World of Warcraft Forever and the FCM Windows companion.
+2. Back up the installed ForeverCharacterManager folder and the game's
+   WTF/Account SavedVariables before modifying installed files.
+3. Extract FCM-v0.9.1-QA4f-Gathering-Rim-Compass.zip.
+4. Copy the included ForeverCharacterManager folder into:
+
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+
+   Choose MERGE folders and REPLACE files with matching names. Do not make
+   a nested ForeverCharacterManager/ForeverCharacterManager directory.
+   DO NOT delete the installed addon directory or personal SavedVariables:
+   the companion's encrypted key, cached references and generated files
+   must survive. They are not included in the ZIP.
+
+5. Check the installed build in Windows PowerShell:
+
+   Select-String -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua" -Pattern "FCM.build"
+
+   Expected: QA4f-20261114-Gathering-Rim-Compass
+
+6. Restart the game and open /fcm > Gathering. The top controls are:
+
+   Hide within: 15 yd       Remove nearby FCM historical node icons
+   Pins: On                 Turn FCM historical gathering markers on/off
+   Rim beyond: 45 yd       Put distant nodes along the minimap outside edge
+
+   Change the rim setting to 25, 35, 45, 55, 65, 85 or 100 yards; select
+   0 to disable the rim and return to all in-map positions. Grouped edge
+   icons show a number and tooltip for additional nodes in that direction.
+   Commands for precise whole-yard settings:
+
+      /fcm gatherpins rim 45
+      /fcm gatherpins rim 0
+      /fcm gatherpins near 15
+
+7. Stand near recorded herbs. Far nodes should move around the minimap edge,
+   closer ones should occupy their saved positions in the map, and very
+   close ones should disappear at the Hide within threshold.
+
+The separate round FCM launcher button is never hidden by rim mode.
+The edge compass shows prior discoveries, not confirmed active spawns.

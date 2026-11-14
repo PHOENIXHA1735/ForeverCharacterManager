@@ -2,6 +2,16 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4f minimap rim compass:** Saved herb, mining, fishing and treasure pins
+  farther than **45 yards** (default) now appear along the outer edge of the
+  minimap, in their actual relative direction. Within that distance, pins
+  move onto their precise saved map positions, and the independently
+  adjustable **Hide within** setting still removes them when very close.
+  The 16 compass sectors group distant nodes with similar bearings and
+  display a count on the grouped icon and a tooltip explaining the grouping.
+  The new **FCM > Gathering > Rim beyond: 45 yd** dropdown offers 0, 25, 35,
+  45, 55, 65, 85 or 100 yards; 0 disables rim mode. Advanced users may choose
+  any whole value 0–100 with `/fcm gatherpins rim <yards>`.
 - **QA4e round minimap resource icons:** FCM's small saved herb, ore, fishing
   and treasure icons now use a circular alpha mask on clients exposing native
   `MaskTexture`; each resource keeps its distinct item artwork. On older

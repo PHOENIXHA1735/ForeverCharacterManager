@@ -100,6 +100,21 @@ eq(FCM:GatherMinimapOffset(550,460,540,450,100,nil,false,10)~=nil,true,
 local rx,ry=FCM:GatherMinimapOffset(550,460,540,460,100,math.pi/2,true)
 eq(math.abs(rx)<0.0001,true,'rotating minimap rotates x')
 eq(math.floor(ry*100+.5),-10,'rotating minimap rotates y')
+local rimTest=FCM:LayoutGatherRimPins({
+    {ox=.30,oy=.60,dist=60,name='Peacebloom'},
+    {ox=.32,oy=.59,dist=65,name='Silverleaf'},
+    {ox=-.50,oy=.20,dist=70,name='Copper Vein'},
+    {ox=.12,oy=.10,dist=20,name='Nearby Herb'},
+},45)
+eq(#rimTest,3,'sixteen direction sectors collapse overlapping distant resources')
+eq(rimTest[1].rim,true,'distant herbs move to the minimap compass ring')
+eq(rimTest[1].clusterCount,2,'grouped directional nodes retain their count')
+eq(math.abs(rimTest[1].ox*rimTest[1].ox+rimTest[1].oy*rimTest[1].oy-1)<.001,
+    true,'rim direction uses unit-circle coordinates')
+eq(rimTest[3].rim,nil,'nearby node keeps original minimap location')
+eq(rimTest[3].ox,.12,'nearby node x remains in map')
+eq(#FCM:LayoutGatherRimPins({{ox=.8,oy=.1,dist=70}},0),1,
+    'zero distance disables ring relocation')
 eq(FCM:GatherNodeIcon('herbalism','Wilted Peacebloom'),
     'Interface\\Icons\\INV_Misc_Flower_02','uncached Wilted Peacebloom has recognizable flower icon')
 eq(FCM:GatherNodeIcon('herbalism','Stunted Silverleaf'),
@@ -233,4 +248,25 @@ for _,pin in ipairs(FCM._gatherMiniPins) do
     end
 end
 eq(chestVisible,true,'recorded chest appears as a resource pin on minimap')
-print('PASS: FCM gathering counts, circular icons, nearby visibility, treasure chest loot and safety')
+FCM.db.settings.gatherPinRimYards=45
+FCM:AddGatherNode('herbalism',1438,6120,4640,'Far Silverleaf','personal')
+FCM:UpdateGatherMinimap()
+local ringNode
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then ringNode=pin end
+end
+eq(ringNode~=nil,true,'distant saved herb receives a ring marker')
+eq(ringNode.nodeRim,true,'distant herb marker is placed on outside ring')
+eq(math.abs(ringNode.x)>90 or math.abs(ringNode.y)>90,true,
+    'ring position is outside the minimap interior')
+FCM.db.settings.gatherPinRimYards=0
+FCM:UpdateGatherMinimap()
+local restored
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then restored=pin end
+end
+eq(restored~=nil,true,'herb remains displayed after disabling rim mode')
+eq(restored.nodeRim,nil,'turning rim mode off restores normal in-map placement')
+eq(math.abs(restored.x)<90 and math.abs(restored.y)<90,true,
+    'restored saved herb is inside the minimap area')
+print('PASS: FCM gathering counts, circular icons, treasure chest loot and rim compass')

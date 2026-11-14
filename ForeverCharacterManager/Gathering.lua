@@ -217,6 +217,45 @@ function FCM:GatherMinimapOffset(playerX,playerY,nodeX,nodeY,radius,facing,rotat
     return dx/radius,-dy/radius,distance
 end
 
+-- Relocate distant historical resource markers to a compact directional
+-- compass on the minimap rim. Close markers retain their actual map offsets.
+-- Sixteen rim sectors prevent neighboring herbs from covering one another;
+-- when several point the same way, display the nearest plus a count.
+local function rimAngle(x,y)
+    if math.atan2 then return math.atan2(y,x) end
+    if x>0 then return math.atan(y/x) end
+    if x<0 then return math.atan(y/x)+(y>=0 and math.pi or -math.pi) end
+    return y>=0 and math.pi/2 or -math.pi/2
+end
+
+function FCM:LayoutGatherRimPins(matches,approachYards)
+    local cutoff=tonumber(approachYards) or 45
+    if cutoff<=0 then return matches end
+    local rendered,buckets={},{}
+    local sectors=16
+    for _,node in ipairs(matches or {}) do
+        if type(node.dist)=="number" and node.dist>cutoff and
+           type(node.ox)=="number" and type(node.oy)=="number" then
+            local angle=rimAngle(node.ox,node.oy)
+            local bucket=math.floor(((angle+math.pi)/(math.pi*2))*sectors+0.5)%sectors
+            local near=buckets[bucket]
+            if near then
+                near.clusterCount=(near.clusterCount or 1)+1
+            else
+                local bearing=(bucket/sectors)*math.pi*2-math.pi
+                node.rim=true
+                node.clusterCount=1
+                node.ox,node.oy=math.cos(bearing),math.sin(bearing)
+                buckets[bucket]=node
+                rendered[#rendered+1]=node
+            end
+        else
+            rendered[#rendered+1]=node
+        end
+    end
+    return rendered
+end
+
 -- Node names can differ from the item they yield (e.g. "Wilted Peacebloom").
 -- Prefer the client's native item image and keep a known native texture path
 -- for when that item has not yet entered the local item cache.
@@ -297,6 +336,13 @@ local function gatherPin()
             pin.roundMask=mask
         end)
     end
+    if type(pin.CreateFontString)=="function" then
+        local badge=pin:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+        badge:SetPoint("BOTTOMRIGHT",pin,"BOTTOMRIGHT",4,-3)
+        badge:SetTextColor(1,0.9,0.25)
+        badge:Hide()
+        pin.clusterBadge=badge
+    end
     pin:SetScript("OnEnter",function(btn)
         if not GameTooltip then return end
         GameTooltip:SetOwner(btn,"ANCHOR_LEFT")
@@ -305,6 +351,14 @@ local function gatherPin()
             string.format("%.2f, %.2f",(btn.nodeX or 0)/100,(btn.nodeY or 0)/100),0.75,0.9,1)
         GameTooltip:AddLine(btn.nodePersonal and "Personally gathered" or "Saved reference location",0.65,1,0.65)
         GameTooltip:AddLine(FCM:GatherCountLabel(btn.nodeCount),0.85,1,0.85)
+        if btn.nodeRim then
+            GameTooltip:AddLine("Direction marker | Nearest saved point ~"..
+                tostring(math.floor((btn.nodeDistance or 0)+0.5)).." yd away",1,0.84,0.3)
+            if (btn.nodeCluster or 1)>1 then
+                GameTooltip:AddLine(tostring(btn.nodeCluster-1)..
+                    " additional saved spots in this direction",1,0.84,0.3)
+            end
+        end
         GameTooltip:AddLine("Previously reported; spawn not guaranteed",0.9,0.85,0.7)
         GameTooltip:Show()
     end)
@@ -396,6 +450,8 @@ function FCM:UpdateGatherMinimap()
         end
     end
     table.sort(matches,function(a,b) return a.dist<b.dist end)
+    matches=self:LayoutGatherRimPins(matches,
+        self.db.settings and self.db.settings.gatherPinRimYards or 45)
     self._gatherMiniPins=self._gatherMiniPins or {}
     local maxPins=math.min(#matches,60)
     local width,height=Minimap:GetWidth()/2,Minimap:GetHeight()/2
@@ -407,6 +463,9 @@ function FCM:UpdateGatherMinimap()
         pin.nodeX,pin.nodeY=node.x,node.y
         pin.nodePersonal=node.personal
         pin.nodeCount=node
+        pin.nodeDistance=node.dist
+        pin.nodeRim=node.rim
+        pin.nodeCluster=node.clusterCount or 1
         if pin.iconName~=node.name or pin.iconKind~=node.kind then
             pin.icon:SetTexture(self:GatherNodeIcon(node.kind,node.name))
             pin.iconName,pin.iconKind=node.name,node.kind
@@ -414,8 +473,16 @@ function FCM:UpdateGatherMinimap()
         -- Known item icons retain their original coloration. Other resource
         -- types still remain distinct by their fallback category artwork.
         pin.icon:SetVertexColor(1,1,1,1)
+        if pin.clusterBadge then
+            if (node.clusterCount or 1)>1 then
+                pin.clusterBadge:SetText(tostring(node.clusterCount))
+                pin.clusterBadge:Show()
+            else pin.clusterBadge:Hide() end
+        end
         pin:ClearAllPoints()
-        pin:SetPoint("CENTER",Minimap,"CENTER",node.ox*width,node.oy*height)
+        local rimOffset=node.rim and 12 or 0
+        pin:SetPoint("CENTER",Minimap,"CENTER",
+            node.ox*(width+rimOffset),node.oy*(height+rimOffset))
         pin:Show()
     end
     for i=maxPins+1,#self._gatherMiniPins do self._gatherMiniPins[i]:Hide() end

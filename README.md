@@ -2,9 +2,9 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4e (combined test candidate)
+## Current source: v0.9.1 QA4f (combined test candidate)
 
-The **v0.9.1 QA4e preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box, with a live right-side estimate of owned items, crafts, reagents, stock by character and possible eligible material transfers. The Crafting request button saves the draft explicitly; the Requests quantity editor retains its popup for editing existing requests. Gathering draws nearby saved nodes inside the minimap using FCM's account-wide records. Resource icons now use circular masks where WoW's client supports them, while Peacebloom, Silverleaf and other resources retain their distinct images. Named treasure chest interactions can be recorded when an actual loot event occurs; ordinary loot must not create false chest pins. Hover a saved node to see FCM's personal gather count at that location; older discoveries report minimum counts because prior builds did not track repeat gathers. Saved gathering markers automatically hide within **15 yards (recommended default)** so they do not obscure native minimap dots. Change this on **FCM > Gathering** with the **Hide within** dropdown (0, 5, 10, 15, 20, 25, 35 or 50 yards); the neighboring **Pins: On/Off** button toggles historical resource markers independently of the launcher. Slash alternatives are `/fcm gatherpins near <0-50>` and `/fcm gatherpins on|off`. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
+The **v0.9.1 QA4f preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box with a live right-side estimate of owned items, casts, reagents, stock by character and eligible material transfers. Gathering draws saved account-wide nodes on the minimap using distinct resource art and circular masks where the WoW client supports them. **Distant resource markers now occupy a grouped directional compass on the outer minimap ring instead of covering the map itself.** They move onto the map when within 45 yards (adjustable), then disappear within the independently adjustable 15-yard hide distance so WoW's native tracking dots are visible. Change this using **FCM > Gathering > Rim beyond** (0, 25, 35, 45, 55, 65, 85 or 100 yards), **Hide within** (0, 5, 10, 15, 20, 25, 35 or 50 yards) and **Pins: On/Off**. Slash alternatives: `/fcm gatherpins rim <0-100>`, `/fcm gatherpins near <0-50>`, `/fcm gatherpins on|off`. Hover a saved node to see its personal gather count. Named treasure chest interactions can also be recorded after an actual loot event, subject to the game reporting the chest name. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -68,6 +68,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md`: inline quantity, candidate material-transfer, and nearby gathering-minimap live tests.
 - `INSTALL-QA4d.txt`: exact in-place Windows installation steps and PowerShell build verification.
 - `INSTALL-QA4e.txt`: current safe install and live test steps for circular markers and chest tracking.
+- `INSTALL-QA4f.txt`: latest safe install and compass-rim test instructions.
 
 ## Important limitations
 

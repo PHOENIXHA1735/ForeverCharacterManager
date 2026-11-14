@@ -1107,6 +1107,11 @@ function UI:Create()
     end)
     self.gatherPinsButton:SetPoint("LEFT",self.gatherDistanceButton,"RIGHT",8,0)
     self.gatherPinsButton:Hide()
+    self.gatherRimButton=button(panel,"Rim beyond: 45 yd",174,25,function()
+        self:ShowGatherRimMenu()
+    end)
+    self.gatherRimButton:SetPoint("LEFT",self.gatherPinsButton,"RIGHT",8,0)
+    self.gatherRimButton:Hide()
 
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
@@ -1436,6 +1441,24 @@ function UI:ShowGatherDistanceMenu()
         }
     end
     self:MakeMenu(self.gatherDistanceButton,options,248,false)
+end
+function UI:ShowGatherRimMenu()
+    if not self.gatherRimButton or not FCM.db or not FCM.db.settings then return end
+    local options={}
+    for _,yards in ipairs({0,25,35,45,55,65,85,100}) do
+        local cutoff=yards
+        options[#options+1]={
+            label=cutoff==0 and "Keep all saved markers inside" or
+                ("Move to rim beyond "..cutoff.." yards"..
+                (cutoff==45 and " (default)" or "")),
+            run=function()
+                FCM.db.settings.gatherPinRimYards=cutoff
+                FCM._gatherMinimapDirty=true
+                self:Refresh()
+            end,
+        }
+    end
+    self:MakeMenu(self.gatherRimButton,options,290,false)
 end
 function UI:ShowAdvisorSortMenu()
     local browsing=self.tab=="Item Explorer" or self.tab=="Global Search"
@@ -2098,9 +2121,12 @@ local function buildRows(ui)
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
             "Saved nodes appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
             "The Gathering tab has a Hide within distance dropdown (15 yards recommended), "..
-                "plus a separate Pins On/Off toggle. Close-range hiding keeps saved markers "..
-                "from covering WoW's own tracking dots; 0 yards disables proximity hiding. "..
-            "Alternatively use /fcm gatherpins near <0-50> and /fcm gatherpins on|off. "..
+                "a Pins On/Off toggle and a Rim beyond dropdown (45 yards by default). "..
+                "Distant resource markers move outside the minimap; nearby markers use their "..
+                "actual positions, then hide at the close-range cutoff to expose live tracking dots. "..
+                "Rim sectors group nodes in the same direction and show a count. "..
+                "0 disables either distance behavior independently. "..
+            "Alternatively use /fcm gatherpins near <0-50>, rim <0-100>, or on|off. "..
                 "They are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
@@ -3352,11 +3378,15 @@ function UI:Refresh()
         local gathering=(tab=="Gathering")
         self.gatherDistanceButton:SetShown(gathering)
         self.gatherPinsButton:SetShown(gathering)
+        self.gatherRimButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or
                 ("Hide within: "..distance.." yd"))
             self.gatherPinsButton:SetText(FCM.db.settings.gatherPins and "Pins: On" or "Pins: Off")
+            local rim=tonumber(FCM.db.settings.gatherPinRimYards) or 45
+            self.gatherRimButton:SetText(rim==0 and "Rim: Off" or
+                ("Rim beyond: "..rim.." yd"))
         end
         if crafting then
             local selectedProfession=FCM.db.settings.craftProfession or "all"
