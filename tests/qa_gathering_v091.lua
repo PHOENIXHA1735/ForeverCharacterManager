@@ -258,8 +258,9 @@ for _,pin in ipairs(FCM._gatherMiniPins) do
 end
 eq(ringNode~=nil,true,'distant saved herb receives a ring marker')
 eq(ringNode.nodeRim,true,'distant herb marker is placed on outside ring')
-eq(math.abs(ringNode.x)>90 or math.abs(ringNode.y)>90,true,
-    'ring position is outside the minimap interior')
+eq(ringNode.width,12,'book-style rim icon uses about 75 percent of default size')
+eq(math.abs(math.sqrt(ringNode.x*ringNode.x+ringNode.y*ringNode.y)-90)<.01,true,
+    'book-style icon is centered on the minimap circumference')
 FCM.db.settings.gatherPinRimYards=0
 FCM:UpdateGatherMinimap()
 local restored
@@ -277,16 +278,21 @@ local resized
 for _,pin in ipairs(FCM._gatherMiniPins) do
     if pin:IsShown() and pin.nodeName=='Far Silverleaf' then resized=pin end
 end
-eq(resized.width,24,'saved resource icon grows to selected 24-pixel size')
-eq(resized.height,24,'height tracks selected marker width')
+eq(resized.width,18,'rim art scales to 75 percent of selected 24 pixels')
+eq(resized.height,18,'height tracks book-style rim marker width')
 eq(resized.nodeRim,true,'icon remains on the rim when resized')
-eq(math.abs(resized.x)>100 or math.abs(resized.y)>100,true,
-    'larger rim icon is offset farther outward to keep the map clear')
+eq(math.abs(math.sqrt(resized.x*resized.x+resized.y*resized.y)-90)<.01,true,
+    'larger rim icon remains centered on border instead of moving outward')
+local inside
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin:IsShown() and pin.nodeName=='Silverleaf' and not pin.nodeRim then inside=pin end
+end
+eq(inside.width,24,'nearby in-map icon retains full selected 24-pixel size')
 FCM.db.settings.gatherPinSize=10
 FCM:UpdateGatherMinimap()
 local smaller
 for _,pin in ipairs(FCM._gatherMiniPins) do
     if pin:IsShown() and pin.nodeName=='Far Silverleaf' then smaller=pin end
 end
-eq(smaller.width,10,'resource icon shrinks when user picks 10 pixels')
-print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure and rim compass')
+eq(smaller.width,10,'rim icon shrinks with user size setting but stays legible')
+print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure and book-style rim')

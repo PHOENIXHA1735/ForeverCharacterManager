@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4g — Inline crafting and gathering minimap QA
+# FCM v0.9.1 QA4h — Inline crafting and gathering minimap QA
 
-Build `QA4g-20261114-Adjustable-Gathering-Icons` (not a GitHub release).
+Build `QA4h-20261114-Rim-Book-Style` (not a GitHub release).
 
 ## Install
 
@@ -160,7 +160,7 @@ from the chest, not a client-provided coordinate for the chest object.
    `/fcm` > Gathering and set **Pins: On**, **Hide within: 15 yd**, and
    **Rim beyond: 45 yd** (the new default).
 2. Look at the minimap: saved nodes farther than 45 yards, but within the
-   game-reported minimap view, should appear just **outside the circular
+   game-reported minimap view, should appear **centered on the circular
    edge**, in the direction of the saved spots. Nodes inside 45 yards should
    remain positioned on the map; nodes within 15 yards should disappear.
 3. Walk toward a rim icon. It should move onto the minimap when you come
@@ -184,20 +184,37 @@ from the chest, not a client-provided coordinate for the chest object.
    resource symbols should shrink immediately, while retaining their
    individual pictures and hover details.
 3. Select 24 pixels. Markers should grow without changing their saved
-   locations, current grouping or close-range hiding behavior. Larger rim
-   symbols should move slightly farther outside the map to avoid overlap.
+   locations, current grouping or close-range hiding behavior. Rim symbols
+   remain centered on the circular border (about 18 px with Size: 24 px).
 4. Try `/fcm gatherpins size 19` for an exact size not in the preset menu.
    The control should update to 19 px and markers should resize accordingly.
 5. Relog a different character. The size should remain saved account-wide;
    the separate FCM launcher emblem must not change dimensions.
 
+## Test 11 — book-style markers directly on the rim
+
+1. On a character with previously recorded herb/ore nodes, set **Pins: On**,
+   **Rim beyond: 45 yd**, **Hide within: 15 yd**, and **Size: 16 px**.
+2. Compare distant gathering icons with the small book symbols on the game's
+   minimap border. FCM icons should be **centered on the border**, not
+   detached outside the circle. Their default diameter is about **12 px**;
+   closer nodes positioned inside the map still use **16 px**.
+3. Move toward a saved node. At the 45-yard transition it should shift to
+   its saved position inside the map, with full 16-pixel size; within 15
+   yards, it should disappear so native tracking is not covered.
+4. Choose **Size: 24 px** and repeat. Rim icons should grow to about 18 px
+   but **stay centered on the same circular rim**. The launcher and native
+   book markers must remain unchanged.
+5. Rotate and zoom the map while watching a rim icon. Report screenshots if
+   the icon drifts off the border or its relative direction is inaccurate.
+
 ## Confirm that the installed files actually updated
 
 The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
 still installed, which is older than QA4b/QA4c and explains the identical
-emblem markers. See `INSTALL-QA4g.txt` and check the installed `Core.lua` after
+emblem markers. See `INSTALL-QA4h.txt` and check the installed `Core.lua` after
 merging this release. The expected build marker is
-`QA4g-20261114-Adjustable-Gathering-Icons`.
+`QA4h-20261114-Rim-Book-Style`.
 
 ## Offline regressions
 

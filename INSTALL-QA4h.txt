@@ -1,0 +1,32 @@
+FCM v0.9.1 QA4h — book-style minimap rim icons
+Build: QA4h-20261114-Rim-Book-Style
+
+SAFE WINDOWS UPDATE
+1. Fully close World of Warcraft: Forever and FCM's Windows companion.
+2. Back up your installed ForeverCharacterManager folder and WTF SavedVariables.
+3. Open the ZIP. Copy its ForeverCharacterManager folder into:
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+4. MERGE the folders and replace matching addon source files when prompted.
+   Do NOT delete the existing folder. Do NOT remove your saved data, generated
+   reference files, community cache, encrypted API key or companion cache.
+5. Start WoW. FCM Diagnostics should show:
+   QA4h-20261114-Rim-Book-Style
+
+Optional PowerShell verification (PowerShell 5.1 is fine):
+Select-String -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua" -Pattern "FCM.build"
+
+LIVE TEST
+1. Open /fcm > Gathering, set Pins: On; Rim beyond: 45 yd;
+   Hide within: 15 yd; Size: 16 px.
+2. Saved gathering icons beyond 45 yards should sit directly ON the curved
+   minimap rim like its book markers (about 12 px in diameter), with half
+   their art inside and half outside. In-map nearby pins remain 16 px.
+3. At 45 yards, a pin should move inside the map; at 15 yards, hide to
+   reveal the native gathering dot. Previously gathered nodes remain saved.
+4. Choose Size: 24 px. Rim pins should be roughly 18 px and still centered
+   on the rim. Try /fcm gatherpins size 19 for a custom whole-pixel size.
+5. Hover a pin to confirm resource name and personal gather count. Rotate
+   and zoom the minimap; record any positioning issues with a screenshot.
+
+The FCM launcher icon and built-in book symbols are not resized or moved.
+No GitHub release was published as part of this QA preview.

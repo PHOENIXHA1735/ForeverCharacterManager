@@ -455,12 +455,18 @@ function FCM:UpdateGatherMinimap()
     self._gatherMiniPins=self._gatherMiniPins or {}
     local maxPins=math.min(#matches,60)
     local width,height=Minimap:GetWidth()/2,Minimap:GetHeight()/2
-    local iconSize=math.max(8,math.min(32,
+    local selectedSize=math.max(8,math.min(32,
         math.floor(tonumber(self.db.settings and self.db.settings.gatherPinSize) or 16)))
     for i=1,maxPins do
         local node=matches[i]
         local pin=self._gatherMiniPins[i]
         if not pin then pin=gatherPin(); self._gatherMiniPins[i]=pin end
+        -- Rim markers should resemble the small book symbols on WoW's
+        -- perimeter, not sit as detached buttons outside the circle. The
+        -- chosen Size still scales both, with edge icons at about 75%.
+        local iconSize=node.rim and math.min(selectedSize,
+            math.max(10,math.floor(selectedSize*0.75+0.5)))
+            or selectedSize
         if pin.nodeIconSize~=iconSize then
             pin:SetSize(iconSize,iconSize)
             pin.nodeIconSize=iconSize
@@ -486,9 +492,10 @@ function FCM:UpdateGatherMinimap()
             else pin.clusterBadge:Hide() end
         end
         pin:ClearAllPoints()
-        local rimOffset=node.rim and (iconSize/2+4) or 0
+        -- Center the icon directly ON the rim: half its art sits in the map
+        -- and half outside, just like the book markers in the user screenshot.
         pin:SetPoint("CENTER",Minimap,"CENTER",
-            node.ox*(width+rimOffset),node.oy*(height+rimOffset))
+            node.ox*width,node.oy*height)
         pin:Show()
     end
     for i=maxPins+1,#self._gatherMiniPins do self._gatherMiniPins[i]:Hide() end

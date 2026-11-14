@@ -2,6 +2,14 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4h book-style rim alignment:** Directional historical gathering pins
+  now **straddle the circular minimap border**, like the native book symbols,
+  instead of sitting detached beyond it. To match their smaller visual scale,
+  rim symbols display at approximately 75% of the configured gathering Size:
+  the default 16-pixel selection gives a roughly **12-pixel rim icon** and a
+  full 16-pixel in-map icon. The size control continues to resize both.
+  Settings for the 45-yard rim transition and 15-yard near-hide remain
+  unchanged; this does not alter the separate FCM launcher emblem.
 - **QA4g adjustable gathering-marker size:** FCM > Gathering now has a
   **Size: 16 px** menu for historical herb, ore, fishing and chest icons
   both inside the minimap and on its outer rim. Presets are 10, 12, 14,
