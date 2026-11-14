@@ -115,7 +115,12 @@ local function frame()
     function f:ClearAllPoints() end
     function f:CreateTexture()
         return {SetTexture=function(texture,path)texture.path=path end,
-            SetAllPoints=function()end,SetVertexColor=function()end}
+            SetAllPoints=function()end,SetVertexColor=function()end,
+            AddMaskTexture=function(texture,mask)texture.mask=mask end}
+    end
+    function f:CreateMaskTexture()
+        return {SetTexture=function(mask,path)mask.path=path end,
+            SetAllPoints=function()end}
     end
     function f:Show() self.shown=true end
     function f:Hide() self.shown=false end
@@ -150,6 +155,9 @@ FCM:StartGatherMinimap()
 FCM._gatherMiniController.scripts.OnUpdate(FCM._gatherMiniController,0.40)
 eq(#FCM._gatherMiniPins,3,'both Peacebloom nodes and Silverleaf render')
 eq(FCM._gatherMiniPins[1]:IsShown(),true,'nearest saved node shown')
+eq(FCM._gatherMiniPins[1].icon.mask.path,
+    'Interface\\AddOns\\ForeverCharacterManager\\Media\\FCM_GatherCircleMask',
+    'gathering item icons are clipped with circular mask, not replaced by emblem')
 local textures={}
 for _,pin in ipairs(FCM._gatherMiniPins) do textures[pin.nodeName]=pin.icon.path end
 eq(textures['Wilted Peacebloom']~=textures['Silverleaf'],true,'different herb icons on minimap')
@@ -186,4 +194,43 @@ eq(FCM._gatherMiniPins[2]:IsShown(),false,'missing radius API hides rather than 
 Minimap.GetViewRadius=function() return 100 end
 FCM:UpdateGatherMinimap()
 eq(FCM._gatherMiniPins[2]:IsShown(),true,'Ascension-style Minimap:GetViewRadius fallback')
-print('PASS: FCM gathering counts, distinct icons, near-range hiding, minimap tooltip and safety')
+
+-- Chest locations require actual loot and a recent chest-like target name.
+-- A GameObject source helps distinguish treasure from ordinary corpse loot.
+GetNumLootItems=function() return 1 end
+GetLootSourceInfo=function() return 'GameObject-0-0-0-0-12345-00001',1 end
+GameTooltip.IsShown=function() return true end
+GameTooltip.GetOwner=function() return nil end
+GameTooltipTextLeft1={GetText=function() return 'Battered Chest' end}
+FCM:CaptureTreasureTooltip()
+GameTooltip.IsShown=function() return false end
+eq(FCM:GatherCounts().treasure,0,'hover alone never marks a treasure chest')
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().treasure,1,'loot event records named treasure chest')
+eq(FCM:GatherNodes('treasure')[1].name,'Battered Chest','chest name retained')
+FCM:GatherEvent('LOOT_OPENED')
+eq(FCM:GatherNodes('treasure')[1].gatherCount,1,
+    'loot ready and loot opened cannot double count one chest')
+GetLootSourceInfo=function() return 'Creature-0-0-0-0-6789-00001',1 end
+FCM:RememberTreasureHover('Sturdy Chest')
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().treasure,1,'NPC looting cannot create a chest marker')
+FCM:RememberTreasureHover('Forest Bear')
+GetLootSourceInfo=function() return 'GameObject-0-0-0-0-12345-00001',1 end
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().treasure,1,'unnamed treasure or ordinary loot is ignored')
+-- Some client builds omit GetLootSourceInfo; actual loot plus a fresh named
+-- chest tooltip is the supported conservative fallback on those builds.
+GetLootSourceInfo=nil
+FCM:RememberTreasureHover('Dusty Coffer')
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().treasure,2,'named chest saved when source GUID API is absent')
+FCM:UpdateGatherMinimap()
+local chestVisible=false
+for _,pin in ipairs(FCM._gatherMiniPins) do
+    if pin:IsShown() and pin.nodeKind=='treasure' and pin.nodeName=='Battered Chest' then
+        chestVisible=true
+    end
+end
+eq(chestVisible,true,'recorded chest appears as a resource pin on minimap')
+print('PASS: FCM gathering counts, circular icons, nearby visibility, treasure chest loot and safety')

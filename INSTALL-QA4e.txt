@@ -1,0 +1,37 @@
+FCM v0.9.1 QA4e — Round gathering markers and treasure chests
+=============================================================
+
+PREVIEW — not published to GitHub; live WoW Forever testing still required.
+
+1. Fully close World of Warcraft Forever and the FCM Windows companion.
+2. Back up the installed ForeverCharacterManager addon directory and your
+   WoW WTF/Account SavedVariables before updating.
+3. Extract FCM-v0.9.1-QA4e-Round-Pins-Treasure.zip.
+4. Copy the extracted ForeverCharacterManager directory into:
+
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+
+   Choose to merge folders and replace files with the same names. Do not
+   create nested ForeverCharacterManager/ForeverCharacterManager directories.
+   DO NOT delete the installed addon directory. Your companion's encrypted
+   key, local reference cache, generated data, settings and WoW SavedVariables
+   must not be removed. None are contained in the ZIP.
+
+5. Check the installed build ID in Windows PowerShell:
+
+   Select-String -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua" -Pattern "FCM.build"
+
+   Expected: QA4e-20261114-Round-Pins-Treasure
+
+6. Restart the game. Use /fcm > Gathering, Pins: On, with Hide within: 15 yd
+   (recommended starting distance). Saved herbs and ore use circular icon
+   masks if the game client supports them. Their item art remains distinct.
+7. Open a real world treasure chest after hovering its name. FCM should
+   record the chest following a loot event. Open /fcm > Gathering to inspect.
+   Some Forever clients may not expose the necessary chest names or masking
+   API; see the QA4 testing notes for fallback and exact checks.
+
+The large FCM launcher button remains unchanged. Saved node icons disappear
+when nearby according to your adjustable Hide within distance, leaving room
+for native WoW tracking dots. Treasure points are saved at the character's
+position at the time of looting, not a guaranteed exact chest location.

@@ -2,6 +2,18 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4e round minimap resource icons:** FCM's small saved herb, ore, fishing
+  and treasure icons now use a circular alpha mask on clients exposing native
+  `MaskTexture`; each resource keeps its distinct item artwork. On older
+  clients without masks, the original working square icons remain. The
+  separate round FCM launcher emblem is unchanged.
+- **QA4e treasure chest recording:** Previously, treasure was an import-only
+  category. FCM now observes named chest/coffer/cache interactions and actual
+  `LOOT_READY`/`LOOT_OPENED` events, using a `GameObject` loot GUID when the
+  client supplies one. A hover alone does not save a location, and corpse
+  loot is rejected when distinguishable. The stored point is the player's
+  position at looting time, so the exact chest position may differ by a few
+  yards; reliable discovery requires the client to expose the chest name.
 - **QA4d close-range markers:** Saved herb, mining, fishing and treasure
   markers automatically hide once the character is within **15 yards** of
   the saved location, leaving the game's native tracking dot unobscured.

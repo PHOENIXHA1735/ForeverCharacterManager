@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4d — Inline crafting and nearby minimap markers
+# FCM v0.9.1 QA4e — Inline crafting and gathering minimap QA
 
-Build `QA4d-20261114-Nearby-Node-Visibility` (not a GitHub release).
+Build `QA4e-20261114-Round-Pins-Treasure` (not a GitHub release).
 
 ## Install
 
@@ -124,13 +124,43 @@ the same name may require manual confirmation if they are within eight yards.
 5. The round launcher button must remain visible throughout. FCM only hides
    its *own* location markers; it does not control Blizzard tracking dots.
 
+## Test 7 — round item markers
+
+1. Restart WoW with QA4e installed and open the minimap with visible saved
+   Peacebloom and Silverleaf records (stand more than 15 yards away).
+2. Both symbols should be **circular**, retain their distinct resource art,
+   and still show their normal hover name and personal gather count.
+3. The larger FCM launcher remains round and separate from the item markers.
+   On a client without `MaskTexture` support, the original square item pins
+   deliberately remain visible rather than causing a Lua error.
+
+## Test 8 — treasure chests recorded by looting
+
+1. Find an unopened world treasure chest, such as Battered Chest. Hover it
+   long enough for the game tooltip to show its object name, then open it
+   and allow the loot event to complete. Do not use an inventory lockbox.
+2. Open **FCM > Gathering** and look for the chest under the Treasure records.
+   Move more than 15 yards away, while within minimap view, to check its
+   distinct saved marker and hover tooltip.
+3. Hover a chest but do not open it; no new entry should appear.
+4. Loot an ordinary defeated creature after hovering a chest: no extra
+   treasure location should be recorded if the client identifies the loot
+   source as a creature. Reopening the same chest within one interaction
+   should not double-count `LOOT_READY` and `LOOT_OPENED`.
+5. If chests do not record, note the exact chest name, whether loot opened,
+   and whether the item minimap icons appear round; this client may omit
+   the name or expose a different loot event or texture-mask API.
+
+The map records the character's position while looting; this is a few yards
+from the chest, not a client-provided coordinate for the chest object.
+
 ## Confirm that the installed files actually updated
 
 The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
 still installed, which is older than QA4b/QA4c and explains the identical
-emblem markers. See `INSTALL-QA4d.txt` and check the installed `Core.lua` after
+emblem markers. See `INSTALL-QA4e.txt` and check the installed `Core.lua` after
 merging this release. The expected build marker is
-`QA4d-20261114-Nearby-Node-Visibility`.
+`QA4e-20261114-Round-Pins-Treasure`.
 
 ## Offline regressions
 

@@ -2,9 +2,9 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4 (combined test candidate)
+## Current source: v0.9.1 QA4e (combined test candidate)
 
-The **v0.9.1 QA4d preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box, with a live right-side estimate of owned items, crafts, reagents, stock by character and possible eligible material transfers. The Crafting request button saves the draft explicitly; the Requests quantity editor retains its popup for editing existing requests. Gathering now draws nearby saved nodes inside the minimap using FCM's own account-wide records, with distinct Peacebloom and Silverleaf icons. Hover a saved node to see FCM's account-wide personal gather count at that location; older discoveries report minimum counts because prior builds did not track repeat gathers. Saved gathering markers automatically hide within **15 yards (recommended default)** so they do not obscure native minimap dots. Change this on **FCM > Gathering** with the **Hide within** dropdown (0, 5, 10, 15, 20, 25, 35 or 50 yards); the neighboring **Pins: On/Off** button toggles historical resource markers independently of the launcher. Slash alternatives are `/fcm gatherpins near <0-50>` and `/fcm gatherpins on|off`. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
+The **v0.9.1 QA4e preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box, with a live right-side estimate of owned items, crafts, reagents, stock by character and possible eligible material transfers. The Crafting request button saves the draft explicitly; the Requests quantity editor retains its popup for editing existing requests. Gathering draws nearby saved nodes inside the minimap using FCM's account-wide records. Resource icons now use circular masks where WoW's client supports them, while Peacebloom, Silverleaf and other resources retain their distinct images. Named treasure chest interactions can be recorded when an actual loot event occurs; ordinary loot must not create false chest pins. Hover a saved node to see FCM's personal gather count at that location; older discoveries report minimum counts because prior builds did not track repeat gathers. Saved gathering markers automatically hide within **15 yards (recommended default)** so they do not obscure native minimap dots. Change this on **FCM > Gathering** with the **Hide within** dropdown (0, 5, 10, 15, 20, 25, 35 or 50 yards); the neighboring **Pins: On/Off** button toggles historical resource markers independently of the launcher. Slash alternatives are `/fcm gatherpins near <0-50>` and `/fcm gatherpins on|off`. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -13,7 +13,7 @@ The **v0.9.1 QA4d preview** includes all QA3 features (local gathering, optional
 - Faction, ruleset and region-aware evaluation of transfer eligibility; unknown item binding and rulesets stay unverified.
 - Gear scoring, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
 - Windows companion scripts for read-only public reference import, auction reference updates and local tooling.
-- Gathering tab: account-wide personally observed nodes, one-time read-only GatherMate2 import, and versioned public resource snapshots.
+- Gathering tab: account-wide personally observed herbs, ore and eligible named treasure chests, one-time read-only GatherMate2 import, and versioned public resource snapshots.
 - Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); numerically imported Zygor/Pawn weight profiles for character-specific gear comparisons.
 - Crafting requests accept finished-item quantities (including multi-output recipes), with a client-safe Enter/Continue popup handler.
 - The Crafting tab offers a saved profession dropdown and a separate search covering learned recipes, their output items and recipe IDs only.
@@ -67,6 +67,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `FCM_v091_QA3_COMPANION_TEST_NOTES.md`: focused companion quota-ledger repair and Clam Meat search checks.
 - `FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md`: inline quantity, candidate material-transfer, and nearby gathering-minimap live tests.
 - `INSTALL-QA4d.txt`: exact in-place Windows installation steps and PowerShell build verification.
+- `INSTALL-QA4e.txt`: current safe install and live test steps for circular markers and chest tracking.
 
 ## Important limitations
 

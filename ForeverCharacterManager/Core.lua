@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA4d-20261114-Nearby-Node-Visibility"
+FCM.build = "QA4e-20261114-Round-Pins-Treasure"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -446,6 +446,7 @@ f:SetScript("OnEvent", function(_, event, ...)
         -- Initialize the minimap button at login; opening the main window is optional.
         if FCM.UI and FCM.UI.CreateMinimap then FCM.UI:CreateMinimap() end
         if FCM.StartGatherMinimap then FCM:StartGatherMinimap() end
+        if FCM.StartTreasureTracking then FCM:StartTreasureTracking() end
         if C_Timer and C_Timer.After then
             C_Timer.After(3, function()
                 FCM:ScanBasic(); FCM:ScanProfessions(); FCM:ScanReputations(); FCM:ScanTalents()
@@ -500,7 +501,8 @@ for _, event in ipairs({"PLAYER_LOGOUT", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT
     "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_UPDATE", "SKILL_LINES_CHANGED",
     "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED", "PLAYERBANKBAGSLOTS_CHANGED",
     "UPDATE_FACTION", "TRAIT_CONFIG_UPDATED", "TRAIT_NODE_CHANGED", "PLAYER_MONEY", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
-    "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED"}) do
+    "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
+    "LOOT_READY", "LOOT_OPENED"}) do
     FCM:Listen(event)
 end
 

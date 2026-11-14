@@ -19,6 +19,19 @@ local function safeName(value)
     return value
 end
 
+-- Treasure objects have no reliable gathering spell on every Forever client.
+-- Only treat a named chest-like object as a candidate, and require a loot
+-- event before recording it. Merely hovering over a chest never saves a pin.
+local treasureLabels={"chest", "coffer", "strongbox", "footlocker", "trunk", "cache", "treasure"}
+local function treasureName(value)
+    local valid=safeName(value)
+    if not valid then return nil end
+    local lower=valid:lower()
+    for _,word in ipairs(treasureLabels) do
+        if lower:find(word,1,true) then return valid end
+    end
+end
+
 local function exportName(name)
     return (name:gsub("[^%w%-%._ ]", function(c) return string.format("%%%02X",c:byte()) end))
 end
@@ -271,6 +284,19 @@ local function gatherPin()
     local icon=pin:CreateTexture(nil,"ARTWORK")
     icon:SetAllPoints(pin)
     pin.icon=icon
+    -- The client-native alpha mask clips every item image into a real circle;
+    -- item icons stay distinct instead of replacing them with one FCM emblem.
+    -- Older clients without MaskTexture keep their working unmasked markers.
+    if type(pin.CreateMaskTexture)=="function" and
+       type(icon.AddMaskTexture)=="function" then
+        pcall(function()
+            local mask=pin:CreateMaskTexture()
+            mask:SetTexture("Interface\\AddOns\\ForeverCharacterManager\\Media\\FCM_GatherCircleMask")
+            mask:SetAllPoints(pin)
+            icon:AddMaskTexture(mask)
+            pin.roundMask=mask
+        end)
+    end
     pin:SetScript("OnEnter",function(btn)
         if not GameTooltip then return end
         GameTooltip:SetOwner(btn,"ANCHOR_LEFT")
@@ -404,6 +430,7 @@ function FCM:StartGatherMinimap()
         frame.elapsed=frame.elapsed+(tonumber(elapsed) or 0)
         if frame.elapsed<0.35 and not FCM._gatherMinimapDirty then return end
         frame.elapsed=0
+        if FCM.CaptureTreasureTooltip then FCM:CaptureTreasureTooltip() end
         -- Future client builds may restrict map calls during transitions.
         -- Keep the rest of the addon running if a display update fails.
         local ok,err=pcall(FCM.UpdateGatherMinimap,FCM)
@@ -417,6 +444,90 @@ function FCM:StartGatherMinimap()
     end)
     self._gatherMiniController=controller
     self._gatherMinimapDirty=true
+end
+
+function FCM:RememberTreasureHover(value)
+    if type(issecretvalue)=="function" and issecretvalue(value) then return end
+    local name=treasureName(value)
+    if name then self._treasureHover={name=name,at=self:Now()} end
+end
+
+function FCM:CaptureTreasureTooltip()
+    if not GameTooltip or type(GameTooltip.IsShown)~="function" or
+       not GameTooltip:IsShown() then return end
+    -- Avoid treating FCM's own saved-node tooltips as new loot candidates.
+    local owner=type(GameTooltip.GetOwner)=="function" and GameTooltip:GetOwner() or nil
+    if owner and owner.nodeKind then return end
+    local label=GameTooltipTextLeft1
+    if not label or type(label.GetText)~="function" then return end
+    local ok,name=pcall(label.GetText,label)
+    if ok then self:RememberTreasureHover(name) end
+end
+
+function FCM:StartTreasureTracking()
+    if self._treasureTooltipHooked or not GameTooltip or
+       type(GameTooltip.HookScript)~="function" then return end
+    local ok=pcall(GameTooltip.HookScript,GameTooltip,"OnShow",function()
+        FCM:CaptureTreasureTooltip()
+    end)
+    if ok then self._treasureTooltipHooked=true end
+end
+
+local function lootObjectEvidence()
+    if type(GetLootSourceInfo)~="function" or type(GetNumLootItems)~="function" then
+        return nil -- Older clients can still use the named-tooltip fallback.
+    end
+    local ok,slots=pcall(GetNumLootItems)
+    if not ok or type(slots)~="number" then return nil end
+    local seenOther=false
+    for slot=1,math.min(math.max(slots,0),40) do
+        local got,guid=pcall(GetLootSourceInfo,slot)
+        if got and type(issecretvalue)=="function" and issecretvalue(guid) then
+            return nil
+        end
+        if got and type(guid)=="string" then
+            if guid:find("GameObject-",1,true)==1 then return true end
+            seenOther=true
+        end
+    end
+    if seenOther then return false end
+    return nil
+end
+
+function FCM:RecordTreasureLoot()
+    self:CaptureTreasureTooltip()
+    local candidate=self._treasureHover
+    if not candidate then return end
+    local now=self:Now()
+    if now-(candidate.at or 0)>8 or not treasureName(candidate.name) then
+        self._treasureHover=nil
+        return
+    end
+    -- When the client provides a source GUID, reject NPC/corpse looting.
+    -- A valid chest-like hover followed by an actual loot event is required.
+    if lootObjectEvidence()==false then
+        self._treasureHover=nil
+        return
+    end
+    self._treasureHover=nil
+    if not C_Map or type(C_Map.GetBestMapForUnit)~="function" or
+       type(C_Map.GetPlayerMapPosition)~="function" then return end
+    local zone=self:Try(C_Map.GetBestMapForUnit,"player")
+    if not number(zone,1,200000) then return end
+    local pos=self:Try(C_Map.GetPlayerMapPosition,zone,"player")
+    if not pos or type(pos.GetXY)~="function" then return end
+    local x,y=self:Try(pos.GetXY,pos)
+    if type(x)~="number" or type(y)~="number" then return end
+    local px,py=math.floor(x*10000+0.5),math.floor(y*10000+0.5)
+    local recent=self._treasureLootRecorded
+    if recent and now-recent.at<3 and recent.zone==zone and
+       recent.name==candidate.name then return end
+    self._treasureLootRecorded={at=now,zone=zone,name=candidate.name}
+    local added=self:AddGatherNode("treasure",zone,px,py,candidate.name,"personal")
+    if added and self.Say then
+        self:Say("Saved treasure location: "..candidate.name..". The marker follows your nearby-pin distance setting.")
+    end
+    if added and self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
 end
 
 -- GatherMate2 exposes these read-only methods; no source code or database is
@@ -484,6 +595,11 @@ function FCM:GatherEvent(event,...)
     if event=="UNIT_SPELLCAST_SENT" then
         local unit,target,castGUID,spellID=...
         if unit~="player" or type(spellID)~="number" then return end
+        -- A chest name reported by the interaction cast can supplement a
+        -- tooltip that disappears when the player clicks the game object.
+        if type(issecretvalue)~="function" or not issecretvalue(target) then
+            self:RememberTreasureHover(target)
+        end
         local kind=spellKinds[spellID]
         if not kind then return end
         if type(issecretvalue)=="function" and issecretvalue(target) then return end
@@ -491,6 +607,8 @@ function FCM:GatherEvent(event,...)
     elseif event=="UNIT_SPELLCAST_FAILED" or event=="UNIT_SPELLCAST_INTERRUPTED" then
         local unit,castGUID=...
         if unit=="player" and pending and pending.guid==castGUID then pending=nil end
+    elseif event=="LOOT_READY" or event=="LOOT_OPENED" then
+        self:RecordTreasureLoot()
     elseif event=="UNIT_SPELLCAST_SUCCEEDED" then
         local unit,castGUID,spellID=...
         if unit~="player" or not pending or pending.spellID~=spellID or
