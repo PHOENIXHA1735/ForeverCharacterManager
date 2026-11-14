@@ -888,7 +888,7 @@ function UI:Create()
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
     background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "Settings", "Diagnostics", "Help"}
+    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "Settings", "Diagnostics", "Help"}
     -- Sidebar can exceed the window height when a character has multiple
     -- profession tabs. Keep every destination reachable with wheel or arrows.
     local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
@@ -1043,6 +1043,12 @@ function UI:Create()
 
     -- Footer is OUTSIDE the scrolling detail panel, so it never covers recipe text.
     self.action = button(panel,"Request craft",264,29,function()
+        if self.tab=="Gathering" then
+            local added,message=FCM:ImportGatherMate()
+            FCM:Say(message or "Unable to import GatherMate2 data.")
+            if added then self:Refresh() end
+            return
+        end
         if self.tab == "Requests" and self.activeRequest then
             local req = self.activeRequest
             local recipe = FCM:RecipeByID(req.recipeID)
@@ -1737,6 +1743,35 @@ local function buildRows(ui)
         end
         if #rows==0 then add("no-upgrades","No actionable upgrades found","Scan gear and recipes on the appropriate characters.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
+    elseif tab=="Gathering" then
+        local count=FCM:GatherCounts()
+        local total=count.herbalism+count.mining+count.fishing+count.treasure
+        add("gather-guide","Gathering database (account-wide)",
+            total.." locations | "..count.personal.." personally confirmed",
+            "GatherMate2 import: click Import GatherMate2 below, or type /fcm gather import.\n\n"..
+            "Independent recording: FCM saves named herbalism/mining gathering casts when the client reports a successful gather. "..
+            "Fishing is recorded only when the client explicitly names a school or pool. "..
+            "Unnamed targets are skipped to avoid false locations.\n\n"..
+            "Community data: the Windows companion checks GitHub and merges published locations into your local FCM database. "..
+            "No character data is uploaded; community contributions are manual for now.\n\n"..
+            "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
+                count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
+            "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
+                ", community "..count.community..".")
+        local categories={"herbalism","mining","fishing","treasure"}
+        for _,kind in ipairs(categories) do
+            local rows=FCM:GatherNodes(kind,nil,70)
+            for _,n in ipairs(rows) do
+                local point=n
+                local place=string.format("Map %d at %.2f, %.2f",point.mapID or 0,point.x/100,point.y/100)
+                add("gather:"..kind..":"..point.mapID..":"..point.x..":"..point.y..":"..point.name,
+                    point.name,kind.." | "..place,
+                    "|cffffd983"..point.name.."|r\n\n"..place.."\n"..
+                    "Gathering: "..kind.."\nSource: "..(point.personal and "Personally gathered" or
+                        (point.source=="gathermate" and "Imported from GatherMate2" or "Community database"))..
+                    "\n\nThis is a previously reported location, not a live spawn indicator.")
+            end
+        end
     elseif tab=="Shopping" then
         local list,unresolved=FCM:ShoppingList(FCM:FactionView())
         for _,m in ipairs(list) do
@@ -2872,6 +2907,10 @@ function UI:Refresh()
             self.action:Show()
             self.cancelRequestButton:SetText("Set Status")
             self.cancelRequestButton:Show()
+        elseif tab=="Gathering" then
+            self.action:SetWidth(190)
+            self.action:SetText("Import GatherMate2")
+            self.action:Show()
         elseif selected.recipe and ch then
             self.activeRecipe=selected.recipe
             self.activeCrafters=selected.crafters

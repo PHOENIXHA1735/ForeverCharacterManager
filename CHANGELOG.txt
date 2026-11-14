@@ -1,3 +1,11 @@
+v0.9.1 — Local gathering database and optional GitHub community sync (preview)
+- Added independent per-account resource location storage and read-only GatherMate2 import.
+- Added Gathering sidebar, gather status and import commands, and provenance markers.
+- Added sanitized personal discovery export (manual review, no network upload).
+- Added versioned GitHub community database snapshots and companion download/merge.
+- Preserved existing saved characters and generated data during code updates.
+- Offline regression tests passed; live WoW and Windows companion testing pending.
+
 v0.8.9 — Gear comparison readability and client stat alias normalization
 - Replaced unsupported triangle glyphs with WoW texture arrows and GAIN/LOSS fallback labels.
 - Show equipped -> candidate values and full known normalized stats.

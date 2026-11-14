@@ -1,18 +1,7 @@
 name: Publish FCM v0.9.0 GitHub Release
 on:
-  push:
-    branches: [main]
-    paths:
-      - FCM_v090_RELEASE_NOTES.md
-      - .github/workflows/publish-v090-release.yml
-      - ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1
-      - ForeverCharacterManager/Core.lua
-      - ForeverCharacterManager/Crafting.lua
-      - ForeverCharacterManager/Scan.lua
-      - ForeverCharacterManager/UI.lua
-      - tests/README.md
-      - tests/qa_crafting_professions_v090.lua
-      - SOURCE_MANIFEST_SHA256.txt
+  # Legacy packaging stays available manually. Newer source changes must not
+  # overwrite v0.9.0 assets with a mixture of old tagged and new main files.
   workflow_dispatch:
 permissions:
   contents: write

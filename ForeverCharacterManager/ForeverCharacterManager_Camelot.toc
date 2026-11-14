@@ -2,12 +2,14 @@
 ## Title: Forever Character Manager
 ## Notes: Account-wide gear, crafting requests, shopping, talents, reputation, and upgrade planning for WoW Forever.
 ## Author: Custom build
-## Version: 0.9.0
-## SavedVariables: FCM_DB
+## Version: 0.9.1
+## SavedVariables: FCM_DB, FCM_GatherExport
 ## OptionalDeps: AHledger
 ## IconTexture: Interface\AddOns\ForeverCharacterManager\Media\FCM_Emblem
 
 Core.lua
+Gathering.lua
+CommunityGathering.generated.lua
 Scan.lua
 Crafting.lua
 Gear.lua

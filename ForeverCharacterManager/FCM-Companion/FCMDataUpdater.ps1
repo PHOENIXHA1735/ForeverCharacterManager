@@ -43,6 +43,7 @@ $script:Config = @{ gameRoot=''; terms='Raw Brilliant Smallfish'; market='foreve
 . (Join-Path $script:Base 'ForeverDB.Provider.ps1')
 . (Join-Path $script:Base 'ReferenceAudit.ps1')
 . (Join-Path $script:Base 'GitHubUpdates.ps1')
+. (Join-Path $script:Base 'GatheringSync.ps1')
 
 function Get-Config {
     if (Test-Path -LiteralPath $script:ConfigPath) {
@@ -218,7 +219,7 @@ function Install-Addon {
     if (-not (Test-Path -LiteralPath $dest)) { New-Item -Path $dest -ItemType Directory | Out-Null }
     foreach ($src in @(Get-ChildItem -LiteralPath $script:SourceAddon -File)) {
         # Never overwrite reference data created by an earlier successful update.
-        if ($src.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua') -and
+        if ($src.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua','CommunityGathering.generated.lua') -and
                 (Test-Path -LiteralPath (Join-Path $dest $src.Name))) { continue }
         Copy-Item -LiteralPath $src.FullName -Destination (Join-Path $dest $src.Name) -Force
     }
@@ -236,7 +237,7 @@ function Install-Addon {
     $destCompanion = Join-Path $dest 'FCM-Companion'
     if (-not (Test-Path -LiteralPath $destCompanion)) { New-Item -Path $destCompanion -ItemType Directory | Out-Null }
     # Only copy static scripts and documentation; NEVER copy credentials, settings or caches.
-    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt')) {
+    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','GatheringSync.ps1','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt')) {
         $companionSource = Join-Path $script:Base $filename
         if (Test-Path -LiteralPath $companionSource) {
             Copy-Item -LiteralPath $companionSource -Destination (Join-Path $destCompanion $filename) -Force
@@ -719,7 +720,7 @@ function Action($operation,[bool]$isScan=$false) {
     $script:syncButton.Enabled = $false
     $script:installButton.Enabled = $false
     $script:stopButton.Enabled = $isScan
-    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox,$script:auditButton)) {
+    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox,$script:auditButton,$script:gatherSyncButton,$script:gatherExportButton)) {
         if ($null -ne $ctrl) {$ctrl.Enabled=$false}
     }
     $script:stopButton.Text = 'Stop Scan'
@@ -759,6 +760,8 @@ function Action($operation,[bool]$isScan=$false) {
         if ($script:githubRestoreButton) {$script:githubRestoreButton.Enabled=$true}
         if ($script:checkUpdatesBox) {$script:checkUpdatesBox.Enabled=$true}
         if ($script:auditButton) {$script:auditButton.Enabled=$true}
+        if ($script:gatherSyncButton) {$script:gatherSyncButton.Enabled=$true}
+        if ($script:gatherExportButton) {$script:gatherExportButton.Enabled=$true}
         $script:statusLabel.Text = $(if ($script:CancelRequested) {'Stopped'} else {'Idle'})
         $script:CancelRequested = $false
         foreach ($control in @($script:gameBox,$script:termsBox,$script:marketBox,$script:autoBox,$script:fdbKeyBox,$script:fdbRememberBox,$script:browseButton)) {
@@ -769,7 +772,7 @@ function Action($operation,[bool]$isScan=$false) {
 
 Get-Config
 $form=New-Object System.Windows.Forms.Form
-$form.Text='Forever Character Manager - Data Companion v0.9.0'
+$form.Text='Forever Character Manager - Data Companion v0.9.1'
 $form.Size=New-Object System.Drawing.Size(800,850)
 $form.StartPosition='CenterScreen'
 $form.MinimumSize=New-Object System.Drawing.Size(800,850)
@@ -899,12 +902,24 @@ $script:auditButton.Location=New-Object System.Drawing.Point(548,414)
 $script:auditButton.Size=New-Object System.Drawing.Size(220,29)
 $script:auditButton.Add_Click({Action {$null=Write-FCMReferenceAudit}})
 $form.Controls.Add($script:auditButton)
-$null=New-Label 'Sync activity and data sources' 20 444 470 25
-$script:statusLabel=New-Label 'Idle' 650 444 118 25
+$script:gatherSyncButton=New-Object System.Windows.Forms.Button
+$script:gatherSyncButton.Text='Sync Gathering (GitHub)'
+$script:gatherSyncButton.Location=New-Object System.Drawing.Point(20,446)
+$script:gatherSyncButton.Size=New-Object System.Drawing.Size(236,29)
+$script:gatherSyncButton.Add_Click({Action {Sync-FCMGatheringCommunity}})
+$form.Controls.Add($script:gatherSyncButton)
+$script:gatherExportButton=New-Object System.Windows.Forms.Button
+$script:gatherExportButton.Text='Export Gathering Contribution'
+$script:gatherExportButton.Location=New-Object System.Drawing.Point(267,446)
+$script:gatherExportButton.Size=New-Object System.Drawing.Size(263,29)
+$script:gatherExportButton.Add_Click({Action {Export-FCMGatheringContributions}})
+$form.Controls.Add($script:gatherExportButton)
+$null=New-Label 'Sync activity and data sources' 20 478 470 20
+$script:statusLabel=New-Label 'Idle' 650 478 118 20
 $script:logBox=New-Object System.Windows.Forms.TextBox
 $script:logBox.Multiline=$true; $script:logBox.ReadOnly=$true;$script:logBox.ScrollBars='Vertical'
-$script:logBox.Location=New-Object System.Drawing.Point(20,471)
-$script:logBox.Size=New-Object System.Drawing.Size(748,231)
+$script:logBox.Location=New-Object System.Drawing.Point(20,501)
+$script:logBox.Size=New-Object System.Drawing.Size(748,201)
 $script:logBox.BackColor=[System.Drawing.Color]::FromArgb(12,18,25)
 $script:logBox.ForeColor=[System.Drawing.Color]::FromArgb(185,225,210)
 $script:logBox.Font=New-Object System.Drawing.Font('Consolas',9)

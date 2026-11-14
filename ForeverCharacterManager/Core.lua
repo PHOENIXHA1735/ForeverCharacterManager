@@ -3,8 +3,8 @@
 local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
-FCM.version = "0.9.0"
-FCM.build = "Release-20261112-Consolidated"
+FCM.version = "0.9.1"
+FCM.build = "Gathering-Local-GitHub-Preview"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -436,6 +436,7 @@ f:SetScript("OnEvent", function(_, event, ...)
         FCM:ScanProfessions()
         FCM:ScanReputations()
         FCM:ScanTalents()
+        if FCM.MergeCommunityGathering then FCM:MergeCommunityGathering() end
         if FCM.TrackSession then FCM:TrackSession() end
         -- Initialize the minimap button at login; opening the main window is optional.
         if FCM.UI and FCM.UI.CreateMinimap then FCM.UI:CreateMinimap() end
@@ -450,6 +451,7 @@ f:SetScript("OnEvent", function(_, event, ...)
         return
     end
     if not FCM.db then return end
+    if FCM.GatherEvent then FCM:GatherEvent(event,...) end
     if event == "PLAYER_LOGOUT" then
         FCM:ScanBasic(); FCM:ScanBags(); FCM:ScanGear()
     elseif event == "BAG_UPDATE_DELAYED" then
@@ -491,7 +493,8 @@ FCM:Listen("PLAYER_LOGIN")
 for _, event in ipairs({"PLAYER_LOGOUT", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED",
     "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_UPDATE", "SKILL_LINES_CHANGED",
     "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED", "PLAYERBANKBAGSLOTS_CHANGED",
-    "UPDATE_FACTION", "TRAIT_CONFIG_UPDATED", "TRAIT_NODE_CHANGED", "PLAYER_MONEY", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE"}) do
+    "UPDATE_FACTION", "TRAIT_CONFIG_UPDATED", "TRAIT_NODE_CHANGED", "PLAYER_MONEY", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
+    "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED"}) do
     FCM:Listen(event)
 end
 
@@ -540,6 +543,23 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             local assessment=FCM:BoEProtectionCheck(id,FCM:Current())
             for _,line in ipairs(FCM:BoEProtectionLines(assessment,8)) do FCM:Say(line) end
         else FCM:Say("BoE advisor unavailable.") end
+    elseif cmd == "gather" or cmd == "gathering" then
+        local sub=string.lower(rest or "")
+        if sub=="import" then
+            local added,report=FCM:ImportGatherMate()
+            FCM:Say(report or "GatherMate2 import failed.")
+            if added and FCM.Refresh then FCM:Refresh() end
+        elseif sub=="status" then
+            local totals=FCM:GatherCounts()
+            FCM:Say("Saved nodes: herbs "..totals.herbalism..", mining "..totals.mining..
+                ", fishing "..totals.fishing..", treasure "..totals.treasure..
+                ". Personal "..totals.personal..", imported "..totals.gathermate..", community "..totals.community..".")
+        elseif sub=="" then
+            if FCM.UI then FCM.UI.tab="Gathering" end
+            if FCM.Toggle then
+                if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
+            end
+        else FCM:Say("Use /fcm gather, /fcm gather status, or /fcm gather import.") end
     elseif cmd == "farm" then
         local itemID,count=(rest or ""):match("^(%d+)%s*(%d*)$")
         itemID,count=tonumber(itemID),tonumber(count) or 1

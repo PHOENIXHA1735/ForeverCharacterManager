@@ -1,0 +1,68 @@
+name: Publish FCM v0.9.1 Gathering Preview
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-v091-release.yml
+      - FCM_v091_RELEASE_NOTES.md
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'PHOENIXHA1735/ForeverCharacterManager'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate public source and prepare packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c SOURCE_MANIFEST_SHA256.txt
+          if find ForeverCharacterManager -type f \( -iname '*.dpapi' -o -name 'settings.json' -o -name 'reference-cache.json' -o -name 'AHPrices.generated.lua' -o -name 'ExternalData.generated.lua' -o -name 'FCM_DB.lua' -o -name 'fcm-gathering-contribution.json' \) | grep -q .; then
+            echo 'Private or machine-generated file in release source' >&2
+            exit 1
+          fi
+          grep -q '^## Version: 0.9.1$' ForeverCharacterManager/ForeverCharacterManager.toc
+          mkdir -p dist
+          zip -q -r dist/FCM-v0.9.1.zip ForeverCharacterManager
+          zip -q -r dist/FCM-v0.9.1-Addon-and-Companion.zip ForeverCharacterManager README.md FCM_v091_RELEASE_NOTES.md
+          cd dist
+          sha256sum FCM-v0.9.1.zip > FCM-v0.9.1.zip.sha256
+          sha256sum FCM-v0.9.1-Addon-and-Companion.zip > FCM-v0.9.1-Addon-and-Companion.zip.sha256
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          for archive_path in (Path('FCM-v0.9.1.zip'), Path('FCM-v0.9.1-Addon-and-Companion.zip')):
+              assert archive_path.stat().st_size < 15_000_000
+              with ZipFile(archive_path) as archive:
+                  names = [name for name in archive.namelist() if not name.endswith('/')]
+                  expected = {
+                      'ForeverCharacterManager/Core.lua',
+                      'ForeverCharacterManager/Gathering.lua',
+                      'ForeverCharacterManager/CommunityGathering.generated.lua',
+                      'ForeverCharacterManager/ForeverCharacterManager.toc',
+                      'ForeverCharacterManager/FCM-Companion/GatheringSync.ps1',
+                      'ForeverCharacterManager/FCM-Companion/FCMDataUpdater.ps1',
+                      'ForeverCharacterManager/Media/FCM_Emblem.tga',
+                  }
+                  assert expected.issubset(names)
+                  assert len(names) <= 160
+                  assert all('..' not in name and ':' not in name and not name.startswith(('/', './')) for name in names)
+                  assert all(name.startswith('ForeverCharacterManager/') for name in names) if archive_path.name == 'FCM-v0.9.1.zip' else True
+          PY
+      - name: Create the v0.9.1 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.9.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit v0.9.1 --repo "$GITHUB_REPOSITORY" --title 'Forever Character Manager v0.9.1 - Gathering Preview' --notes-file FCM_v091_RELEASE_NOTES.md
+            gh release upload v0.9.1 dist/FCM-v0.9.1.zip dist/FCM-v0.9.1.zip.sha256 dist/FCM-v0.9.1-Addon-and-Companion.zip dist/FCM-v0.9.1-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create v0.9.1 dist/FCM-v0.9.1.zip dist/FCM-v0.9.1.zip.sha256 dist/FCM-v0.9.1-Addon-and-Companion.zip dist/FCM-v0.9.1-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Forever Character Manager v0.9.1 - Gathering Preview' --notes-file FCM_v091_RELEASE_NOTES.md
+          fi
