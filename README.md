@@ -2,7 +2,19 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4k (combined test candidate)
+## Current source: v0.9.1 QA4l (combined test candidate)
+
+**QA4l aligns world-map gathering icons and adds map-header filters:** Live
+testing confirmed the QA4k markers finally rendered, but spots recorded in
+**Shadowglen** appeared northwest around Oracle Glade. FCM now converts the
+scrolling canvas's effective scale into the overlaid pin host's scale, so
+locations stay aligned at the correct map coordinates. It recalculates if
+the canvas scale changes when zooming. While the world map is open, use the
+**FCM Pins: On/Off** button near the top right to hide/show every gathering
+marker, or the adjacent **Herbs**, **Ore**, **Fish** and **Chests** buttons
+to turn those resource types on or off individually. These map settings do
+not affect minimap markers or saved gathering observations. Live placement
+and click testing of QA4l is still needed.
 
 **QA4k addresses invisible world-map markers:** Spotty Dotty's live
 Teldrassil test found **45 matching saved gathering points on map 1438**,
@@ -100,7 +112,8 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `INSTALL-QA4h.txt`: previous book-style rim placement test guide.
 - `INSTALL-QA4i.txt`: previous full world-map overlay test guide.
 - `INSTALL-QA4j.txt`: latest installation, bag-capacity and world-map diagnostic checks.
-- `INSTALL-QA4k.txt`: current map-overlay layer fix and live-test instructions.
+- `INSTALL-QA4k.txt`: previous map-overlay layer fix and live-test instructions.
+- `INSTALL-QA4l.txt`: current map-position correction and world-map filter testing.
 
 ## Important limitations
 

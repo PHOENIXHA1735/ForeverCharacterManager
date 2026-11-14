@@ -1,0 +1,37 @@
+FCM v0.9.1 QA4l — Shadowglen world-map alignment and visibility controls
+Build: QA4l-20261114-World-Map-Scale-Filters
+This is an unpublished test candidate, not an official GitHub release.
+
+What changed:
+- Corrected the scale conversion between WoW Forever's scrolling map canvas
+  and FCM's high-layer icon buttons. The 45 recorded Teldrassil resource
+  locations should align around Shadowglen instead of Oracle Glade.
+- Added an FCM Pins: On/Off button to the upper right of the open world map.
+- Added independent Herbs, Ore, Fish and Chests show/hide buttons beside it.
+- Zooming or resizing the world map causes the offsets to be recalculated.
+- Bag-capacity and prior AH/crafting behavior are unchanged.
+- No saved gathering coordinates or account data are modified or removed.
+
+Install safely:
+1. Exit WoW Forever entirely.
+2. Back up the installed ForeverCharacterManager addon folder and its
+   account SavedVariables in WTF/Account.
+3. Merge the ZIP's ForeverCharacterManager folder into the EXISTING addon
+   folder in Interface/AddOns, replacing matching source files only.
+   Do not delete generated Lua data, companion encrypted keys, or WTF files.
+4. Start WoW and verify FCM Diagnostics shows the QA4l build string above.
+
+Live test:
+1. Press M, select Kalimdor > Teldrassil, and look at Shadowglen.
+2. Confirm gathered herbs now align with Shadowglen, not Oracle Glade.
+3. Pan/zoom; icons should stay attached to their map locations.
+4. Click FCM Pins: Off (upper right): all FCM resource icons should hide.
+   Click FCM Pins: On to bring them back.
+5. Click Herbs: Off; only herb icons should disappear. Turn Herbs back On.
+   Test Ore, Fish and Chests in zones where those types exist.
+6. Verify minimap pins and the confirmed bag-slot display still work.
+7. If icons remain displaced, share a Teldrassil screenshot plus FCM >
+   Diagnostics > Gathering world map line, which now reports canvas/host
+   effective scales and number of enabled pins.
+
+This ZIP is for local testing only. The main GitHub branch is not updated.

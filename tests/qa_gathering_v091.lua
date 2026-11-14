@@ -125,6 +125,8 @@ local function frame()
     function f:SetSize(width,height) self.width,self.height=width,height end
     function f:SetFrameStrata(value) self.strata=value end
     function f:SetFrameLevel(value) self.level=value end
+    function f:SetText(value) self.text=value end
+    function f:GetText() return self.text end
     function f:SetScript(event,fn) self.scripts[event]=fn end
     function f:SetPoint(_,anchor,_,x,y) self.anchor,self.x,self.y=anchor,x,y end
     function f:ClearAllPoints() end
@@ -146,6 +148,10 @@ local function frame()
     function f:GetFrameLevel() return 3 end
     function f:GetWidth() return 180 end
     function f:GetHeight() return 180 end
+    function f:GetEffectiveScale()
+        if self.scale then return self.scale end
+        return self.parent and self.parent:GetEffectiveScale() or 1
+    end
     return f
 end
 Minimap=frame()
@@ -329,6 +335,8 @@ eq(worldFar.x,612,'world map x uses recorded normalized zone coordinate')
 eq(math.abs(worldFar.y+371.2)<.001,true,'world map y is measured down from top')
 eq(worldFar.width,16,'world map icon uses configured full item size')
 eq(worldFar.nodeRim,nil,'world map pins do not use minimap compass')
+eq(#FCM._gatherWorldMapControls,5,'map header has master and four gathering-type controls')
+eq(FCM._gatherWorldMapControls[1].text,'FCM Pins: On','full world map provides a direct master toggle')
 eq(FCM._gatherWorldDiagnostic:find('pins drawn (world overlay)',1,true)~=nil,true,
     'world map debug confirms how many actual icon buttons were drawn')
 eq(FCM._gatherWorldDiagnostic:find('first visible: true',1,true)~=nil,true,
@@ -342,6 +350,42 @@ end
 eq(importedTeldrassil,true,'legacy Teldrassil map 41 imports appear on modern map 1438')
 eq(FCM._gatherWorldDiagnostic:find('Map 1438',1,true)~=nil,true,
     'world-map diagnostic records selected client map ID')
+-- Real Forever draws the scroll canvas at a different scale than the map
+-- frame. Pin offsets must be converted into the host frame's units: otherwise
+-- Shadowglen nodes render northwest near Oracle Glade.
+worldCanvas.scale=1.5
+FCM:UpdateGatherWorldMap()
+eq(worldFar.x,918,'scaled world map uses canvas pixels in host units')
+eq(math.abs(worldFar.y+556.8)<.001,true,'scaled world map y uses same conversion')
+eq(FCM._gatherWorldDiagnostic:find('scales 1.5/1',1,true)~=nil,true,
+    'diagnostics show effective canvas/host scales')
+worldCanvas.scale=1
+FCM:UpdateGatherWorldMap()
+eq(worldFar.x,612,'map rescaling reapplies correct coordinates without changing records')
+-- Each kind can be hidden from the world map independently of the minimap.
+FCM._gatherWorldMapControls[2].scripts.OnClick()
+eq(FCM.db.settings.gatherWorldMapKinds.herbalism,false,'Herbs filter saved')
+local anyWorldHerb=false
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    if pin:IsShown() and pin.nodeKind=='herbalism' then anyWorldHerb=true end
+end
+eq(anyWorldHerb,false,'Herbs Off removes visible world-map herbs without deleting nodes')
+eq(FCM:GatherCounts().herbalism>0,true,'filter does not remove saved gathering records')
+eq(FCM.db.settings.gatherPins,true,'world-map category filter leaves minimap enabled')
+FCM._gatherWorldMapControls[2].scripts.OnClick()
+eq(FCM.db.settings.gatherWorldMapKinds.herbalism,true,'Herbs filter can be re-enabled')
+local foundRestored=false
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then foundRestored=true end
+end
+eq(foundRestored,true,'Herbs On restores historic map pins')
+FCM._gatherWorldMapControls[1].scripts.OnClick()
+eq(FCM.db.settings.gatherWorldMapPins,false,'map header master toggle persists disabled state')
+eq(FCM._gatherWorldPins[1]:IsShown(),false,'master map toggle hides overlay immediately')
+eq(FCM._gatherWorldMapControls[1].text,'FCM Pins: Off','map header label updates')
+FCM._gatherWorldMapControls[1].scripts.OnClick()
+eq(FCM.db.settings.gatherWorldMapPins,true,'map header toggle re-enables overlay')
+eq(FCM._gatherWorldPins[1]:IsShown(),true,'master map toggle restores visible pins')
 FCM:UpdateGatherWorldMap()
 eq(worldFar:IsShown(),true,'unchanged map redraw is safely cached')
 worldFar.scripts.OnEnter(worldFar)

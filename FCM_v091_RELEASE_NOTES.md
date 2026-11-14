@@ -2,6 +2,16 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4l world-map positioning and controls:** QA4k's layer change made all
+  saved herb icons visible, but live Teldrassil testing placed them around
+  Oracle Glade instead of their recorded Shadowglen locations. The map canvas
+  and overlaid buttons have different effective scales; pin offsets now
+  compensate for their ratio and refresh if zoom changes. The open world map
+  also gets **FCM Pins: On/Off** and independent **Herbs**, **Ore**, **Fish**,
+  **Chests** buttons near the upper right. Controls change SavedVariables
+  visibility preferences only; they do not delete or move any nodes and leave
+  the minimap toggle alone. Correct placement and mouse input require live
+  QA4l verification.
 - **QA4k world-map layering fix:** The QA4j live diagnostic detected map
   1438 and **45 matching saved points** while the Teldrassil map was open,
   but no icons were rendered visibly. The addon had been parenting its pin

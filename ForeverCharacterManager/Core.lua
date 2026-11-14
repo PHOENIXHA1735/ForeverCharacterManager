@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA4k-20261114-World-Map-Layer-Fix"
+FCM.build = "QA4l-20261114-World-Map-Scale-Filters"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -72,6 +72,14 @@ function FCM:InitDB()
     -- Independent of the minimap toggle: the full zone map displays saved
     -- locations even when far from the character or inside the hide radius.
     db.settings.gatherWorldMapPins = db.settings.gatherWorldMapPins ~= false
+    -- Each gathering type has a separate world-map visibility preference;
+    -- missing preferences default to visible, preserving earlier saved data.
+    if type(db.settings.gatherWorldMapKinds)~="table" then
+        db.settings.gatherWorldMapKinds={}
+    end
+    for _,kind in ipairs({"herbalism","mining","fishing","treasure"}) do
+        db.settings.gatherWorldMapKinds[kind]=db.settings.gatherWorldMapKinds[kind]~=false
+    end
     -- Once close enough to inspect the actual node, stop covering the
     -- game's own tracking dot with FCM's historical location marker.
     db.settings.gatherPinHideYards=math.max(0,math.min(50,

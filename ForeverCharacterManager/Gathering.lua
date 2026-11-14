@@ -576,6 +576,12 @@ end
 -- must remain readable through either zone-map ID. Avoid converting other
 -- zones until a verified mapping is available.
 local gatheringMapAliases={[41]={1438},[1438]={41}}
+local worldGatherKinds={
+    {key="herbalism",label="Herbs"},
+    {key="mining",label="Ore"},
+    {key="fishing",label="Fish"},
+    {key="treasure",label="Chests"},
+}
 local function gatherZoneMaps(nodes,mapID)
     local result={}
     local wanted={[mapID]=true}
@@ -614,7 +620,67 @@ function FCM:HideGatherWorldMapPins()
     self._gatherWorldPinsVisible=nil
 end
 
+-- These controls live on the game's map itself. The Gathering tab and slash
+-- command still offer the same master switch; the four independent filters
+-- only affect the world-map display, not saved nodes or the minimap.
+function FCM:UpdateGatherWorldMapControls()
+    local world=_G.WorldMapFrame
+    if not world or type(world.IsShown)~="function" or not world:IsShown() then
+        for _,button in ipairs(self._gatherWorldMapControls or {}) do button:Hide() end
+        return
+    end
+    if not self.db or not self.db.settings then return end
+    if not self._gatherWorldMapControls then
+        local controls={}
+        local function control(label,width,previous,callback)
+            local button=CreateFrame("Button",nil,world,"UIPanelButtonTemplate")
+            button:SetSize(width,22)
+            button:SetFrameStrata("FULLSCREEN_DIALOG")
+            button:SetFrameLevel(world:GetFrameLevel()+150)
+            if previous then
+                button:SetPoint("RIGHT",previous,"LEFT",-4,0)
+            else
+                button:SetPoint("TOPRIGHT",world,"TOPRIGHT",-44,-38)
+            end
+            button:SetText(label)
+            button:SetScript("OnClick",callback)
+            controls[#controls+1]=button
+            return button
+        end
+        local master=control("FCM Pins: On",112,nil,function()
+            local settings=FCM.db and FCM.db.settings
+            if not settings then return end
+            settings.gatherWorldMapPins=not (settings.gatherWorldMapPins~=false)
+            FCM._gatherWorldMapDirty=true
+            FCM:UpdateGatherWorldMap()
+            if FCM.UI and FCM.UI.tab=="Gathering" and FCM.Refresh then FCM:Refresh() end
+        end)
+        for _,entry in ipairs(worldGatherKinds) do
+            control(entry.label..": On",81,controls[#controls],function()
+                local settings=FCM.db and FCM.db.settings
+                if not settings then return end
+                settings.gatherWorldMapKinds=settings.gatherWorldMapKinds or {}
+                local kinds=settings.gatherWorldMapKinds
+                kinds[entry.key]=not (kinds[entry.key]~=false)
+                FCM._gatherWorldMapDirty=true
+                FCM:UpdateGatherWorldMap()
+            end)
+        end
+        self._gatherWorldMapControls=controls
+    end
+    local controls=self._gatherWorldMapControls
+    controls[1]:SetText(self.db.settings.gatherWorldMapPins~=false and "FCM Pins: On" or "FCM Pins: Off")
+    controls[1]:Show()
+    for i,entry in ipairs(worldGatherKinds) do
+        local enabled=not self.db.settings.gatherWorldMapKinds or
+            self.db.settings.gatherWorldMapKinds[entry.key]~=false
+        controls[i+1]:SetText(entry.label..(enabled and ": On" or ": Off"))
+        controls[i+1]:Show()
+    end
+end
+
 function FCM:UpdateGatherWorldMap()
+    self:UpdateGatherWorldMapControls()
     if not self.db or (self.db.settings and self.db.settings.gatherWorldMapPins==false) then
         self._gatherWorldDiagnostic="World-map gathering pins disabled"
         self:HideGatherWorldMapPins()
@@ -631,6 +697,11 @@ function FCM:UpdateGatherWorldMap()
     if not g then self:HideGatherWorldMapPins(); return end
     local iconSize=math.max(8,math.min(32,
         math.floor(tonumber(self.db.settings and self.db.settings.gatherPinSize) or 16)))
+    local host=_G.WorldMapFrame or canvas
+    local canvasScale=type(canvas.GetEffectiveScale)=="function" and canvas:GetEffectiveScale() or 1
+    local hostScale=type(host.GetEffectiveScale)=="function" and host:GetEffectiveScale() or 1
+    if type(canvasScale)~="number" or canvasScale<=0 then canvasScale=1 end
+    if type(hostScale)~="number" or hostScale<=0 then hostScale=1 end
     -- When panning or zooming, the map scroll child's own transform carries
     -- all anchored pins. Rebuilding hundreds of pins every half second is
     -- unnecessary unless the map/geometry/settings/data actually changed.
@@ -638,24 +709,31 @@ function FCM:UpdateGatherWorldMap()
        self._gatherWorldRenderedCanvas==canvas and
        self._gatherWorldRenderedWidth==width and
        self._gatherWorldRenderedHeight==height and
+       self._gatherWorldRenderedCanvasScale==canvasScale and
+       self._gatherWorldRenderedHostScale==hostScale and
        self._gatherWorldRenderedSize==iconSize then return end
     local matches={}
+    local allMatches=0
     for kind,maps in pairs(g.nodes) do
         for _,zone in ipairs(gatherZoneMaps(maps,mapID)) do
             for _,node in pairs(zone) do
                 if type(node)=="table" and type(node.name)=="string" and
                    type(node.x)=="number" and type(node.y)=="number" and
                    node.x>=0 and node.x<=10000 and node.y>=0 and node.y<=10000 then
-                    matches[#matches+1]={kind=kind,name=node.name,x=node.x,y=node.y,
-                        personal=node.personal,gatherCount=node.gatherCount,
-                        gatherCountMinimum=node.gatherCountMinimum}
+                    allMatches=allMatches+1
+                    if not self.db.settings.gatherWorldMapKinds or
+                       self.db.settings.gatherWorldMapKinds[kind]~=false then
+                        matches[#matches+1]={kind=kind,name=node.name,x=node.x,y=node.y,
+                            personal=node.personal,gatherCount=node.gatherCount,
+                            gatherCountMinimum=node.gatherCountMinimum}
+                    end
                 end
             end
         end
     end
-    self._gatherWorldLastOpenDiagnostic="Map "..mapID.." | "..#matches..
-        " matching saved locations | stored map IDs: "..gatherMapIDs(g)..
-        " | canvas "..width.."x"..height
+    self._gatherWorldLastOpenDiagnostic="Map "..mapID.." | "..#matches.."/"..allMatches..
+        " enabled saved locations | stored map IDs: "..gatherMapIDs(g)..
+        " | canvas "..width.."x"..height.." | scales "..canvasScale.."/"..hostScale
     self._gatherWorldDiagnostic=self._gatherWorldLastOpenDiagnostic
     -- Prefer personally discovered nodes if an unusually large imported zone
     -- exceeds the safety cap. This is display-only; no records are deleted.
@@ -668,12 +746,11 @@ function FCM:UpdateGatherWorldMap()
     end)
     self._gatherWorldPins=self._gatherWorldPins or {}
     local maxPins=math.min(#matches,500)
-    -- The map tiles/detail layers may be siblings above ScrollContainer.Child
-    -- in Forever. Parenting buttons to the child made 45 correctly matched
-    -- nodes invisible. Host buttons on the visible WorldMapFrame at a high
-    -- stratum, but anchor their centers to the scrolling child so map pan
-    -- and zoom still determine their positions.
-    local host=_G.WorldMapFrame or canvas
+    -- These buttons must be hosted above Forever's map detail art to be
+    -- visible. The host and ScrollContainer.Child can have different effective
+    -- scales (the live map showed about 1.5x). WoW SetPoint offsets use the
+    -- PIN's scale, so raw canvas offsets shift pins up-left. Convert offsets
+    -- to host units and re-evaluate if the canvas zoom scale changes.
     for i=1,maxPins do
         local node=matches[i]
         local pin=self._gatherWorldPins[i]
@@ -703,7 +780,8 @@ function FCM:UpdateGatherWorldMap()
         pin.icon:SetVertexColor(1,1,1,1)
         if pin.clusterBadge then pin.clusterBadge:Hide() end
         pin:ClearAllPoints()
-        pin:SetPoint("CENTER",canvas,"TOPLEFT",node.x*width/10000,-node.y*height/10000)
+        pin:SetPoint("CENTER",canvas,"TOPLEFT",node.x*width/10000*canvasScale/hostScale,
+            -node.y*height/10000*canvasScale/hostScale)
         pin:Show()
         self._gatherWorldPinsVisible=true
     end
@@ -712,6 +790,8 @@ function FCM:UpdateGatherWorldMap()
     self._gatherWorldRenderedCanvas=canvas
     self._gatherWorldRenderedWidth=width
     self._gatherWorldRenderedHeight=height
+    self._gatherWorldRenderedCanvasScale=canvasScale
+    self._gatherWorldRenderedHostScale=hostScale
     self._gatherWorldRenderedSize=iconSize
     self._gatherWorldMapDirty=nil
     local first=self._gatherWorldPins[1]

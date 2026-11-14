@@ -1,18 +1,23 @@
-# FCM v0.9.1 QA4k — Inline crafting, bag capacity and gathering map QA
+# FCM v0.9.1 QA4l — Inline crafting, bag capacity and gathering map QA
 
-Build `QA4k-20261114-World-Map-Layer-Fix` (not a GitHub release).
+Build `QA4l-20261114-World-Map-Scale-Filters` (not a GitHub release).
 
-## Latest live observation and QA4k retest
+## Latest live observation and QA4l retest
 
 - QA4j installed and bag capacity was confirmed fixed by the user.
-- While Teldrassil's world map was open, FCM reported map 1438 with 45
-  matching saved locations and a usable canvas, but icons were invisible.
-- QA4k moves the rendered buttons above the map's detail layers without
-  changing their saved coordinates or the minimap's marker behavior.
-- After installing QA4k, press M for Teldrassil and inspect the previously
-  recorded herb positions. If still invisible, open FCM > Diagnostics *after*
-  closing the map: the last map-open diagnostic now stays available and
-  includes the count of pins actually drawn and the first pin's visibility.
+- QA4k made the 45 Teldrassil markers visible, but Shadowglen herbs appeared
+  at Oracle Glade because the map canvas is scaled differently from the
+  overlaid icon buttons.
+- QA4l converts those coordinates into the overlay's effective scale.
+  Nothing in the saved gathering database is moved or erased.
+- After installing, press M for Teldrassil: the previously recorded Shadowglen
+  markers should be at Shadowglen, not Oracle Glade. Try zooming/panning.
+- Use **FCM Pins: On/Off** near the map's top-right to hide all gathering
+  icons. Toggle **Herbs**, **Ore**, **Fish**, **Chests** individually; confirm
+  the minimap pin preference remains separate.
+- If placement still looks wrong, close the world map, open FCM > Diagnostics,
+  and provide the saved `Gathering world map:` line. It now includes the
+  effective `canvas/host` scale values and visible/total pin counts.
 
 ## Test A — bag size and item hover
 
@@ -276,9 +281,9 @@ protect performance. All original locations remain in SavedVariables.
 
 The November 14 Diagnostics screenshots show **QA4h** currently installed.
 QA4h predates the **QA4i** world-map overlay; its absence there is expected.
-See `INSTALL-QA4k.txt` and check the installed `Core.lua` after merging the
+See `INSTALL-QA4l.txt` and check the installed `Core.lua` after merging the
 new combined source. The expected build marker is
-`QA4k-20261114-World-Map-Layer-Fix`.
+`QA4l-20261114-World-Map-Scale-Filters`.
 
 ## Offline regressions
 
