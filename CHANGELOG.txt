@@ -1,3 +1,12 @@
+v0.9.1 QA4l — Verified world-map gathering icons and controls (source preview)
+- Live-tested Teldrassil gathering icons now appear at Shadowglen rather than
+  Oracle Glade, with map-canvas scaling corrected.
+- Added on-map master and per-type (Herbs/Ore/Fish/Chests) visibility buttons;
+  both placement and toggles confirmed working in game.
+- Bag slot-count display confirmed fixed in the earlier QA4j candidate.
+- Remaining crafting, cross-character gathering, and Windows companion tests
+  are not part of this confirmed map/UI scope.
+
 v0.9.1 QA1 — Combined QA6e crafting/Legacy + Gathering Preview (not yet published)
 - Merged the tested finished-item quantity/Enter popup, tree-specific Legacy goals,
   first-point manual snapshots, and Zygor Frost Mage weight profiles.

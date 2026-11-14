@@ -13,8 +13,9 @@ the canvas scale changes when zooming. While the world map is open, use the
 **FCM Pins: On/Off** button near the top right to hide/show every gathering
 marker, or the adjacent **Herbs**, **Ore**, **Fish** and **Chests** buttons
 to turn those resource types on or off individually. These map settings do
-not affect minimap markers or saved gathering observations. Live placement
-and click testing of QA4l is still needed.
+not affect minimap markers or saved gathering observations. Brandon
+confirmed in-game that QA4l places Shadowglen icons correctly and that the
+on-map master and category visibility controls work.
 
 **QA4k addresses invisible world-map markers:** Spotty Dotty's live
 Teldrassil test found **45 matching saved gathering points on map 1438**,

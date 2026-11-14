@@ -4,6 +4,10 @@ Build `QA4l-20261114-World-Map-Scale-Filters` (not a GitHub release).
 
 ## Latest live observation and QA4l retest
 
+- **Confirmed November 14:** Brandon tested QA4l and reported that the
+  Shadowglen icon placement is fixed and all world-map master/category
+  visibility buttons work. The earlier bag-slot correction is also confirmed.
+  Other gathering, crafting, and companion QA steps below remain independent.
 - QA4j installed and bag capacity was confirmed fixed by the user.
 - QA4k made the 45 Teldrassil markers visible, but Shadowglen herbs appeared
   at Oracle Glade because the map canvas is scaled differently from the

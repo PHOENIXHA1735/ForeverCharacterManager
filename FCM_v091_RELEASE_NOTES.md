@@ -10,8 +10,8 @@
   also gets **FCM Pins: On/Off** and independent **Herbs**, **Ore**, **Fish**,
   **Chests** buttons near the upper right. Controls change SavedVariables
   visibility preferences only; they do not delete or move any nodes and leave
-  the minimap toggle alone. Correct placement and mouse input require live
-  QA4l verification.
+  the minimap toggle alone. In-game QA4l testing confirmed corrected
+  Shadowglen placement and working map-header visibility controls.
 - **QA4k world-map layering fix:** The QA4j live diagnostic detected map
   1438 and **45 matching saved points** while the Teldrassil map was open,
   but no icons were rendered visibly. The addon had been parenting its pin
