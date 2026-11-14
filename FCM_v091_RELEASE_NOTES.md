@@ -10,6 +10,25 @@ optional community data stub. See `FCM_v091_QA1_COMBINED_TEST_NOTES.md` for
 the combined test checklist. This candidate has **not** been published to
 GitHub; the release workflow is manual-only until those tests pass.
 
+## Companion QA addition: shared ForeverDB budget and extended schedule
+
+- Automatic catalog imports can run every 15 minutes from **10 PM through
+  11:45 AM Pacific**, using two Windows Task Scheduler jobs (28 starts each).
+- A persistent, per-Windows-user budget shared by the manual companion, the
+  overnight catalog importer, and the metadata build-check job caps their
+  combined ForeverDB requests at **4,500 per UTC day**.
+- All FCM ForeverDB requests are spaced at least four seconds apart; HTTP
+  429 Retry-After cooldowns and an optional provider-reported 500-request
+  reserve are shared too.
+- The request budget and cooldown live under
+  `%LOCALAPPDATA%\ForeverCharacterManager`, so running the companion from a
+  different extracted folder on the same PC does not create another budget.
+- Existing item caches, generated Lua files, credentials, SavedVariables and
+  previous overnight quota records are preserved. The Windows tasks need
+  explicit registration through `ENABLE-FCM-OVERNIGHT.cmd` after installation.
+- All changes are offline-tested; live PowerShell/Task Scheduler and provider
+  behavior still require validation on the user's Windows PC.
+
 ## Implemented
 
 - Added a **Gathering** sidebar tab and `/fcm gather`, `/fcm gather status`, `/fcm gather import`.

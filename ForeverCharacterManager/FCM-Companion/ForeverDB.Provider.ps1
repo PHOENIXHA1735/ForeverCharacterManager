@@ -44,13 +44,10 @@ function Fetch-ForeverDB([string]$relative) {
     if ($relative -notmatch '^/[a-z0-9/?=&%._-]+$') { throw 'Unsafe ForeverDB route.' }
     # Only use ForeverDB's documented official host and GET paths.
     $url = 'https://foreverdb.net/api/v1' + $relative
-    # ForeverDB free tier: 30 requests per minute; be conservative across retries.
+    # The shared quota ledger counts manual, scheduled and build-check calls.
     if ($null -ne $script:ForeverDBDailyRemaining -and $script:ForeverDBDailyRemaining -le 0) { throw 'ForeverDB daily API allowance exhausted; no more requests will be sent.' }
-    if ($script:OvernightCatalogMode) {
-        Assert-FCMOvernightRequestAllowed
-    } elseif ($script:ForeverDBRequests -gt 0) {
-        Wait-FcmResponsive 2200
-    }
+    if ($script:OvernightCatalogMode) {Assert-FCMOvernightRequestAllowed}
+    $null=Reserve-FCMForeverDBRequest
     $script:ForeverDBRequests++
     try {
         $result = Invoke-FcmHttpJson $url @{
@@ -66,7 +63,7 @@ function Fetch-ForeverDB([string]$relative) {
         $status = Get-FcmHttpStatus $_
         if ($status -eq 429) {
             $seconds = [int]$script:FcmLastHttpRetryAfter
-            if ($script:OvernightCatalogMode) {Set-FCMOvernightBackoff ([Math]::Max(60,$seconds))}
+            Set-FCMForeverDBBackoff ([Math]::Max(60,$seconds))
             throw ('ForeverDB rate limited (429); Retry-After '+[Math]::Max(1,$seconds)+' seconds. Scan stopped; cached records retained.')
         }
         if ($status -eq 401 -or $status -eq 403) { throw 'ForeverDB authentication failed. Check your approved API key.' }

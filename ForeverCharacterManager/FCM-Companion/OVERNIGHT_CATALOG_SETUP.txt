@@ -19,16 +19,28 @@ INSTALL ON YOUR WINDOWS PC
      powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-OvernightCatalog.ps1 -RunNow
 
 SCHEDULE
-- 21:00 to 04:45, every 15 minutes; no new starts at or after 05:00.
+- 22:00 through 11:45 Pacific every 15 minutes, 56 attempts per day.
+  No new starts at or after 12:00 (noon).
+- Windows limits one task to 48 triggers. FCM creates TWO coordinated tasks,
+  each with 28 daily triggers, and both share one request-budget ledger.
 - Pacific time, including daylight saving time. Windows PC timezone must
   be Pacific, with your Windows account signed in and the computer awake.
   On the spring/fall DST transition nights, Windows may skip a nonexistent
   local time or repeat an hour; the provider rate and daily guards still apply.
 - Skips any scan while WoW is running. No unattended Windows credential or
   Always-on login is stored in the scheduler. No WakeToRun option is enabled.
-- Each request has a 4-second spacing (no more than 15/minute), and the
-  companion sends at most 1,200 unattended requests per UTC day, also
-  stopping when ForeverDB reports 500 or fewer requests remaining.
+- Every ForeverDB request made by FCM (manual, unattended catalog, and
+  scheduled build check) is counted against one shared 4,500-request UTC-day
+  ceiling. Already-used manual calls reduce the nightly allowance.
+- The 4,500 is a CEILING, not a target. The current 45-request-per-scan
+  safety cap and 56 possible starts mean no more than 2,520 unattended
+  requests from a completely uninterrupted day's catalog task runs.
+- Requests have 4-second spacing ACROSS FCM processes (15/minute maximum),
+  including when the user starts a manual scan. If ForeverDB provides an
+  authoritative remaining count, FCM also stops at 500 remaining.
+- The 500-reserve check depends on an optional provider response header.
+  Requests from unrelated apps/other accounts cannot be measured with FCM's
+  local counter; obtain separate ForeverDB accounts/keys per user.
 - ForeverDB's documented free-tier quotas are 30 requests/minute and
   5,000 requests/day across ALL account keys; other apps may use quota too.
   HTTP 429 persists the provider's Retry-After cooldown and the scheduler
@@ -38,14 +50,22 @@ SCHEDULE
   a successful scheduled update to load the new item list.
 
 WHAT TO CHECK
-- In Windows Task Scheduler find "FCM ForeverDB Overnight Catalog".
-  Verify 32 daily triggers, 21:00 through 04:45, under your logged-in user.
+- In Windows Task Scheduler verify both "FCM ForeverDB Overnight Catalog"
+  (22:00–04:45) and "FCM ForeverDB Morning Catalog" (05:00–11:45).
+  Each must have 28 daily triggers under your logged-in Windows user.
 - The companion folder contains overnight-catalog-status.json showing
   "updated", "game_running", "outside_window", "provider_unavailable",
   "no_key", "no_requests", or "error". Each successful run records item
-  count, request count, and next catalog offset. This file has no API key.
-- overnight-catalog-budget.json records requests per UTC day, not the key.
-- overnight-catalog-backoff.json records a 429 cooldown, if applicable.
+  count, this-run requests, combined requests used/available today and next
+  catalog offset. This file has no API key.
+- %LOCALAPPDATA%\ForeverCharacterManager\foreverdb-request-budget.json records
+  ALL FCM ForeverDB requests by UTC day. It is shared even when you launch
+  a second FCM companion copy from Downloads. Every request is reserved
+  before transmission, including failed calls.
+- %LOCALAPPDATA%\ForeverCharacterManager\foreverdb-request-backoff.json
+  records shared HTTP 429 Retry-After cooldowns.
+  Previous overnight-catalog-budget.json and overnight-catalog-backoff.json
+  remain available for migration and older-version rollback.
 - After a nighttime update, open WoW, FCM Item Explorer, clear category/type/
   quality/source filters, and search "Clam Meat" and "Clam". An item can still
   be absent if the upstream catalog omits it; use the companion search terms
@@ -59,8 +79,16 @@ NOTES
 - The scheduled Windows task is NOT active until the enable script completes
   on your PC; the distributed ZIP alone cannot create a task remotely.
 - Do not publish settings.json, reference-cache.json, any DPAPI key file,
+  foreverdb-request-budget.json, foreverdb-request-backoff.json,
   overnight-catalog-budget.json, overnight-catalog-backoff.json,
   overnight-catalog-status.json, any generated
   Lua reference file or WTF SavedVariables to GitHub or CurseForge.
 - ForeverDB source attribution: https://foreverdb.net
 - This is an unverified Windows QA build: first-night testing is required.
+- Manual requests made before installing this version were not previously
+  tracked. The first shared budget can recover the older unattended counter,
+  but prior manual requests cannot be reconstructed without provider usage
+  reporting. Start the new budget on a fresh UTC day for exact FCM tracking.
+- The budget is local to this Windows user on this PC. Using your API key on
+  another computer would not update this ledger; separate other users must
+  have their own ForeverDB account and approved key.

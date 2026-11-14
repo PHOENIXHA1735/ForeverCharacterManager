@@ -10,6 +10,8 @@
 **/overnight-catalog-status.json
 **/overnight-catalog-budget.json
 **/overnight-catalog-backoff.json
+**/foreverdb-request-budget.json
+**/foreverdb-request-backoff.json
 **/*.tmp
 **/fcm-gathering-contribution.json
 **/SavedVariables/

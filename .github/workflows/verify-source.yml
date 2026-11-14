@@ -48,5 +48,5 @@ jobs:
                   if not line or line.startswith('##'): continue
                   if line.lower() in ('externaldata.generated.lua', 'ahprices.generated.lua'): continue
                   assert (root / line).is_file(), f'{toc.name} refers to missing file: {line}'
-          for pattern in ('**/ExternalData.generated.lua','**/AHPrices.generated.lua','**/SavedVariables/**','**/.env'):
+          for pattern in ('**/ExternalData.generated.lua','**/AHPrices.generated.lua','**/SavedVariables/**','**/.env','**/foreverdb-request-budget.json','**/foreverdb-request-backoff.json'):
               assert not list(Path('.').glob(pattern)), f'Sensitive/generated path matched {pattern}'

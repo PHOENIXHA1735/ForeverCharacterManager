@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum -c SOURCE_MANIFEST_SHA256.txt
-          if find ForeverCharacterManager -type f \( -iname '*.dpapi' -o -name 'settings.json' -o -name 'reference-cache.json' -o -name 'AHPrices.generated.lua' -o -name 'ExternalData.generated.lua' -o -name 'FCM_DB.lua' -o -name 'fcm-gathering-contribution.json' \) | grep -q .; then
+          if find ForeverCharacterManager -type f \( -iname '*.dpapi' -o -name 'settings.json' -o -name 'reference-cache.json' -o -name 'AHPrices.generated.lua' -o -name 'ExternalData.generated.lua' -o -name 'FCM_DB.lua' -o -name 'fcm-gathering-contribution.json' -o -name 'foreverdb-request-budget.json' -o -name 'foreverdb-request-backoff.json' -o -name 'overnight-catalog-budget.json' -o -name 'overnight-catalog-backoff.json' -o -name 'overnight-catalog-status.json' \) | grep -q .; then
             echo 'Private or machine-generated file in release source' >&2
             exit 1
           fi

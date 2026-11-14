@@ -71,13 +71,18 @@ BoE safety and Zygor/Pawn numerical weight imports.
 ## Overnight ForeverDB catalog QA addition
 
 - Separate from the existing 12-hour build checker: Windows Task Scheduler
-  creates 32 daily starts (every 15 minutes, 21:00–04:45 Pacific).
+  creates two coordinated tasks with 28 starts each, or 56 daily attempts
+  (every 15 minutes, 22:00–11:45 Pacific).
 - Before the first run: install this FCM version, save the ForeverDB key
   encrypted for the Windows user and run `ENABLE-FCM-OVERNIGHT.cmd`.
-- At 21:00 with WoW closed, check `overnight-catalog-status.json` for `updated`,
+- At 22:00 with WoW closed, check `overnight-catalog-status.json` for `updated`,
   a rising item count and a moving item-page cursor. A deferred scan should
-  retain previous reference files. Check that the daily budget never exceeds
-  1,200 requests and the script respects the provider's 429 response.
+  retain previous reference files. Check that `foreverdb-request-budget.json`
+  accumulates manual, build-check and scheduled requests but never exceeds
+  4,500 for one UTC day, and that HTTP 429 triggers shared cooldown.
+- Run a manual ForeverDB scan before 22:00. The overnight request allowance
+  must be 4,500 minus the manual count; switching between windows/tasks must
+  not reset or duplicate the daily counter.
 - Start WoW and wait for the next 15-minute trigger: status should show
   `game_running` and preserve the generated references. Exit WoW, await another
   trigger and confirm scanning resumes.

@@ -1,6 +1,7 @@
 # Registers two independent Windows Task Scheduler jobs for this FCM install.
 # The Auction House job pulls AHledger current prices. The ForeverDB job
 # checks build metadata only; it does not invoke a full catalog import.
+# Its ForeverDB requests share the 4,500/day FCM account-local budget.
 # Run as the Windows user whose ForeverDB DPAPI key was saved by FCM.
 [CmdletBinding()]
 param(
@@ -19,7 +20,8 @@ if (-not (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue)) {
 }
 $ahScript=Join-Path $base 'FCM-DailyAHSync.ps1'
 $fdbScript=Join-Path $base 'FCM-ForeverDBBuildCheck.ps1'
-foreach ($path in @($ahScript,$fdbScript)) { if (-not (Test-Path -LiteralPath $path)) {throw ('Required script missing: '+(Split-Path -Leaf $path))} }
+$quotaScript=Join-Path $base 'ForeverDB.Quota.ps1'
+foreach ($path in @($ahScript,$fdbScript,$quotaScript)) { if (-not (Test-Path -LiteralPath $path)) {throw ('Required script missing: '+(Split-Path -Leaf $path))} }
 $exe=Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name
 $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
@@ -45,6 +47,7 @@ Write-Host 'FCM consumes AHledgerAPI while in game; no FCM AH Windows task is cr
 Write-Host 'Runs only while signed into Windows. Game login is not required for metadata/price downloads.'
 Write-Host 'AHledger Sync is separate from your ForeverDB key and API allowance.'
 Write-Host 'The ForeverDB job makes at most a build-metadata GET per check, not a full data import.'
+Write-Host 'ForeverDB calls count toward the shared 4,500-request UTC-day FCM budget.'
 Write-Host 'Status: fdb-build-status.json in FCM-Companion. AHledger Sync handles its own prices.'
 if ($RunNow) {
     Start-ScheduledTask -TaskName $name

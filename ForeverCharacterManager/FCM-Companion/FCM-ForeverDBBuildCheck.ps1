@@ -1,12 +1,13 @@
-# FCM v0.9.0 - low-cost scheduled ForeverDB build metadata probe.
+# FCM v0.9.1 - low-cost scheduled ForeverDB build metadata probe.
 # NEVER downloads the catalog, exports a key, or modifies a running game.
-# Full reference updates remain user-triggered in FCMDataUpdater.ps1 until
-# safe unattended updates have been validated on the player's Windows PC.
+# Shares the same account-local request budget as manual and catalog scans.
 [CmdletBinding()]
 param([switch]$Quiet)
 
 $ErrorActionPreference='Stop'
 $base=Split-Path -Parent $MyInvocation.MyCommand.Path
+$script:Base=$base
+. (Join-Path $base 'ForeverDB.Quota.ps1')
 $keyFile=Join-Path $base 'foreverdb-key.dpapi'
 $statusFile=Join-Path $base 'fdb-build-status.json'
 $settingFile=Join-Path $base 'settings.json'
@@ -37,6 +38,7 @@ $headers=@{'X-API-Key'=$key;'Accept'='application/json';'User-Agent'='FCM/0.9.0 
 $endpoint='https://foreverdb.net/api/v1/builds/latest'
 try {
     try {
+        $null=Reserve-FCMForeverDBRequest
         $reply=Invoke-RestMethod -Uri $endpoint -Headers $headers -Method Get -TimeoutSec 25 -MaximumRedirection 0
     } catch {
         $status=0
@@ -44,6 +46,7 @@ try {
         if ($status -ne 404) {throw}
         # Provider also documents /api/v1/meta as a metadata route.
         $endpoint='https://foreverdb.net/api/v1/meta'
+        $null=Reserve-FCMForeverDBRequest
         $reply=Invoke-RestMethod -Uri $endpoint -Headers $headers -Method Get -TimeoutSec 25 -MaximumRedirection 0
     }
     $node=$reply
@@ -81,7 +84,16 @@ try {
     # Never include a URI, HTTP header, or key in exception/status output.
     $code=0
     try {$code=[int]$_.Exception.Response.StatusCode} catch {}
-    $reason=if ($code -eq 429) {'rate_limited'} elseif ($code -eq 401 -or $code -eq 403) {'authentication_failed'} elseif ($code) {'http_'+$code} else {'unavailable_or_unrecognized'}
+    if ($code -eq 429) {
+        $seconds=900 # Fall back to 15 minutes if the provider gives no duration.
+        try {
+            $retry=[string]$_.Exception.Response.Headers['Retry-After']
+            if ($retry -match '^\d+$') {$seconds=[int]$retry}
+            elseif ($retry) {$seconds=[int][Math]::Ceiling(([DateTimeOffset]::Parse($retry).UtcDateTime-[DateTime]::UtcNow).TotalSeconds)}
+        } catch {}
+        try {Set-FCMForeverDBBackoff ([Math]::Max(60,$seconds))} catch {}
+    }
+    $reason=if ($_.Exception.Message -match 'combined.*request.*limit|4,500-request') {'combined_budget_exhausted'} elseif ($_.Exception.Message -match 'Retry-After cooldown') {'rate_limited_deferred'} elseif ($code -eq 429) {'rate_limited'} elseif ($code -eq 401 -or $code -eq 403) {'authentication_failed'} elseif ($code) {'http_'+$code} else {'unavailable_or_unrecognized'}
     Write-Status ([ordered]@{checkedAt=$at;status=$reason;changed=$false;source='ForeverDB';note='Old reference data retained. No API credentials logged.'})
     Say ('Build check '+$reason+'; no data overwritten.')
 }

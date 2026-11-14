@@ -11,8 +11,9 @@ Data providers are INDEPENDENT:
   available via the separate overnight catalog task (see
   OVERNIGHT_CATALOG_SETUP.txt). This build check does NOT import catalog items.
 - Character scans: in the WoW addon after login, not related to provider APIs.
-- Overnight ForeverDB catalog: optional 15-minute task from 21:00 to 05:00
-  Pacific, guarded by per-run and daily budgets, only when WoW is closed.
+- Overnight ForeverDB catalog: two coordinated 15-minute tasks from 22:00
+  through 11:45 Pacific, sharing 4,500 daily requests with FCM manual and
+  build-check calls, only importing while WoW is closed.
   Install separately with ENABLE-FCM-OVERNIGHT.cmd; still needs Windows QA.
 
 INSTALL ONCE, after you install the TEST version of FCM and save your approved
