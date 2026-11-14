@@ -1,7 +1,8 @@
-# Forever Character Manager - Windows Data Companion v0.9.0
+# Forever Character Manager - Windows Data Companion v0.9.1
 # Open-source PowerShell 5.1 Windows Forms tool; no installation, modules, or
 # administrator privileges required. Internet requests are GET only.
 # Reads FCM's SavedVariables locally for item IDs. Never uploads them.
+param([switch]$OvernightCatalog)
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Net.Http
@@ -11,6 +12,12 @@ $script:Base = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ConfigPath = Join-Path $script:Base 'settings.json'
 $script:CachePath = Join-Path $script:Base 'reference-cache.json'
 $script:ReportPath = Join-Path $script:Base 'last-sync-report.json'
+$script:OvernightCatalogMode = [bool]$OvernightCatalog
+$script:OvernightStatusPath = Join-Path $script:Base 'overnight-catalog-status.json'
+$script:OvernightBudgetPath = Join-Path $script:Base 'overnight-catalog-budget.json'
+$script:OvernightBackoffPath = Join-Path $script:Base 'overnight-catalog-backoff.json'
+$script:OvernightLastRequestUtc = [DateTime]::MinValue
+$script:OvernightDailyCap = 1200 # Reserve most of ForeverDB's shared 5,000/day free allowance.
 $script:OperationRunning = $false
 $script:ScanRunning = $false
 $script:FcmLastHttpDailyRemaining = $null
@@ -50,7 +57,7 @@ function Get-Config {
         try {
             $o = Get-Content -LiteralPath $script:ConfigPath -Raw | ConvertFrom-Json
             foreach ($prop in $o.PSObject.Properties) {
-                if ($prop.Name -in @('gameRoot','terms','market','autoSync','autoUpdateCheck','lastSync') -or $prop.Name -match '^fdb[A-Za-z0-9_]+$') {
+                if ($prop.Name -in @('gameRoot','terms','market','autoSync','autoUpdateCheck','lastSync','lastCatalogSync') -or $prop.Name -match '^fdb[A-Za-z0-9_]+$') {
                     if ($null -ne $prop.Value) { $script:Config[$prop.Name] = $prop.Value }
                 }
             }
@@ -90,7 +97,88 @@ function Log([string]$message) {
     $script:logBox.ScrollToCaret()
     [System.Windows.Forms.Application]::DoEvents()
 }
+function Test-FCMOvernightWindow {
+    # ForeverDB overnight scans use America/Los_Angeles time even across DST.
+    $zone=[TimeZoneInfo]::FindSystemTimeZoneById('Pacific Standard Time')
+    $pacific=[TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow,$zone)
+    return ($pacific.Hour -ge 21 -or $pacific.Hour -lt 5)
+}
+function Write-FCMOvernightStatus([string]$state,[string]$detail) {
+    $record=[ordered]@{
+        checkedAtUtc=[DateTime]::UtcNow.ToString('o');status=$state;detail=$detail
+        items=$script:ItemCache.Count;recipes=$script:RecipeCache.Count
+        nextForeverDBItemOffset=[int]$script:Config.fdbItemOffset
+        requestsThisRun=[int]$script:ForeverDBRequests
+        source='ForeverDB.net (https://foreverdb.net)'
+    }
+    $temp=$script:OvernightStatusPath+'.tmp'
+    [IO.File]::WriteAllText($temp,($record | ConvertTo-Json -Depth 4),(New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $temp -Destination $script:OvernightStatusPath -Force
+    Write-Host ('FCM overnight catalog: '+$state+'; '+$detail)
+}
+function Test-FCMOvernightBackoff {
+    if (-not (Test-Path -LiteralPath $script:OvernightBackoffPath)) {return $false}
+    try {
+        $entry=Get-Content -LiteralPath $script:OvernightBackoffPath -Raw | ConvertFrom-Json
+        $until=[DateTime]::Parse([string]$entry.untilUtc).ToUniversalTime()
+        return ([DateTime]::UtcNow -lt $until)
+    } catch {
+        # If the provider cooldown file cannot be read, fail closed until fixed.
+        return $true
+    }
+}
+function Set-FCMOvernightBackoff([int]$seconds) {
+    if (-not $script:OvernightCatalogMode) {return}
+    $seconds=[Math]::Max(60,$seconds)
+    $record=[ordered]@{untilUtc=[DateTime]::UtcNow.AddSeconds($seconds).ToString('o');reason='ForeverDB HTTP 429 Retry-After'}
+    $temp=$script:OvernightBackoffPath+'.tmp'
+    [IO.File]::WriteAllText($temp,($record | ConvertTo-Json -Compress),(New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $temp -Destination $script:OvernightBackoffPath -Force
+}
+function Assert-FCMOvernightRequestAllowed {
+    if (-not $script:OvernightCatalogMode) {return}
+    if (-not (Test-FCMOvernightWindow)) {throw 'Outside the 21:00-05:00 Pacific refresh window.'}
+    if (Test-FCMOvernightBackoff) {throw 'ForeverDB 429 Retry-After cooldown is active; remaining requests deferred.'}
+    if (Game-Is-Running) {throw 'WoW is running; remaining catalog requests deferred.'}
+    if ($null -ne $script:ForeverDBDailyRemaining -and $script:ForeverDBDailyRemaining -le 500) {
+        throw 'ForeverDB reported 500 or fewer daily requests remaining; overnight scan deferred.'
+    }
+    # Four seconds between requests caps this process at 15/minute, leaving
+    # headroom under the provider's account-wide 30/minute free-tier limit.
+    if ($script:OvernightLastRequestUtc -ne [DateTime]::MinValue) {
+        $elapsed=([DateTime]::UtcNow-$script:OvernightLastRequestUtc).TotalMilliseconds
+        if ($elapsed -lt 4000) {Wait-FcmResponsive ([int][Math]::Ceiling(4000-$elapsed))}
+    }
+    if (-not (Test-FCMOvernightWindow)) {throw 'Overnight refresh window ended; remaining requests deferred.'}
+    $today=[DateTime]::UtcNow.ToString('yyyy-MM-dd')
+    $used=0
+    if (Test-Path -LiteralPath $script:OvernightBudgetPath) {
+        try {
+            $old=Get-Content -LiteralPath $script:OvernightBudgetPath -Raw | ConvertFrom-Json
+            if ($old.utcDay -eq $today) { $used=[int]$old.requests }
+        } catch {throw 'Overnight quota record unreadable; no further requests sent until repaired.'}
+    }
+    if ($used -ge $script:OvernightDailyCap) {throw 'Overnight daily safety budget reached; retry after UTC midnight.'}
+    # Record the request BEFORE sending it so a crash cannot erase spent quota.
+    $entry=[ordered]@{utcDay=$today;requests=($used+1);cap=$script:OvernightDailyCap}
+    $temp=$script:OvernightBudgetPath+'.tmp'
+    [IO.File]::WriteAllText($temp,($entry | ConvertTo-Json -Compress),(New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $temp -Destination $script:OvernightBudgetPath -Force
+    $script:OvernightLastRequestUtc=[DateTime]::UtcNow
+}
+function Enter-FCMCatalogLock {
+    $mutex=[System.Threading.Mutex]::new($false,'Local\FCM-ForeverDB-Catalog-Write')
+    if (-not $mutex.WaitOne(0)) {
+        $mutex.Dispose()
+        throw 'Another FCM catalog scan is already running; this scan was skipped.'
+    }
+    return $mutex
+}
 function Check-FcmCancel {
+    if ($script:OvernightCatalogMode) {
+        if (Game-Is-Running) {throw 'WoW opened; overnight refresh stopped to protect the installed files.'}
+        if (-not (Test-FCMOvernightWindow)) {throw 'Overnight Pacific window ended; refresh stopped.'}
+    }
     if ($script:ScanRunning -and $script:CancelRequested) {
         throw 'FCM scan cancelled by user.'
     }
@@ -139,7 +227,13 @@ function Invoke-FcmHttpJson([string]$uri,[hashtable]$headers) {
             $script:FcmLastHttpDailyRemaining=(@($response.Headers.GetValues('X-Daily-Remaining')) | Select-Object -First 1)
         }
         if ($response.Headers.RetryAfter) {
-            try { $script:FcmLastHttpRetryAfter=[int][Math]::Ceiling($response.Headers.RetryAfter.Delta.TotalSeconds) } catch {}
+            try {
+                if ($response.Headers.RetryAfter.Delta) {
+                    $script:FcmLastHttpRetryAfter=[int][Math]::Ceiling($response.Headers.RetryAfter.Delta.TotalSeconds)
+                } elseif ($response.Headers.RetryAfter.Date) {
+                    $script:FcmLastHttpRetryAfter=[int][Math]::Ceiling(($response.Headers.RetryAfter.Date.UtcDateTime-[DateTime]::UtcNow).TotalSeconds)
+                }
+            } catch {}
         }
         if (-not $response.IsSuccessStatusCode) {
             $status = [int]$response.StatusCode
@@ -237,7 +331,7 @@ function Install-Addon {
     $destCompanion = Join-Path $dest 'FCM-Companion'
     if (-not (Test-Path -LiteralPath $destCompanion)) { New-Item -Path $destCompanion -ItemType Directory | Out-Null }
     # Only copy static scripts and documentation; NEVER copy credentials, settings or caches.
-    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','GatheringSync.ps1','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt')) {
+    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','GatheringSync.ps1','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt','Enable-FCM-OvernightCatalog.ps1','Disable-FCM-OvernightCatalog.ps1','ENABLE-FCM-OVERNIGHT.cmd','OVERNIGHT_CATALOG_SETUP.txt')) {
         $companionSource = Join-Path $script:Base $filename
         if (Test-Path -LiteralPath $companionSource) {
             Copy-Item -LiteralPath $companionSource -Destination (Join-Path $destCompanion $filename) -Force
@@ -663,10 +757,14 @@ function Write-LuaFile {
     Log "Wrote $itemWritten items, $recipeWritten recipes, $($script:PriceCache.Count) market-specific prices, and $($script:DungeonCache.Count) dungeon records. Character saves were not touched."
 }
 function Sync-All {
+    $catalogLock=Enter-FCMCatalogLock
+    try {
     Check-FcmCancel
     if (Game-Is-Running) { throw 'Close WoW completely before synchronizing. A running client cannot reload external files safely.' }
     $null=Target-Addon
     Save-Config
+    # Refresh a cache another FCM companion process may have updated overnight.
+    Get-Config
     Log 'Starting public-reference update (read-only web requests). Market prices are snapshots; IV is not scraped.'
     # Query approved ForeverDB first so a broken public endpoint does not delay useful data.
     Sync-ForeverDB
@@ -705,6 +803,82 @@ function Sync-All {
     Log "CATALOG COVERAGE: $($summary.items) item records cached; additional manual syncs advance through ForeverDB catalog pages."
     Log "SYNC SUMMARY: $($summary.items) items; $($summary.referenceRecipes) recipes; $($summary.prices) prices; $($summary.dungeons) dungeons."
     Log 'Finished. Open WoW Forever and type /fcm, then choose Item Explorer.'
+    } finally {
+        $catalogLock.ReleaseMutex()
+        $catalogLock.Dispose()
+    }
+}
+function Invoke-FCMOvernightCatalog {
+    if (-not (Test-FCMOvernightWindow)) {
+        Write-FCMOvernightStatus 'outside_window' 'Allowed only 21:00-05:00 Pacific.'
+        return
+    }
+    if (Game-Is-Running) {
+        Write-FCMOvernightStatus 'game_running' 'WoW is open; will try the next scheduled slot.'
+        return
+    }
+    if (Test-FCMOvernightBackoff) {
+        Write-FCMOvernightStatus 'rate_limited' 'ForeverDB requested a cooldown; this slot was skipped.'
+        return
+    }
+    if (-not (Get-ForeverDBKey)) {
+        Write-FCMOvernightStatus 'no_key' 'Save your approved ForeverDB key using Remember encrypted in the companion.'
+        return
+    }
+    $catalogLock=Enter-FCMCatalogLock
+    $originalOffsets=@{}
+    $offsetsCaptured=$false
+    $committed=$false
+    try {
+        # Re-read from disk after acquiring the cross-process lock.
+        Get-Config
+        $script:gameBox.Text=[string]$script:Config.gameRoot
+        $script:termsBox.Text=[string]$script:Config.terms
+        $index=$script:marketBox.Items.IndexOf([string]$script:Config.market)
+        if ($index -ge 0) {$script:marketBox.SelectedIndex=$index}
+        $null=Target-Addon
+        if (-not (Test-Path -LiteralPath (Join-Path (Target-Addon) 'ExternalData.lua'))) {
+            throw 'Install the current FCM addon before enabling overnight catalog updates.'
+        }
+        foreach ($key in @($script:Config.Keys)) {
+            if ($key -match '^fdb.*(Offset|Importer)$') {$originalOffsets[$key]=$script:Config[$key]}
+        }
+        $offsetsCaptured=$true
+        Log 'Overnight ForeverDB catalog scan (no auction requests or character save writes).'
+        Sync-ForeverDB
+        if (-not $script:ForeverDBScanConnected) {
+            Write-FCMOvernightStatus 'provider_unavailable' 'ForeverDB metadata request failed; existing references retained.'
+            return
+        }
+        # Fail closed if the game starts or the window ends during a long scan.
+        if (Game-Is-Running) {throw 'WoW opened during the scan; generated files retained.'}
+        if (-not (Test-FCMOvernightWindow)) {throw 'Overnight window ended before export; existing data retained.'}
+        if ($script:ForeverDBRequests -eq 0) {
+            Write-FCMOvernightStatus 'no_requests' 'No catalog requests made; existing data retained.'
+            return
+        }
+        Write-LuaFile
+        $committed=$true
+        $script:Config.lastCatalogSync=[DateTime]::UtcNow.ToString('o')
+        Save-Config
+        try {$null=Write-FCMReferenceAudit} catch {Log 'Reference audit failed; saved catalog remains intact.'}
+        $state=$(if (Test-FCMOvernightBackoff) {'rate_limited_partial'} else {'updated'})
+        Write-FCMOvernightStatus $state 'Any successfully fetched reference data was exported; restart WoW to load changes.'
+    } catch {
+        if (-not $committed -and $offsetsCaptured) {
+            # Restore cursors if the export failed so that no item pages are
+            # skipped; scheduled mode does not persist them before export.
+            foreach ($key in @($script:Config.Keys)) {
+                if ($key -match '^fdb.*(Offset|Importer)$' -and -not $originalOffsets.ContainsKey($key)) {$script:Config.Remove($key)}
+            }
+            foreach ($key in $originalOffsets.Keys) {$script:Config[$key]=$originalOffsets[$key]}
+            Save-Config
+        }
+        throw
+    } finally {
+        $catalogLock.ReleaseMutex()
+        $catalogLock.Dispose()
+    }
 }
 function Action($operation,[bool]$isScan=$false) {
     if ($script:OperationRunning) { return }
@@ -976,4 +1150,19 @@ $form.Add_FormClosing({
     if ($null -ne $script:HttpClient) { $script:HttpClient.Dispose() }
     if ($null -ne $script:HttpHandler) { $script:HttpHandler.Dispose() }
 })
+if ($OvernightCatalog) {
+    $exitCode=0
+    try {Invoke-FCMOvernightCatalog}
+    catch {
+        # Do not show modal message boxes in Task Scheduler, or leak credentials
+        # or request headers from nested PowerShell exceptions.
+        try {Write-FCMOvernightStatus 'error' 'Catalog refresh failed safely; old cache retained. Check the companion configuration.'} catch {}
+        $exitCode=1
+    } finally {
+        if ($script:HttpClient) {$script:HttpClient.Dispose()}
+        if ($script:HttpHandler) {$script:HttpHandler.Dispose()}
+        $form.Dispose()
+    }
+    exit $exitCode
+}
 [void]$form.ShowDialog()

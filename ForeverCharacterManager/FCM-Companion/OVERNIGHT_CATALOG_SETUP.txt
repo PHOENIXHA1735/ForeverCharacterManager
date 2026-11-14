@@ -1,0 +1,66 @@
+FCM v0.9.1 - Overnight ForeverDB Catalog Refresh (Windows preview)
+=================================================================
+
+The build-check task only checks the latest reference build. This separate
+Windows task actually imports ForeverDB items (up to 1,000 more item rows per
+successful run), recipes, gathering references and dungeon information.
+It does NOT query AHledger, alter character saves, or upload account data.
+
+INSTALL ON YOUR WINDOWS PC
+1. Close WoW completely. Back up your existing FCM installation and any
+   generated reference files before replacing FCM source files.
+2. Install this FCM v0.9.1 build without deleting any prior data.
+3. Open the companion, choose your WoW _forever_ folder, enter your approved
+   ForeverDB API key, check "Remember encrypted for this Windows user",
+   then close the companion to save settings.
+4. In the installed FCM-Companion folder, double-click
+   ENABLE-FCM-OVERNIGHT.cmd. No administrator account is needed.
+   Or use PowerShell:
+     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-OvernightCatalog.ps1 -RunNow
+
+SCHEDULE
+- 21:00 to 04:45, every 15 minutes; no new starts at or after 05:00.
+- Pacific time, including daylight saving time. Windows PC timezone must
+  be Pacific, with your Windows account signed in and the computer awake.
+  On the spring/fall DST transition nights, Windows may skip a nonexistent
+  local time or repeat an hour; the provider rate and daily guards still apply.
+- Skips any scan while WoW is running. No unattended Windows credential or
+  Always-on login is stored in the scheduler. No WakeToRun option is enabled.
+- Each request has a 4-second spacing (no more than 15/minute), and the
+  companion sends at most 1,200 unattended requests per UTC day, also
+  stopping when ForeverDB reports 500 or fewer requests remaining.
+- ForeverDB's documented free-tier quotas are 30 requests/minute and
+  5,000 requests/day across ALL account keys; other apps may use quota too.
+  HTTP 429 persists the provider's Retry-After cooldown and the scheduler
+  skips all slots until the cooldown expires.
+- A scan writes to local cache and ExternalData.generated.lua only after its
+  fetch completes. Backup .bak files are retained. Quit/relaunch WoW after
+  a successful scheduled update to load the new item list.
+
+WHAT TO CHECK
+- In Windows Task Scheduler find "FCM ForeverDB Overnight Catalog".
+  Verify 32 daily triggers, 21:00 through 04:45, under your logged-in user.
+- The companion folder contains overnight-catalog-status.json showing
+  "updated", "game_running", "outside_window", "provider_unavailable",
+  "no_key", "no_requests", or "error". Each successful run records item
+  count, request count, and next catalog offset. This file has no API key.
+- overnight-catalog-budget.json records requests per UTC day, not the key.
+- overnight-catalog-backoff.json records a 429 cooldown, if applicable.
+- After a nighttime update, open WoW, FCM Item Explorer, clear category/type/
+  quality/source filters, and search "Clam Meat" and "Clam". An item can still
+  be absent if the upstream catalog omits it; use the companion search terms
+  or a known item ID for a direct lookup in that case.
+
+STOP
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Disable-FCM-OvernightCatalog.ps1
+Disabling the task does not delete cache, credentials, or character data.
+
+NOTES
+- The scheduled Windows task is NOT active until the enable script completes
+  on your PC; the distributed ZIP alone cannot create a task remotely.
+- Do not publish settings.json, reference-cache.json, any DPAPI key file,
+  overnight-catalog-budget.json, overnight-catalog-backoff.json,
+  overnight-catalog-status.json, any generated
+  Lua reference file or WTF SavedVariables to GitHub or CurseForge.
+- ForeverDB source attribution: https://foreverdb.net
+- This is an unverified Windows QA build: first-night testing is required.

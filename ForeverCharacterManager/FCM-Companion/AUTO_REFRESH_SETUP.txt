@@ -8,9 +8,12 @@ Data providers are INDEPENDENT:
 - ForeverDB build check: every 12 hours by default, or every 24 hours.
   Only requests build metadata with your private, user-encrypted key.
   A change is recorded in fdb-build-status.json; FULL catalog downloads are
-  still performed through the regular Windows Data Companion by the user.
-  This is intentional until safe unattended imports are validated on Windows.
+  available via the separate overnight catalog task (see
+  OVERNIGHT_CATALOG_SETUP.txt). This build check does NOT import catalog items.
 - Character scans: in the WoW addon after login, not related to provider APIs.
+- Overnight ForeverDB catalog: optional 15-minute task from 21:00 to 05:00
+  Pacific, guarded by per-run and daily budgets, only when WoW is closed.
+  Install separately with ENABLE-FCM-OVERNIGHT.cmd; still needs Windows QA.
 
 INSTALL ONCE, after you install the TEST version of FCM and save your approved
 ForeverDB key through the Data Companion:
@@ -22,7 +25,7 @@ ForeverDB key through the Data Companion:
 For 60-minute AH prices and once-daily ForeverDB checks:
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-FCM-ScheduledRefresh.ps1 -AuctionMinutes 60 -ForeverDBHours 24 -RunNow
 
-To disable both:
+To disable the existing build check:
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Disable-FCM-ScheduledRefresh.ps1
 
 NOTES

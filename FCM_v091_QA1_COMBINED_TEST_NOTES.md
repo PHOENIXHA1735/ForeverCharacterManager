@@ -67,3 +67,21 @@ BoE safety and Zygor/Pawn numerical weight imports.
   starter JSON contains zero contributions, and publishing is not yet enabled.
 - A published v0.9.1 GitHub release. The release workflow is manual-only until
   the tester confirms this combined build works.
+
+## Overnight ForeverDB catalog QA addition
+
+- Separate from the existing 12-hour build checker: Windows Task Scheduler
+  creates 32 daily starts (every 15 minutes, 21:00–04:45 Pacific).
+- Before the first run: install this FCM version, save the ForeverDB key
+  encrypted for the Windows user and run `ENABLE-FCM-OVERNIGHT.cmd`.
+- At 21:00 with WoW closed, check `overnight-catalog-status.json` for `updated`,
+  a rising item count and a moving item-page cursor. A deferred scan should
+  retain previous reference files. Check that the daily budget never exceeds
+  1,200 requests and the script respects the provider's 429 response.
+- Start WoW and wait for the next 15-minute trigger: status should show
+  `game_running` and preserve the generated references. Exit WoW, await another
+  trigger and confirm scanning resumes.
+- Relog in WoW, clear Item Explorer filters, and search `Clam Meat`, `Clam`,
+  `Red Linen Bag`, and a known ID. Presence depends on ForeverDB coverage.
+- Windows Task registration, DST behavior, saved encrypted key access, real
+  provider throttling and live game interaction are not yet verified here.

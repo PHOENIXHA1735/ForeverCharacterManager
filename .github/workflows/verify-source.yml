@@ -18,6 +18,8 @@ jobs:
         run: |
           find ForeverCharacterManager -name '*.lua' -type f -print0 | xargs -0 -r luac5.1 -p
           lua5.1 tests/qa_gathering_v091.lua
+      - name: Validate overnight catalog schedule safeguards
+        run: python3 tests/qa_overnight_catalog.py
       - name: Validate public gathering snapshot schema
         shell: python
         run: |

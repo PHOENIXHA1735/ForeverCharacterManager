@@ -46,7 +46,11 @@ function Fetch-ForeverDB([string]$relative) {
     $url = 'https://foreverdb.net/api/v1' + $relative
     # ForeverDB free tier: 30 requests per minute; be conservative across retries.
     if ($null -ne $script:ForeverDBDailyRemaining -and $script:ForeverDBDailyRemaining -le 0) { throw 'ForeverDB daily API allowance exhausted; no more requests will be sent.' }
-    if ($script:ForeverDBRequests -gt 0) { Wait-FcmResponsive 2200 }
+    if ($script:OvernightCatalogMode) {
+        Assert-FCMOvernightRequestAllowed
+    } elseif ($script:ForeverDBRequests -gt 0) {
+        Wait-FcmResponsive 2200
+    }
     $script:ForeverDBRequests++
     try {
         $result = Invoke-FcmHttpJson $url @{
@@ -62,6 +66,7 @@ function Fetch-ForeverDB([string]$relative) {
         $status = Get-FcmHttpStatus $_
         if ($status -eq 429) {
             $seconds = [int]$script:FcmLastHttpRetryAfter
+            if ($script:OvernightCatalogMode) {Set-FCMOvernightBackoff ([Math]::Max(60,$seconds))}
             throw ('ForeverDB rate limited (429); Retry-After '+[Math]::Max(1,$seconds)+' seconds. Scan stopped; cached records retained.')
         }
         if ($status -eq 401 -or $status -eq 403) { throw 'ForeverDB authentication failed. Check your approved API key.' }
@@ -795,6 +800,7 @@ function FDB-SaveVendor($vendor) {
 }
 function Sync-ForeverDB {
     Check-FcmCancel
+    $script:ForeverDBScanConnected=$false
     if (-not (Get-ForeverDBKey)) {
         Log 'ForeverDB not configured; public TheWoWDB/AHledger refresh still works. An approved ForeverDB key is optional.'
         return
@@ -810,6 +816,7 @@ function Sync-ForeverDB {
         Log ('ForeverDB skipped: ' + $_.Exception.Message)
         return
     }
+    $script:ForeverDBScanConnected=$true
     if ($build) { $script:Config.fdbLastBuild=[string]$build }
     # First repaired run goes back to page zero: older versions advanced the
     # cursor even when item rows could not be decoded and saved.
@@ -998,7 +1005,9 @@ function Sync-ForeverDB {
         } catch { Log 'ForeverDB vendor import unavailable; cached items kept.' }
     }
     Check-FcmCancel
-    Save-ForeverDBCredential
-    Save-Config
+    if (-not $script:OvernightCatalogMode) {
+        Save-ForeverDBCredential
+        Save-Config
+    }
     Log "ForeverDB update complete: $($script:ForeverDBItemsImported) item entries, $($script:ForeverDBRecipesImported) recipe entries, $($script:ForeverDBRequests) API calls."
 }

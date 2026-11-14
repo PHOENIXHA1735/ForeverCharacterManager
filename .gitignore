@@ -1,5 +1,16 @@
 # Private WoW characters, settings and generated reference data
 **/ExternalData.generated.lua
+**/AHPrices.generated.lua
+**/reference-cache.json
+**/settings.json
+**/last-sync-report.json
+**/reference-audit.json
+**/foreverdb-key.dpapi
+**/fdb-build-status.json
+**/overnight-catalog-status.json
+**/overnight-catalog-budget.json
+**/overnight-catalog-backoff.json
+**/*.tmp
 **/fcm-gathering-contribution.json
 **/SavedVariables/
 **/WTF/
