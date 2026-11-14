@@ -2,7 +2,19 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA5 (item readability test candidate)
+## Current source: v0.9.1 QA6 (fishing-school detection test candidate)
+
+**QA6 addresses Frosty Bit's Oily Blackmouth School test at Twilight Shore.**
+The visible fishing pool produced a real catch, but FCM failed to record a
+location because the Fishing cast did not supply a school name. FCM can now
+read an explicitly named school/pool tooltip while hovering it, associate that
+observation with the next Fishing cast, and save the standing-location marker
+only after an actual bobber loot event. A successful Fishing cast by itself
+does not create a location. Open-water catches without named-school evidence
+remain unrecorded; the client cannot prove the bobber landed inside a pool. Use
+`/fcm gather fishstatus` to see the last captured pool name, spell ID and
+recording decision. In-game behavior still needs testing on Forever; do not
+publish community coordinates from QA alone.
 
 **QA5 makes item search easier to read:** The Item Explorer and Global Search
 right-hand pane is wider, with clear sections explaining **where an item comes

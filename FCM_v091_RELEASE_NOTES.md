@@ -1,5 +1,25 @@
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
+## QA6 fishing school tooltip + loot verification (November 14)
+
+- Frosty Bit's in-game Oily Blackmouth School catch at Twilight Shore did not
+  create a fishing location with QA5. `UNIT_SPELLCAST_SENT` may report only
+  the Fishing spell without naming the school.
+- QA6 captures a live school/pool tooltip (including text populated after
+  OnShow), pairs it with a recent Fishing cast, and records a personal pin
+  only after a bobber loot event. It uses the player's cast position as an
+  approximate access point, **not an asserted exact pool center**.
+- Cast-only, unnamed open-water catches, expired observations, corpse/NPC
+  loot, and duplicate LOOT_READY/LOOT_OPENED events do not create extra pins.
+  The client may still not confirm whether a cast landed inside the school;
+  the marker is a player-observed access point, not a live spawn assertion.
+- `/fcm gather fishstatus` explains the last tooltip, spell ID and recording
+  decision. A resolved Fishing spell name also permits client-specific cast
+  IDs. No private data or automatic community upload has been added.
+- Offline Lua gathering tests cover named hover, actual loot, repeat counts,
+  spell override, stale hover and false-positive rejection. Live Forever
+  validation is required before promoting the preview.
+
 ## QA5 readable item explorer and sourced acquisition preview (November 14)
 
 - Global Search and Item Explorer now use a wider, readable right-hand panel

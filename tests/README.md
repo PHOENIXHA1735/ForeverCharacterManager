@@ -16,7 +16,8 @@ python3 tests/qa_overnight_catalog.py
 These tests cover Lua parsing, binding API and gear behavior, identity / faction / ruleset migration, and per-recipe profession assignment with safe SavedVariables repair. They use mock APIs and do not replace in-game verification.
 
 The gathering harness checks zone-map ID aliases (41 / 1438), map pins and
-minimap behavior. The bag harness validates slot counts from reference data,
+minimap behavior, and QA6's hover-to-cast-to-loot fishing-school recording
+without inventing markers for open-water or NPC loot. The bag harness validates slot counts from reference data,
 real client-tooltip-style input, safe unknowns, preview text and hover.
 The item-readability harness covers humanized item metadata, source provenance,
 crafting relationships, honest unknown-source reporting, and readable AH dates.

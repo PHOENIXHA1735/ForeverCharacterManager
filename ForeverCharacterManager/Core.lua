@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA5-20261114-Readable-Item-Sources"
+FCM.build = "QA6-20261114-Fishing-Pool-Detection"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -573,12 +573,14 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             FCM:Say("Saved nodes: herbs "..totals.herbalism..", mining "..totals.mining..
                 ", fishing "..totals.fishing..", treasure "..totals.treasure..
                 ". Personal "..totals.personal..", imported "..totals.gathermate..", community "..totals.community..".")
+        elseif sub=="fishstatus" then
+            FCM:Say(FCM.FishingStatus and FCM:FishingStatus() or "Fishing diagnostics unavailable.")
         elseif sub=="" then
             if FCM.UI then FCM.UI.tab="Gathering" end
             if FCM.Toggle then
                 if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
             end
-        else FCM:Say("Use /fcm gather, /fcm gather status, or /fcm gather import.") end
+        else FCM:Say("Use /fcm gather, /fcm gather status, /fcm gather fishstatus, or /fcm gather import.") end
     elseif cmd == "ahdiag" then
         local itemID=tonumber(rest) or 4537
         if type(FCM.AHPriceDiagnostic)=="function" then

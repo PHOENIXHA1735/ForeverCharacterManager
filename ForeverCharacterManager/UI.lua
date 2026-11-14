@@ -2165,7 +2165,9 @@ local function buildRows(ui)
             total.." locations | "..count.personal.." personally confirmed",
             "GatherMate2 import: click Import GatherMate2 below, or type /fcm gather import.\n\n"..
             "Independent recording: FCM saves named herbalism/mining gathering casts when the client reports a successful gather. "..
-            "Fishing is recorded only when the client explicitly names a school or pool. "..
+            "Fishing pools: hover the named school first, cast into it, then loot the bobber. "..
+            "FCM matches the school tooltip with your fishing cast and real loot; "..
+            "type /fcm gather fishstatus to see what the client reported. "..
             "Unnamed targets are skipped to avoid false locations.\n\n"..
             "Community data: the Windows companion checks GitHub and merges published locations into your local FCM database. "..
             "No character data is uploaded; community contributions are manual for now.\n\n"..

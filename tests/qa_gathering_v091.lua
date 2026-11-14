@@ -81,6 +81,8 @@ eq(FCM:GatherCounts().mining,1,'unknown target must not invent a node')
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Fishing','cast44',7620)
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','cast44',7620)
 eq(FCM:GatherCounts().fishing,1,'open-water fishing is not a pool')
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().fishing,1,'open-water fishing loot does not invent pool coordinates')
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Rich Thorium Vein','cast45',2575)
 FCM:GatherEvent('UNIT_SPELLCAST_INTERRUPTED','player','cast45',2575)
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','cast45',2575)
@@ -249,6 +251,114 @@ GetLootSourceInfo=nil
 FCM:RememberTreasureHover('Dusty Coffer')
 FCM:GatherEvent('LOOT_READY')
 eq(FCM:GatherCounts().treasure,2,'named chest saved when source GUID API is absent')
+
+-- Forever may omit the school name from UNIT_SPELLCAST_SENT. Its game-object
+-- tooltip is the independent naming evidence, and the fishing bobber loot
+-- event (not merely a successful cast) confirms an actual interaction.
+local fishNow=12345
+function FCM:Now() return fishNow end
+GameTooltip.hooks={}
+GameTooltip.HookScript=function(self,event,fn)self.hooks[event]=fn end
+GameTooltip.IsShown=function()return true end
+GameTooltip.GetOwner=function()return nil end
+local tooltipTitle='Oily Blackmouth School'
+GameTooltipTextLeft1.GetText=function()return tooltipTitle end
+FCM:StartTreasureTracking()
+eq(type(GameTooltip.hooks.OnShow),'function','tooltip show hook is installed')
+eq(type(GameTooltip.hooks.OnUpdate),'function','tooltip update hook handles delayed labels')
+GameTooltip.hooks.OnUpdate(GameTooltip,.2)
+eq(FCM:FishingStatus():find('Oily Blackmouth School',1,true)~=nil,true,
+    'named live school tooltip is remembered')
+GameTooltip.IsShown=function()return false end
+GetNumLootItems=function()return 1 end
+GetLootSourceInfo=function()return 'GameObject-0-0-0-0-99999-00001',1 end
+local priorFish=FCM:GatherCounts().fishing
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish1',7620)
+FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','fish1',7620)
+eq(FCM:GatherCounts().fishing,priorFish,'fishing cast alone does not save a pool')
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().fishing,priorFish+1,'pool named via tooltip saved after real loot')
+FCM:GatherEvent('LOOT_OPENED')
+eq(FCM:GatherCounts().fishing,priorFish+1,'loot ready and opened not duplicated')
+local savedSchool
+for _,node in ipairs(FCM:GatherNodes('fishing')) do
+    if node.name=='Oily Blackmouth School' then savedSchool=node end
+end
+eq(savedSchool~=nil,true,'named school appears in FCM gathering rows')
+eq(savedSchool.personal,true,'observed school saved as a personal location')
+eq(FCM_GatherExport['FCMG1|fishing|1438|5440|4640|Oily Blackmouth School']~=nil,true,
+    'local export contains named school and cast position only')
+-- First school cast occurred at the 1438 player position supplied by the
+-- minimap tests; do not assert an invented position for the school itself.
+fishNow=fishNow+10
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Fishing','fish2',7620)
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().fishing,priorFish+1,
+    'stale tooltip plus open-water loot cannot create a false school')
+GameTooltip.IsShown=function()return true end
+tooltipTitle='Oily Blackmouth School'
+GameTooltip.hooks.OnShow(GameTooltip)
+GameTooltip.IsShown=function()return false end
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish3',7620)
+GetLootSourceInfo=function()return 'Creature-0-0-0-0-111-00001',1 end
+FCM:GatherEvent('LOOT_READY')
+for _,node in ipairs(FCM:GatherNodes('fishing')) do
+    if node.name=='Oily Blackmouth School' then savedSchool=node end
+end
+eq(savedSchool.gatherCount,1,'creature loot cannot count as fishing pool')
+fishNow=fishNow+1
+GetLootSourceInfo=nil -- Forever older client fallback: tooltip + cast + loot.
+GameTooltip.IsShown=function()return true end
+GameTooltip.hooks.OnShow(GameTooltip)
+GameTooltip.IsShown=function()return false end
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish4',7620)
+eq(FCM:FishingStatus():find('Cast: Oily Blackmouth School',1,true)~=nil,true,
+    'tooltip-derived pool is armed for the repeat cast')
+FCM:GatherEvent('LOOT_READY')
+eq(FCM:GatherCounts().fishing,priorFish+1,'repeat school stays a single saved node')
+for _,node in ipairs(FCM:GatherNodes('fishing')) do
+    if node.name=='Oily Blackmouth School' then savedSchool=node end
+end
+eq(savedSchool.gatherCount,2,'named school repeated loot counts as a repeat')
+eq(FCM:FishingStatus():find('Recorded Oily Blackmouth School',1,true)~=nil,true,
+    'diagnostic explains recorded fishing school')
+fishNow=fishNow+1
+C_Spell={GetSpellName=function(id)if id==999999 then return 'Fishing' end end}
+GameTooltip.IsShown=function()return true end
+GameTooltip.hooks.OnShow(GameTooltip)
+GameTooltip.IsShown=function()return false end
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish5',999999)
+FCM:GatherEvent('LOOT_OPENED')
+eq(FCM:FishingStatus():find('Last spell ID: 999999',1,true)~=nil,true,
+    'Forever fishing override ID is recognized by the Fishing spell name')
+for _,node in ipairs(FCM:GatherNodes('fishing')) do
+    if node.name=='Oily Blackmouth School' then savedSchool=node end
+end
+eq(savedSchool.gatherCount,3,'Fishing override cast still saves named school')
+C_Spell=nil
+fishNow=fishNow+1
+GameTooltip.IsShown=function()return true end
+GameTooltip.hooks.OnShow(GameTooltip)
+GameTooltip.IsShown=function()return false end
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish6',7620)
+FCM:GatherEvent('UNIT_SPELLCAST_INTERRUPTED','player','fish6',7620)
+FCM:GatherEvent('LOOT_READY')
+for _,node in ipairs(FCM:GatherNodes('fishing')) do
+    if node.name=='Oily Blackmouth School' then savedSchool=node end
+end
+eq(savedSchool.gatherCount,4,'bobber channel stop still accepts actual loot')
+fishNow=fishNow+1
+GameTooltip.IsShown=function()return true end
+GameTooltip.hooks.OnShow(GameTooltip)
+GameTooltip.IsShown=function()return false end
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish7',7620)
+FCM:GatherEvent('UNIT_SPELLCAST_FAILED','player','fish7',7620)
+FCM:GatherEvent('LOOT_READY')
+for _,node in ipairs(FCM:GatherNodes('fishing')) do
+    if node.name=='Oily Blackmouth School' then savedSchool=node end
+end
+eq(savedSchool.gatherCount,4,'failed fishing cast never saves a school')
+
 FCM:UpdateGatherMinimap()
 local chestVisible=false
 for _,pin in ipairs(FCM._gatherMiniPins) do

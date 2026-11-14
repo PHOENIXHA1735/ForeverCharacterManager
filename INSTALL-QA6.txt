@@ -1,0 +1,41 @@
+FCM v0.9.1 QA6 — Fishing School Detection (Frosty Bit)
+
+TEST BUILD. QA5 is the published GitHub main; do not publish QA6 until the
+in-game fishing test is confirmed.
+
+INSTALL SAFELY
+1. Completely close WoW Forever and the FCM Windows companion.
+2. Back up the installed ForeverCharacterManager addon folder and your
+   WoW WTF/Account/.../SavedVariables/ForeverCharacterManager.lua (or back up
+   the entire SavedVariables directory). FCM_DB and FCM_GatherExport live
+   in account SavedVariables, not in the addon source ZIP.
+3. Extract FCM-v0.9.1-QA6-Fishing-Test.zip.
+4. MERGE the extracted ForeverCharacterManager folder into the installed
+   Interface/AddOns/ForeverCharacterManager directory, replacing only
+   matching source files. DO NOT delete or replace the whole installed
+   directory. All personal and generated files must remain in place.
+5. Launch WoW, type /fcm, open Diagnostics, and check build:
+   QA6-20261114-Fishing-Pool-Detection
+
+LIVE FISHING TEST (Frosty Bit; Oily Blackmouth School at Twilight Shore)
+1. Type /fcm gather status and record the baseline fishing/personal count.
+2. Move the cursor over the visible school until the in-game tooltip actually
+   shows "Oily Blackmouth School". This is the naming evidence FCM needs.
+3. Within a few seconds, cast Fishing into the school, wait for a bite and
+   loot the bobber. A cast alone does not count.
+4. Type /fcm gather fishstatus and share the entire message.
+5. Type /fcm gather status and check whether the fishing/personal totals
+   changed (existing known nodes can count repeat catches without increasing
+   the number of distinct locations).
+6. Open FCM > Gathering and check for "Oily Blackmouth School". Open the zone
+   world map, make sure FCM Pins and Fish are On, and check the marker at
+   your approximate standing position near the pool, not the pool center.
+7. Log out normally and relog; check that the saved location persists.
+
+If it still does not save, report both status messages. `fishstatus` reports
+the last Fishing-related spell ID and whether a named tooltip/loot was seen.
+Without a client-provided school name FCM deliberately cannot infer one
+from "You receive loot: Oily Blackmouth" because open water can yield fish.
+
+Do not run a public-reference sync to test this change. No companion update,
+GitHub Release or SavedVariables reset is required.
