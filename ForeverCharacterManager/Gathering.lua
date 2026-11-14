@@ -616,12 +616,14 @@ end
 
 function FCM:UpdateGatherWorldMap()
     if not self.db or (self.db.settings and self.db.settings.gatherWorldMapPins==false) then
+        self._gatherWorldDiagnostic="World-map gathering pins disabled"
         self:HideGatherWorldMapPins()
         return
     end
     local canvas,mapID,width,height=gatherWorldMapSurface()
     if not canvas then
-        self._gatherWorldDiagnostic=tostring(mapID)
+        self._gatherWorldDiagnostic=self._gatherWorldLastOpenDiagnostic and
+            (self._gatherWorldLastOpenDiagnostic.." | map now closed") or tostring(mapID)
         self:HideGatherWorldMapPins()
         return
     end
@@ -651,9 +653,10 @@ function FCM:UpdateGatherWorldMap()
             end
         end
     end
-    self._gatherWorldDiagnostic="Map "..mapID.." | "..#matches..
+    self._gatherWorldLastOpenDiagnostic="Map "..mapID.." | "..#matches..
         " matching saved locations | stored map IDs: "..gatherMapIDs(g)..
         " | canvas "..width.."x"..height
+    self._gatherWorldDiagnostic=self._gatherWorldLastOpenDiagnostic
     -- Prefer personally discovered nodes if an unusually large imported zone
     -- exceeds the safety cap. This is display-only; no records are deleted.
     table.sort(matches,function(a,b)
@@ -665,15 +668,22 @@ function FCM:UpdateGatherWorldMap()
     end)
     self._gatherWorldPins=self._gatherWorldPins or {}
     local maxPins=math.min(#matches,500)
+    -- The map tiles/detail layers may be siblings above ScrollContainer.Child
+    -- in Forever. Parenting buttons to the child made 45 correctly matched
+    -- nodes invisible. Host buttons on the visible WorldMapFrame at a high
+    -- stratum, but anchor their centers to the scrolling child so map pan
+    -- and zoom still determine their positions.
+    local host=_G.WorldMapFrame or canvas
     for i=1,maxPins do
         local node=matches[i]
         local pin=self._gatherWorldPins[i]
-        if not pin then pin=gatherPin(canvas);self._gatherWorldPins[i]=pin end
-        if pin.nodeCanvas~=canvas then
-            pin:SetParent(canvas)
-            pin:SetFrameStrata(canvas:GetFrameStrata())
-            pin:SetFrameLevel(canvas:GetFrameLevel()+6)
+        if not pin then pin=gatherPin(host);self._gatherWorldPins[i]=pin end
+        if pin.nodeCanvas~=canvas or pin.nodeWorldHost~=host then
+            pin:SetParent(host)
+            pin:SetFrameStrata("FULLSCREEN_DIALOG")
+            pin:SetFrameLevel(math.max(host:GetFrameLevel(),canvas:GetFrameLevel())+100)
             pin.nodeCanvas=canvas
+            pin.nodeWorldHost=host
         end
         if pin.nodeIconSize~=iconSize then
             pin:SetSize(iconSize,iconSize)
@@ -704,6 +714,12 @@ function FCM:UpdateGatherWorldMap()
     self._gatherWorldRenderedHeight=height
     self._gatherWorldRenderedSize=iconSize
     self._gatherWorldMapDirty=nil
+    local first=self._gatherWorldPins[1]
+    local visibility=(maxPins>0 and first and type(first.IsVisible)=="function") and
+        tostring(first:IsVisible()) or "unavailable"
+    self._gatherWorldLastOpenDiagnostic=self._gatherWorldLastOpenDiagnostic..
+        " | "..maxPins.." pins drawn (world overlay) | first visible: "..visibility
+    self._gatherWorldDiagnostic=self._gatherWorldLastOpenDiagnostic
 end
 
 function FCM:StartGatherWorldMap()

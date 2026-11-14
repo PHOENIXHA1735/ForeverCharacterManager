@@ -2,6 +2,15 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4k world-map layering fix:** The QA4j live diagnostic detected map
+  1438 and **45 matching saved points** while the Teldrassil map was open,
+  but no icons were rendered visibly. The addon had been parenting its pin
+  buttons to the scrolling map canvas, which can be obscured by Forever's
+  detail layers. The icon buttons now live on the visible world-map frame
+  with a high overlay stratum, while their anchors still follow the scrolling
+  canvas. The last open map diagnostic is preserved when closing the map;
+  it now reports pin count and first-pin visibility if available. In-game
+  confirmation of the visual result is still required.
 - **QA4j bag-slot details and hover:** When an item is a container, FCM Item
   Explorer / Global Search now shows `Bag capacity: N slots` in the preview
   and details. FCM uses explicit saved reference capacity or the local game's

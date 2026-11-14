@@ -2,7 +2,16 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4j (combined test candidate)
+## Current source: v0.9.1 QA4k (combined test candidate)
+
+**QA4k addresses invisible world-map markers:** Spotty Dotty's live
+Teldrassil test found **45 matching saved gathering points on map 1438**,
+but no visible icons. The map ID and records were correct. FCM now parents
+the markers to the visible world-map frame, draws them over the map's detail
+layers, and still anchors positions to the scrolling map canvas for panning
+and zoom. The last map-open diagnostic persists when the map is closed to
+open FCM and reports icon render count and first-pin visibility where the
+client supports that check. Live confirmation remains necessary.
 
 **QA4j shows bag capacity:** In FCM's Item Explorer or Global Search, select a bag
 to see its slot count in the item preview and details panel. Hover an item
@@ -91,6 +100,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `INSTALL-QA4h.txt`: previous book-style rim placement test guide.
 - `INSTALL-QA4i.txt`: previous full world-map overlay test guide.
 - `INSTALL-QA4j.txt`: latest installation, bag-capacity and world-map diagnostic checks.
+- `INSTALL-QA4k.txt`: current map-overlay layer fix and live-test instructions.
 
 ## Important limitations
 

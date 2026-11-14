@@ -123,10 +123,10 @@ eq(FCM:GatherNodeIcon('herbalism','Stunted Silverleaf'),
 local function frame()
     local f={shown=true,scripts={}}
     function f:SetSize(width,height) self.width,self.height=width,height end
-    function f:SetFrameStrata() end
-    function f:SetFrameLevel() end
+    function f:SetFrameStrata(value) self.strata=value end
+    function f:SetFrameLevel(value) self.level=value end
     function f:SetScript(event,fn) self.scripts[event]=fn end
-    function f:SetPoint(_,_,_,x,y) self.x,self.y=x,y end
+    function f:SetPoint(_,anchor,_,x,y) self.anchor,self.x,self.y=anchor,x,y end
     function f:ClearAllPoints() end
     function f:SetParent(parent) self.parent=parent end
     function f:CreateTexture()
@@ -141,6 +141,7 @@ local function frame()
     function f:Show() self.shown=true end
     function f:Hide() self.shown=false end
     function f:IsShown() return self.shown end
+    function f:IsVisible() return self.shown end
     function f:GetFrameStrata() return 'MEDIUM' end
     function f:GetFrameLevel() return 3 end
     function f:GetWidth() return 180 end
@@ -320,11 +321,18 @@ for _,pin in ipairs(FCM._gatherWorldPins or {}) do
     if pin:IsShown() and pin.nodeName=='Far Silverleaf' then worldFar=pin end
 end
 eq(worldFar~=nil,true,'distant herb appears on zone world map without radius cutoff')
-eq(worldFar.parent,worldCanvas,'world overlay pins attach to scalable map canvas')
+eq(worldFar.parent,WorldMapFrame,'world overlay pins parent to visible world-map frame')
+eq(worldFar.anchor,worldCanvas,'map pin positions remain attached to scrolling canvas')
+eq(worldFar.strata,'FULLSCREEN_DIALOG','overlay draws above Forever map detail tiles')
+eq(worldFar.level>worldCanvas:GetFrameLevel(),true,'overlay draws above map layers')
 eq(worldFar.x,612,'world map x uses recorded normalized zone coordinate')
 eq(math.abs(worldFar.y+371.2)<.001,true,'world map y is measured down from top')
 eq(worldFar.width,16,'world map icon uses configured full item size')
 eq(worldFar.nodeRim,nil,'world map pins do not use minimap compass')
+eq(FCM._gatherWorldDiagnostic:find('pins drawn (world overlay)',1,true)~=nil,true,
+    'world map debug confirms how many actual icon buttons were drawn')
+eq(FCM._gatherWorldDiagnostic:find('first visible: true',1,true)~=nil,true,
+    'world map debug verifies first icon is visible according to client')
 local importedTeldrassil=false
 for _,pin in ipairs(FCM._gatherWorldPins) do
     if pin:IsShown() and pin.nodeName=='Silverleaf' and pin.nodeX==2314 then
@@ -376,11 +384,15 @@ selectedMapID=1438
 WorldMapFrame.ScrollContainer=nil
 WorldMapButton=frame()
 FCM:UpdateGatherWorldMap()
-eq(FCM._gatherWorldPins[1].parent,WorldMapButton,
-    'older clients can attach to WorldMapButton instead of scroll canvas')
+eq(FCM._gatherWorldPins[1].parent,WorldMapFrame,
+    'older clients still host visible icons on main map frame')
+eq(FCM._gatherWorldPins[1].anchor,WorldMapButton,
+    'older clients anchor map points to legacy WorldMapButton canvas')
 WorldMapFrame:Hide()
 FCM:UpdateGatherWorldMap()
 eq(FCM._gatherWorldPins[1]:IsShown(),false,'closing the world map hides FCM overlay')
+eq(FCM._gatherWorldDiagnostic:find('map now closed',1,true)~=nil,true,
+    'closed map retains last open map diagnostics for screenshot review')
 WorldMapFrame:Show()
 FCM.db.settings.gatherWorldMapPins=false
 FCM:UpdateGatherWorldMap()

@@ -1,0 +1,32 @@
+FCM v0.9.1 QA4k — world-map overlay visibility fix
+Build: QA4k-20261114-World-Map-Layer-Fix
+
+LIVE FINDING
+QA4j confirmed 45 saved gathering locations on Teldrassil map 1438, but
+the pins were not visually displayed. QA4k changes the icon button layer
+while retaining the map canvas as the positioning anchor. This is a
+test candidate, not a confirmed live-client fix or published GitHub release.
+
+SAFE UPDATE
+1. Completely close WoW Forever and the FCM Windows companion.
+2. Back up the existing ForeverCharacterManager addon and its WTF SavedVariables.
+3. Merge this ZIP's ForeverCharacterManager folder with the existing one in
+   your World of Warcraft Forever Interface\AddOns directory, replacing
+   matching source files when prompted.
+4. Do not delete your previous addon folder, generated companion data,
+   encrypted key, personal SavedVariables or gathered locations.
+5. Restart WoW; open /fcm > Diagnostics and verify the build above.
+
+TEST THE WORLD MAP
+1. On Spotty Dotty, confirm FCM > Gathering > World Map: On.
+2. Open Teldrassil with M. Previously saved herbs should now draw over
+   the terrain, including those outside your minimap radius.
+3. Hover an icon to check the saved node name and gather count. Pan or zoom
+   to confirm icons remain anchored to their map locations.
+4. Close M, open FCM > Diagnostics, and select FCM System Health.
+   The `Gathering world map:` line now keeps the last open-map result even
+   after the map closes and includes `pins drawn` / `first visible`.
+5. If no icons appear, send that diagnostic line and a world-map screenshot.
+
+The earlier QA4j bag-capacity correction is included unchanged.
+No gathering records are rewritten or removed.

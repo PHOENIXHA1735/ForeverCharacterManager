@@ -1,6 +1,18 @@
-# FCM v0.9.1 QA4j — Inline crafting, bag capacity and gathering map QA
+# FCM v0.9.1 QA4k — Inline crafting, bag capacity and gathering map QA
 
-Build `QA4j-20261114-Bag-Slots-Map-Diagnostics` (not a GitHub release).
+Build `QA4k-20261114-World-Map-Layer-Fix` (not a GitHub release).
+
+## Latest live observation and QA4k retest
+
+- QA4j installed and bag capacity was confirmed fixed by the user.
+- While Teldrassil's world map was open, FCM reported map 1438 with 45
+  matching saved locations and a usable canvas, but icons were invisible.
+- QA4k moves the rendered buttons above the map's detail layers without
+  changing their saved coordinates or the minimap's marker behavior.
+- After installing QA4k, press M for Teldrassil and inspect the previously
+  recorded herb positions. If still invisible, open FCM > Diagnostics *after*
+  closing the map: the last map-open diagnostic now stays available and
+  includes the count of pins actually drawn and the first pin's visibility.
 
 ## Test A — bag size and item hover
 
@@ -264,9 +276,9 @@ protect performance. All original locations remain in SavedVariables.
 
 The November 14 Diagnostics screenshots show **QA4h** currently installed.
 QA4h predates the **QA4i** world-map overlay; its absence there is expected.
-See `INSTALL-QA4j.txt` and check the installed `Core.lua` after merging the
+See `INSTALL-QA4k.txt` and check the installed `Core.lua` after merging the
 new combined source. The expected build marker is
-`QA4j-20261114-Bag-Slots-Map-Diagnostics`.
+`QA4k-20261114-World-Map-Layer-Fix`.
 
 ## Offline regressions
 
