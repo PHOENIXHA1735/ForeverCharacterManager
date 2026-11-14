@@ -128,6 +128,7 @@ local function frame()
     function f:SetScript(event,fn) self.scripts[event]=fn end
     function f:SetPoint(_,_,_,x,y) self.x,self.y=x,y end
     function f:ClearAllPoints() end
+    function f:SetParent(parent) self.parent=parent end
     function f:CreateTexture()
         return {SetTexture=function(texture,path)texture.path=path end,
             SetAllPoints=function()end,SetVertexColor=function()end,
@@ -295,4 +296,74 @@ for _,pin in ipairs(FCM._gatherMiniPins) do
     if pin:IsShown() and pin.nodeName=='Far Silverleaf' then smaller=pin end
 end
 eq(smaller.width,10,'rim icon shrinks with user size setting but stays legible')
-print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure and book-style rim')
+
+-- The full world map gets its own overlay, at exact normalized zone
+-- coordinates. It must not use minimap view radius or near-hide settings.
+WorldMapFrame=nil
+UIParent=frame()
+FCM:StartGatherWorldMap()
+FCM._gatherWorldController.scripts.OnUpdate(FCM._gatherWorldController,.55)
+eq(FCM._gatherWorldPins==nil,true,'lazy-loaded world map is optional at login')
+local worldCanvas=frame()
+worldCanvas.GetWidth=function() return 1000 end
+worldCanvas.GetHeight=function() return 800 end
+WorldMapFrame=frame()
+WorldMapFrame.ScrollContainer={Child=worldCanvas}
+local selectedMapID=1438
+WorldMapFrame.GetMapID=function() return selectedMapID end
+FCM.db.settings.gatherWorldMapPins=true
+FCM.db.settings.gatherPinSize=16
+FCM.db.settings.gatherPinHideYards=50
+FCM._gatherWorldController.scripts.OnUpdate(FCM._gatherWorldController,.55)
+local worldFar
+for _,pin in ipairs(FCM._gatherWorldPins or {}) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then worldFar=pin end
+end
+eq(worldFar~=nil,true,'distant herb appears on zone world map without radius cutoff')
+eq(worldFar.parent,worldCanvas,'world overlay pins attach to scalable map canvas')
+eq(worldFar.x,612,'world map x uses recorded normalized zone coordinate')
+eq(math.abs(worldFar.y+371.2)<.001,true,'world map y is measured down from top')
+eq(worldFar.width,16,'world map icon uses configured full item size')
+eq(worldFar.nodeRim,nil,'world map pins do not use minimap compass')
+FCM:UpdateGatherWorldMap()
+eq(worldFar:IsShown(),true,'unchanged map redraw is safely cached')
+worldFar.scripts.OnEnter(worldFar)
+local foundWorldGatherCount=false
+for _,line in ipairs(GameTooltip.lines) do
+    if line=='1 personal gather' then foundWorldGatherCount=true end
+end
+eq(foundWorldGatherCount,true,'world map hover displays personal gather counts')
+eq(FCM:AddGatherNode('herbalism',1438,1234,5678,'New Map Herb','personal'),true,
+    'gathering can save a fresh location while world map is open')
+FCM._gatherWorldController.scripts.OnUpdate(FCM._gatherWorldController,.01)
+local newMapHerb=false
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    if pin:IsShown() and pin.nodeName=='New Map Herb' then newMapHerb=true end
+end
+eq(newMapHerb,true,'new node refreshes full map immediately without relog')
+FCM.db.settings.gatherPins=false
+FCM:UpdateGatherWorldMap()
+eq(worldFar:IsShown(),true,'world map toggle is independent of minimap pins')
+selectedMapID=37
+FCM:UpdateGatherWorldMap()
+local worldCopper=false
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    if pin:IsShown() and pin.nodeName=='Copper Vein' then worldCopper=true end
+    eq(pin.nodeName~='Far Silverleaf' or not pin:IsShown(),true,
+        'old zone herbs are not retained after switching map zones')
+end
+eq(worldCopper,true,'switching map shows only its saved gathering records')
+selectedMapID=1438
+WorldMapFrame.ScrollContainer=nil
+WorldMapButton=frame()
+FCM:UpdateGatherWorldMap()
+eq(FCM._gatherWorldPins[1].parent,WorldMapButton,
+    'older clients can attach to WorldMapButton instead of scroll canvas')
+WorldMapFrame:Hide()
+FCM:UpdateGatherWorldMap()
+eq(FCM._gatherWorldPins[1]:IsShown(),false,'closing the world map hides FCM overlay')
+WorldMapFrame:Show()
+FCM.db.settings.gatherWorldMapPins=false
+FCM:UpdateGatherWorldMap()
+eq(FCM._gatherWorldPins[1]:IsShown(),false,'independent world-map setting hides only full-map pins')
+print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure, rim and world-map overlay')

@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA4h-20261114-Rim-Book-Style"
+FCM.build = "QA4i-20261114-Gathering-World-Map"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -69,6 +69,9 @@ function FCM:InitDB()
     -- An existing v0.1.0 SavedVariables file remains compatible.
     db.settings.minimap = db.settings.minimap or { x = -66, y = 66 }
     db.settings.gatherPins = db.settings.gatherPins ~= false
+    -- Independent of the minimap toggle: the full zone map displays saved
+    -- locations even when far from the character or inside the hide radius.
+    db.settings.gatherWorldMapPins = db.settings.gatherWorldMapPins ~= false
     -- Once close enough to inspect the actual node, stop covering the
     -- game's own tracking dot with FCM's historical location marker.
     db.settings.gatherPinHideYards=math.max(0,math.min(50,
@@ -451,6 +454,7 @@ f:SetScript("OnEvent", function(_, event, ...)
         -- Initialize the minimap button at login; opening the main window is optional.
         if FCM.UI and FCM.UI.CreateMinimap then FCM.UI:CreateMinimap() end
         if FCM.StartGatherMinimap then FCM:StartGatherMinimap() end
+        if FCM.StartGatherWorldMap then FCM:StartGatherWorldMap() end
         if FCM.StartTreasureTracking then FCM:StartTreasureTracking() end
         if C_Timer and C_Timer.After then
             C_Timer.After(3, function()
@@ -710,10 +714,17 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         local proximity=requested:match("^near%s+(%d+)$")
         local rim=requested:match("^rim%s+(%d+)$")
         local size=requested:match("^size%s+(%d+)$")
-        if size and tonumber(size)>=8 and tonumber(size)<=32 then
+        local world=requested:match("^world%s+(on|off)$")
+        if world then
+            FCM.db.settings.gatherWorldMapPins=(world=="on")
+            FCM._gatherWorldMapDirty=true
+            if world=="off" and FCM.HideGatherWorldMapPins then FCM:HideGatherWorldMapPins() end
+            FCM:Say("Saved gathering markers on world map: "..world)
+        elseif size and tonumber(size)>=8 and tonumber(size)<=32 then
             FCM.db.settings.gatherPinSize=tonumber(size)
             FCM._gatherMinimapDirty=true
-            FCM:Say("Saved gathering markers now use "..size.."-pixel icons on and around the minimap.")
+            FCM._gatherWorldMapDirty=true
+            FCM:Say("Gathering icon size set to "..size.." px for the minimap and world map (rim icons display smaller).")
         elseif rim and tonumber(rim)<=100 then
             FCM.db.settings.gatherPinRimYards=tonumber(rim)
             FCM._gatherMinimapDirty=true
@@ -728,7 +739,7 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             FCM._gatherMinimapDirty=true
             if requested=="off" and FCM.HideGatherMinimapPins then FCM:HideGatherMinimapPins() end
             FCM:Say("Saved gathering markers on minimap: "..requested)
-        else FCM:Say("Usage: /fcm gatherpins on|off, near <0-50>, rim <0-100>, or size <8-32>") end
+        else FCM:Say("Usage: /fcm gatherpins on|off, world on|off, near <0-50>, rim <0-100>, or size <8-32>") end
     elseif cmd == "minimap" then
         if string.lower(rest or "") == "reset" then
             if FCM.UI and FCM.UI.ResetMinimap then FCM.UI:ResetMinimap() end

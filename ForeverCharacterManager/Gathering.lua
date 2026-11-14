@@ -114,6 +114,7 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
             existing.lastSeen=self:Now()
             self._gatherCounts=nil
             self._gatherMinimapDirty=true
+            self._gatherWorldMapDirty=true
             rememberPersonal(kind,mapID,existing.x,existing.y,existing.name)
         end
         return false
@@ -125,6 +126,7 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
         lastSeen=source=="personal" and self:Now() or nil}
     self._gatherCounts=nil
     self._gatherMinimapDirty=true
+    self._gatherWorldMapDirty=true
     g.stats[source]=(g.stats[source] or 0)+1
     if source=="personal" then
         -- A separate, sanitized SavedVariable lets the companion export ONLY
@@ -315,11 +317,12 @@ function FCM:HideGatherMinimapPins()
     for _,pin in ipairs(self._gatherMiniPins or {}) do pin:Hide() end
 end
 
-local function gatherPin()
-    local pin=CreateFrame("Button",nil,Minimap)
+local function gatherPin(parent)
+    parent=parent or Minimap
+    local pin=CreateFrame("Button",nil,parent)
     pin:SetSize(16,16)
-    pin:SetFrameStrata(Minimap:GetFrameStrata())
-    pin:SetFrameLevel(Minimap:GetFrameLevel()+6)
+    pin:SetFrameStrata(parent:GetFrameStrata())
+    pin:SetFrameLevel(parent:GetFrameLevel()+6)
     local icon=pin:CreateTexture(nil,"ARTWORK")
     icon:SetAllPoints(pin)
     pin.icon=icon
@@ -524,6 +527,161 @@ function FCM:StartGatherMinimap()
     end)
     self._gatherMiniController=controller
     self._gatherMinimapDirty=true
+end
+
+-- The world map is separate from the minimap: it displays every saved
+-- location in the selected zone, regardless of distance from the player.
+-- Prefer Blizzard's scaled map canvas so pins follow map zoom and panning;
+-- older Forever clients can instead expose the legacy WorldMapButton.
+local function gatherWorldMapSurface()
+    local world=_G.WorldMapFrame
+    if not world or type(world.IsShown)~="function" or not world:IsShown() then return end
+    local scroll=world.ScrollContainer
+    local canvas=scroll and scroll.Child
+    if not canvas and scroll and type(scroll.GetCanvas)=="function" then
+        local ok,value=pcall(scroll.GetCanvas,scroll)
+        if ok then canvas=value end
+    end
+    canvas=canvas or world.MapCanvas or _G.WorldMapButton or _G.WorldMapDetailFrame
+    if not canvas or type(canvas.GetWidth)~="function" or
+       type(canvas.GetHeight)~="function" then return end
+    local mapID
+    if type(world.GetMapID)=="function" then
+        local ok,value=pcall(world.GetMapID,world)
+        if ok then mapID=value end
+    end
+    if not mapID and scroll and type(scroll.GetMapID)=="function" then
+        local ok,value=pcall(scroll.GetMapID,scroll)
+        if ok then mapID=value end
+    end
+    if not mapID then mapID=world.mapID end
+    if not mapID and type(_G.GetCurrentMapAreaID)=="function" then
+        local ok,value=pcall(_G.GetCurrentMapAreaID)
+        if ok then mapID=value end
+    end
+    mapID=tonumber(mapID)
+    if not mapID or mapID<1 or mapID~=math.floor(mapID) then return end
+    local width,height=canvas:GetWidth(),canvas:GetHeight()
+    if type(width)~="number" or type(height)~="number" or
+       width<=0 or height<=0 then return end
+    return canvas,mapID,width,height
+end
+
+function FCM:HideGatherWorldMapPins()
+    if not self._gatherWorldRenderedMapID and not self._gatherWorldPinsVisible then return end
+    for _,pin in ipairs(self._gatherWorldPins or {}) do pin:Hide() end
+    self._gatherWorldRenderedMapID=nil
+    self._gatherWorldRenderedCanvas=nil
+    self._gatherWorldPinsVisible=nil
+end
+
+function FCM:UpdateGatherWorldMap()
+    if not self.db or (self.db.settings and self.db.settings.gatherWorldMapPins==false) then
+        self:HideGatherWorldMapPins()
+        return
+    end
+    local canvas,mapID,width,height=gatherWorldMapSurface()
+    if not canvas then self:HideGatherWorldMapPins(); return end
+    local g=self:GatherDB()
+    if not g then self:HideGatherWorldMapPins(); return end
+    local iconSize=math.max(8,math.min(32,
+        math.floor(tonumber(self.db.settings and self.db.settings.gatherPinSize) or 16)))
+    -- When panning or zooming, the map scroll child's own transform carries
+    -- all anchored pins. Rebuilding hundreds of pins every half second is
+    -- unnecessary unless the map/geometry/settings/data actually changed.
+    if not self._gatherWorldMapDirty and self._gatherWorldRenderedMapID==mapID and
+       self._gatherWorldRenderedCanvas==canvas and
+       self._gatherWorldRenderedWidth==width and
+       self._gatherWorldRenderedHeight==height and
+       self._gatherWorldRenderedSize==iconSize then return end
+    local matches={}
+    for kind,maps in pairs(g.nodes) do
+        local zone=type(maps)=="table" and (maps[mapID] or maps[tostring(mapID)])
+        if type(zone)=="table" then
+            for _,node in pairs(zone) do
+                if type(node)=="table" and type(node.name)=="string" and
+                   type(node.x)=="number" and type(node.y)=="number" and
+                   node.x>=0 and node.x<=10000 and node.y>=0 and node.y<=10000 then
+                    matches[#matches+1]={kind=kind,name=node.name,x=node.x,y=node.y,
+                        personal=node.personal,gatherCount=node.gatherCount,
+                        gatherCountMinimum=node.gatherCountMinimum}
+                end
+            end
+        end
+    end
+    -- Prefer personally discovered nodes if an unusually large imported zone
+    -- exceeds the safety cap. This is display-only; no records are deleted.
+    table.sort(matches,function(a,b)
+        if (a.personal==true)~=(b.personal==true) then return a.personal==true end
+        if a.kind~=b.kind then return a.kind<b.kind end
+        if a.name~=b.name then return a.name<b.name end
+        if a.x~=b.x then return a.x<b.x end
+        return a.y<b.y
+    end)
+    self._gatherWorldPins=self._gatherWorldPins or {}
+    local maxPins=math.min(#matches,500)
+    for i=1,maxPins do
+        local node=matches[i]
+        local pin=self._gatherWorldPins[i]
+        if not pin then pin=gatherPin(canvas);self._gatherWorldPins[i]=pin end
+        if pin.nodeCanvas~=canvas then
+            pin:SetParent(canvas)
+            pin:SetFrameStrata(canvas:GetFrameStrata())
+            pin:SetFrameLevel(canvas:GetFrameLevel()+6)
+            pin.nodeCanvas=canvas
+        end
+        if pin.nodeIconSize~=iconSize then
+            pin:SetSize(iconSize,iconSize)
+            pin.nodeIconSize=iconSize
+        end
+        pin.nodeName,pin.nodeKind=node.name,node.kind
+        pin.nodeX,pin.nodeY=node.x,node.y
+        pin.nodePersonal=node.personal
+        pin.nodeCount=node
+        pin.nodeRim=nil
+        pin.nodeDistance=nil
+        pin.nodeCluster=1
+        if pin.iconName~=node.name or pin.iconKind~=node.kind then
+            pin.icon:SetTexture(self:GatherNodeIcon(node.kind,node.name))
+            pin.iconName,pin.iconKind=node.name,node.kind
+        end
+        pin.icon:SetVertexColor(1,1,1,1)
+        if pin.clusterBadge then pin.clusterBadge:Hide() end
+        pin:ClearAllPoints()
+        pin:SetPoint("CENTER",canvas,"TOPLEFT",node.x*width/10000,-node.y*height/10000)
+        pin:Show()
+        self._gatherWorldPinsVisible=true
+    end
+    for i=maxPins+1,#self._gatherWorldPins do self._gatherWorldPins[i]:Hide() end
+    self._gatherWorldRenderedMapID=mapID
+    self._gatherWorldRenderedCanvas=canvas
+    self._gatherWorldRenderedWidth=width
+    self._gatherWorldRenderedHeight=height
+    self._gatherWorldRenderedSize=iconSize
+    self._gatherWorldMapDirty=nil
+end
+
+function FCM:StartGatherWorldMap()
+    if self._gatherWorldController or type(CreateFrame)~="function" then return end
+    -- The world map may not be loaded until the player presses M. A small
+    -- passive controller lets that lazy-loaded frame appear without requiring
+    -- a reload or modifying Blizzard map scripts.
+    local controller=CreateFrame("Frame",nil,UIParent)
+    controller.elapsed=0
+    controller:SetScript("OnUpdate",function(frame,elapsed)
+        frame.elapsed=frame.elapsed+(tonumber(elapsed) or 0)
+        if frame.elapsed<0.5 and not FCM._gatherWorldMapDirty then return end
+        frame.elapsed=0
+        local ok,err=pcall(FCM.UpdateGatherWorldMap,FCM)
+        if not ok then
+            FCM:HideGatherWorldMapPins()
+            if not frame.failureReported then
+                frame.failureReported=true
+                if FCM.RecordError then FCM:RecordError("Gathering world map",err) end
+            end
+        else frame.failureReported=nil end
+    end)
+    self._gatherWorldController=controller
 end
 
 function FCM:RememberTreasureHover(value)

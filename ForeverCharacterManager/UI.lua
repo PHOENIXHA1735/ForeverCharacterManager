@@ -1117,6 +1117,17 @@ function UI:Create()
     end)
     self.gatherSizeButton:SetPoint("LEFT",self.gatherRimButton,"RIGHT",8,0)
     self.gatherSizeButton:Hide()
+    self.gatherWorldButton=button(panel,"World Map: On",132,25,function()
+        if not FCM.db or not FCM.db.settings then return end
+        FCM.db.settings.gatherWorldMapPins=not FCM.db.settings.gatherWorldMapPins
+        FCM._gatherWorldMapDirty=true
+        if not FCM.db.settings.gatherWorldMapPins and FCM.HideGatherWorldMapPins then
+            FCM:HideGatherWorldMapPins()
+        end
+        self:Refresh()
+    end)
+    self.gatherWorldButton:SetPoint("LEFT",self.gatherSizeButton,"RIGHT",8,0)
+    self.gatherWorldButton:Hide()
 
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
@@ -1477,6 +1488,7 @@ function UI:ShowGatherSizeMenu()
             run=function()
                 FCM.db.settings.gatherPinSize=size
                 FCM._gatherMinimapDirty=true
+                FCM._gatherWorldMapDirty=true
                 self:Refresh()
             end,
         }
@@ -2142,7 +2154,8 @@ local function buildRows(ui)
             "No character data is uploaded; community contributions are manual for now.\n\n"..
             "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
-            "Saved nodes appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
+            "Saved nodes appear on the full world map at their recorded zone positions, even far from your character; World Map: On/Off controls that overlay separately. "..
+            "Saved nodes also appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
             "The Gathering tab has a Hide within distance dropdown (15 yards recommended), "..
                 "a Pins On/Off toggle, a Rim beyond dropdown (45 yards by default), "..
                 "and a Size dropdown (16 pixels by default; 8-32 by command). "..
@@ -2151,7 +2164,7 @@ local function buildRows(ui)
                 "Rim sectors group nodes in the same direction and show a count. "..
                 "0 disables either distance behavior independently. "..
             "Alternatively use /fcm gatherpins near <0-50>, rim <0-100>, "..
-                "size <8-32>, or on|off. "..
+                "size <8-32>, on|off, or world on|off. "..
                 "They are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
@@ -3405,6 +3418,7 @@ function UI:Refresh()
         self.gatherPinsButton:SetShown(gathering)
         self.gatherRimButton:SetShown(gathering)
         self.gatherSizeButton:SetShown(gathering)
+        self.gatherWorldButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or
@@ -3415,6 +3429,8 @@ function UI:Refresh()
                 ("Rim beyond: "..rim.." yd"))
             self.gatherSizeButton:SetText("Size: "..
                 tostring(tonumber(FCM.db.settings.gatherPinSize) or 16).." px")
+            self.gatherWorldButton:SetText(FCM.db.settings.gatherWorldMapPins and
+                "World Map: On" or "World Map: Off")
         end
         if crafting then
             local selectedProfession=FCM.db.settings.craftProfession or "all"

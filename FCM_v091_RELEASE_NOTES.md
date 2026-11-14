@@ -2,6 +2,17 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4i full world-map gathering overlay:** The zone map now displays saved
+  historical herb, mining, named fishing-pool and treasure locations at their
+  normalized recorded map coordinates, even far from the active character.
+  Hover icons to read the resource name, source status and personal gather
+  count. The new **World Map: On/Off** control in FCM > Gathering operates
+  independently of minimap Pins: On/Off, and `/fcm gatherpins world on|off`
+  provides the same switch. Map icons follow the existing Size setting; the
+  minimap-specific 45-yard rim and 15-yard near-hide settings do **not** hide
+  world-map discoveries. Only locations on the selected zone map are drawn,
+  with a defensive 500-pin display cap prioritizing personal confirmations.
+  Client compatibility, zoom, map switching and hover need live verification.
 - **QA4h book-style rim alignment:** Directional historical gathering pins
   now **straddle the circular minimap border**, like the native book symbols,
   instead of sitting detached beyond it. To match their smaller visual scale,

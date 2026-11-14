@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4h — Inline crafting and gathering minimap QA
+# FCM v0.9.1 QA4i — Inline crafting and gathering map QA
 
-Build `QA4h-20261114-Rim-Book-Style` (not a GitHub release).
+Build `QA4i-20261114-Gathering-World-Map` (not a GitHub release).
 
 ## Install
 
@@ -208,13 +208,41 @@ from the chest, not a client-provided coordinate for the chest object.
 5. Rotate and zoom the map while watching a rim icon. Report screenshots if
    the icon drifts off the border or its relative direction is inaccurate.
 
+## Test 12 — saved gathering locations on the full world map
+
+1. With a character logged in, open **FCM > Gathering**, set **World Map: On**
+   and **Size: 16 px**. Keep the minimap **Pins: Off** temporarily to verify
+   that the world-map overlay works independently.
+2. Press **M** to open the world map and select **Kalimdor > Teldrassil**.
+   Previously saved **Wilted Peacebloom**, **Silverleaf** and any qualifying
+   treasures should appear as distinct item icons at their recorded zone
+   coordinates, even if they are well outside the current minimap view.
+3. Hover an icon. Check the exact resource name, map coordinates, and personal
+   gathering count. These are historical locations, not proof of a live spawn.
+4. Zoom or pan the map and compare each icon with roads and terrain. It must
+   follow the same spot rather than stay fixed on the screen. Switch to a
+   different zone map; Teldrassil icons should disappear and only nodes
+   recorded for the newly selected zone should remain.
+5. Turn **World Map: Off** (or `/fcm gatherpins world off`). The zone-map
+   resource icons should disappear. Turn it on again to restore them. The
+   minimap pin toggle and FCM launcher remain unchanged.
+6. Change **Size** to 24 px. World-map markers should resize on the next
+   refresh. Change **Hide within** to 50 yd and return to a gathered spot;
+   the full map should still show it, while the minimap may hide the icon.
+7. If no world-map pins display, check Diagnostics for errors and share a
+   screenshot showing the currently selected zone and map UI. Client map
+   internals can differ from the offline mock; do not delete or reimport data.
+
+World-map rendering is capped at 500 visible markers per selected zone to
+protect performance. All original locations remain in SavedVariables.
+
 ## Confirm that the installed files actually updated
 
 The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
 still installed, which is older than QA4b/QA4c and explains the identical
-emblem markers. See `INSTALL-QA4h.txt` and check the installed `Core.lua` after
+emblem markers. See `INSTALL-QA4i.txt` and check the installed `Core.lua` after
 merging this release. The expected build marker is
-`QA4h-20261114-Rim-Book-Style`.
+`QA4i-20261114-Gathering-World-Map`.
 
 ## Offline regressions
 

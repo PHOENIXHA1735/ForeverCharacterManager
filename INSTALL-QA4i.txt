@@ -1,0 +1,34 @@
+FCM v0.9.1 QA4i — gathering markers on the full world map
+Build: QA4i-20261114-Gathering-World-Map
+
+SAFE WINDOWS UPDATE
+1. Fully close World of Warcraft: Forever and the FCM Windows companion.
+2. Back up your installed ForeverCharacterManager folder and WTF SavedVariables.
+3. Open the ZIP. Copy its ForeverCharacterManager folder into:
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+4. MERGE the folders and replace matching addon source files when prompted.
+   Do NOT delete the existing folder, saved data, generated reference files,
+   encrypted API key, gathering cache or companion state.
+5. Start WoW and confirm Diagnostics reports:
+   QA4i-20261114-Gathering-World-Map
+
+Optional PowerShell 5.1 check:
+Select-String -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua" -Pattern "FCM.build"
+
+WORLD MAP TEST
+1. Open /fcm > Gathering and select World Map: On, Size: 16 px.
+2. Press M. Select Kalimdor > Teldrassil. Previously saved herbs and other
+   gathering locations should appear as item icons on the full zone map,
+   even when far outside your minimap view.
+3. Hover icons for resource names, recorded coordinates and gather counts.
+   Move/zoom the map; markers should remain anchored to the terrain.
+4. Change zones and check that only the selected zone's saved nodes show.
+5. Set World Map: Off, then On, verifying that the world-map pins disappear
+   and return without affecting the separate minimap pins or FCM launcher.
+   Command alternative: /fcm gatherpins world on|off
+6. The world-map pins use the Gathering Size setting but ignore the minimap
+   Hide within and Rim beyond thresholds; those still work as in QA4h.
+
+The world map shows previously recorded locations, not live spawns. Up to
+500 markers per zone are drawn (personal finds first); no data is deleted.
+This is a local QA preview, not a GitHub release. Live testing is required.

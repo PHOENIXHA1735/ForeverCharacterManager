@@ -2,9 +2,11 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4h (combined test candidate)
+## Current source: v0.9.1 QA4i (combined test candidate)
 
-**QA4h aligns distant gathering icons with the minimap's book markers:** Historical herb, ore, fishing and treasure icons on the directional rim are now **centered on the circular border**, straddling it like the game's small book symbols, instead of floating outside it. With **FCM > Gathering > Size: 16 px** (default), rim icons display at about **12 px**, while closer in-map icons stay **16 px**. The size selector (10, 12, 14, 16, 18, 20, 24, 28 px) and `/fcm gatherpins size <8-32>` scale both; the launcher emblem does not change. Hide-within and Rim-beyond thresholds remain independently adjustable. Live WoW Forever testing is still pending.
+**QA4i adds saved resource icons to the full world map:** Open a **zone** map (such as Teldrassil) and see FCM's recorded herbs, ore, fishing locations and treasure at their original map coordinates, not just the minimap. Hover for the resource and personal gather count. **FCM > Gathering > World Map: On/Off** or `/fcm gatherpins world on|off` controls this overlay independently from the minimap pin toggle. The world-map display ignores minimap view distance and near-hide distance, so saved locations remain visible across the selected zone; it is not live-spawn tracking. The regular gathering Size control scales map icons too. Up to 500 pins per selected zone are displayed, prioritizing personally confirmed observations. This preview still needs in-game validation of the Forever world-map canvas.
+
+**QA4h aligns distant gathering icons with the minimap's book markers:** Historical herb, ore, fishing and treasure icons on the directional rim are **centered on the circular border**, straddling it like the game's small book symbols, instead of floating outside it. With **FCM > Gathering > Size: 16 px** (default), rim icons display at about **12 px**, while closer in-map icons stay **16 px**. The size selector (10, 12, 14, 16, 18, 20, 24, 28 px) and `/fcm gatherpins size <8-32>` scale both; the launcher emblem does not change. Hide-within and Rim-beyond thresholds remain independently adjustable. Live WoW Forever testing is still pending.
 
 The **v0.9.1 QA4f preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box with a live right-side estimate of owned items, casts, reagents, stock by character and eligible material transfers. Gathering draws saved account-wide nodes on the minimap using distinct resource art and circular masks where the WoW client supports them. **Distant resource markers now occupy a grouped directional compass on the outer minimap ring instead of covering the map itself.** They move onto the map when within 45 yards (adjustable), then disappear within the independently adjustable 15-yard hide distance so WoW's native tracking dots are visible. Change this using **FCM > Gathering > Rim beyond** (0, 25, 35, 45, 55, 65, 85 or 100 yards), **Hide within** (0, 5, 10, 15, 20, 25, 35 or 50 yards) and **Pins: On/Off**. Slash alternatives: `/fcm gatherpins rim <0-100>`, `/fcm gatherpins near <0-50>`, `/fcm gatherpins on|off`. Hover a saved node to see its personal gather count. Named treasure chest interactions can also be recorded after an actual loot event, subject to the game reporting the chest name. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
 
@@ -15,7 +17,7 @@ The **v0.9.1 QA4f preview** includes all QA3 features (local gathering, optional
 - Faction, ruleset and region-aware evaluation of transfer eligibility; unknown item binding and rulesets stay unverified.
 - Gear scoring, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
 - Windows companion scripts for read-only public reference import, auction reference updates and local tooling.
-- Gathering tab: account-wide personally observed herbs, ore and eligible named treasure chests, one-time read-only GatherMate2 import, and versioned public resource snapshots.
+- Gathering tab: account-wide personally observed herbs, ore and eligible named treasure chests, one-time read-only GatherMate2 import, minimap/zone world-map overlays, and versioned public resource snapshots.
 - Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); numerically imported Zygor/Pawn weight profiles for character-specific gear comparisons.
 - Crafting requests accept finished-item quantities (including multi-output recipes), with a client-safe Enter/Continue popup handler.
 - The Crafting tab offers a saved profession dropdown and a separate search covering learned recipes, their output items and recipe IDs only.
@@ -49,7 +51,7 @@ On the Windows PC, save the approved key with **Remember encrypted**, then doubl
 
 The community snapshot contains no character IDs, inventory, accounts, passwords or GatherMate2 proprietary data. Never upload `WTF` files or complete FCM SavedVariables. The local private data and imported nodes survive removal of GatherMate2; **do not remove GatherMate2 until the in-game tests confirm import and independent recording**.
 
-Nearby historical gathering markers are now available on the minimap, subject to the WoW client exposing world-coordinate and minimap-radius APIs. Full world-map overlays, optimized routes, and automatically connecting crafting queues to gathering spots are not enabled in this preview. No server or NAS hosting is required.
+Historical gathering markers are available on the minimap, subject to the WoW client exposing world-coordinate and minimap-radius APIs. Saved markers also appear on the selected zone's full world map via the client's map canvas or legacy map button; verify this display in-game. Optimized routes and automatically connecting crafting queues to gathering spots are not enabled in this preview. No server or NAS hosting is required.
 
 ## ForeverDB API key (optional)
 
@@ -73,6 +75,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `INSTALL-QA4f.txt`: latest safe install and compass-rim test instructions.
 - `INSTALL-QA4g.txt`: prior safe installation and marker-sizing test guide.
 - `INSTALL-QA4h.txt`: current safe installation and book-style rim placement test guide.
+- `INSTALL-QA4i.txt`: latest safe installation and full world-map overlay test guide.
 
 ## Important limitations
 
