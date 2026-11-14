@@ -2060,7 +2060,10 @@ local function buildRows(ui)
             "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
             "Saved nodes appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
-            "Use /fcm gatherpins off|on to toggle markers; they are not live spawn indicators.\n"..
+            "Markers hide within "..tostring(FCM.db.settings.gatherPinHideYards or 15)..
+                " yards of your character so they do not cover WoW's own tracking dots. "..
+            "Use /fcm gatherpins near 15 to change the hiding distance (0-50), "..
+                "or /fcm gatherpins off|on to toggle markers. They are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
         local categories={"herbalism","mining","fishing","treasure"}
@@ -2380,7 +2383,8 @@ local function buildRows(ui)
             end)
         end
     elseif tab=="Diagnostics" then
-        add("report","FCM System Health","Live addon state, data ages, and recorded API errors",function()
+        add("report","FCM System Health","Build: "..tostring(FCM.build or "unlabeled")..
+            " | live state, data ages, and recorded API errors",function()
             return FCM:DiagnosticsReport().."\n\n"..FCM:AdvisorDiagnostics()
         end)
         for _,person in ipairs(FCM:VisibleCharacters()) do

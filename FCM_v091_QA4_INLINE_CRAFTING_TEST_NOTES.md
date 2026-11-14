@@ -1,6 +1,6 @@
-# FCM v0.9.1 QA4c — Inline crafting and gathering minimap details
+# FCM v0.9.1 QA4d — Inline crafting and nearby minimap markers
 
-Build `QA4c-20261114-Gathering-Counts` (not a GitHub release).
+Build `QA4d-20261114-Nearby-Node-Visibility` (not a GitHub release).
 
 ## Install
 
@@ -107,6 +107,27 @@ Build `QA4c-20261114-Gathering-Counts` (not a GitHub release).
 Only completed named gathering casts increment a count. Earlier repeat visits
 cannot be reconstructed from saved locations, and different nearby plants with
 the same name may require manual confirmation if they are within eight yards.
+
+## Test 6 — do not cover the game's own gathering dot
+
+1. In-game, type `/fcm gatherpins on` and `/fcm gatherpins near 15`.
+2. Walk toward a previously recorded herb, ore vein or fishing school while
+   any relevant native tracking is enabled. FCM's historical item icon should
+   disappear once you are within 15 yards, exposing the native minimap dot.
+3. Back away beyond 15 yards while still within minimap range. The FCM icon
+   should reappear, retaining its name, count, and icon art.
+4. Run `/fcm gatherpins near 25`, then `/fcm gatherpins near 0` to verify the
+   cutoff changes and that zero disables close-range hiding entirely.
+5. The round launcher button must remain visible throughout. FCM only hides
+   its *own* location markers; it does not control Blizzard tracking dots.
+
+## Confirm that the installed files actually updated
+
+The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
+still installed, which is older than QA4b/QA4c and explains the identical
+emblem markers. See `INSTALL-QA4d.txt` and check the installed `Core.lua` after
+merging this release. The expected build marker is
+`QA4d-20261114-Nearby-Node-Visibility`.
 
 ## Offline regressions
 

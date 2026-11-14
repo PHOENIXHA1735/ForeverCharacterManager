@@ -93,6 +93,10 @@ eq(math.floor(ax*100+.5),10,'right of player minimap position')
 eq(math.floor(ay*100+.5),-10,'above/below map axis orientation')
 eq(math.floor(distance+.5),14,'world distance')
 eq(FCM:GatherMinimapOffset(550,460,350,450,100,nil,false),nil,'hide distant node')
+eq(FCM:GatherMinimapOffset(550,460,540,450,100,nil,false,15),nil,
+    'saved marker hidden when within 15 yards of its tracked location')
+eq(FCM:GatherMinimapOffset(550,460,540,450,100,nil,false,10)~=nil,true,
+    'saved marker still shown outside configured hiding distance')
 local rx,ry=FCM:GatherMinimapOffset(550,460,540,460,100,math.pi/2,true)
 eq(math.abs(rx)<0.0001,true,'rotating minimap rotates x')
 eq(math.floor(ry*100+.5),-10,'rotating minimap rotates y')
@@ -135,7 +139,7 @@ C_Map={
     end,
     GetMapWorldSize=function() return 1000,1000 end,
 }
-FCM.db.settings={gatherPins=true}
+FCM.db.settings={gatherPins=true,gatherPinHideYards=0}
 FCM:AddGatherNode('herbalism',1438,5438,4635,'Wilted Peacebloom','personal')
 FCM:AddGatherNode('herbalism',1438,5519,4594,'Wilted Peacebloom','personal')
 FCM:AddGatherNode('herbalism',1438,5440,4650,'Silverleaf','personal')
@@ -166,6 +170,12 @@ end
 eq(hasCount,true,'minimap hover tooltip shows repeat and nearby gather count')
 eq(FCM_GatherExport['FCMG1|herbalism|1438|5439|4636|Wilted Peacebloom'],nil,
     'nearby repeated casts do not create duplicate contribution nodes')
+FCM.db.settings.gatherPinHideYards=15
+FCM:UpdateGatherMinimap()
+eq(FCM._gatherMiniPins[1]:IsShown(),false,'close-range hiding frees the game tracking dot')
+FCM.db.settings.gatherPinHideYards=0
+FCM:UpdateGatherMinimap()
+eq(FCM._gatherMiniPins[1]:IsShown(),true,'zero-yard setting restores saved marker')
 FCM.db.settings.gatherPins=false
 FCM:UpdateGatherMinimap()
 eq(FCM._gatherMiniPins[1]:IsShown(),false,'off toggle hides FCM nodes')
@@ -176,4 +186,4 @@ eq(FCM._gatherMiniPins[2]:IsShown(),false,'missing radius API hides rather than 
 Minimap.GetViewRadius=function() return 100 end
 FCM:UpdateGatherMinimap()
 eq(FCM._gatherMiniPins[2]:IsShown(),true,'Ascension-style Minimap:GetViewRadius fallback')
-print('PASS: FCM discovery, repeated gather counts, legacy honesty, minimap tooltip and safety')
+print('PASS: FCM gathering counts, distinct icons, near-range hiding, minimap tooltip and safety')

@@ -1,0 +1,50 @@
+FCM v0.9.1 QA4d - Install into the actual WoW Forever AddOns folder
+==================================================================
+
+Your previous PowerShell screenshot showed this installed file was still QA4:
+
+  C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua
+
+Its build label was QA4-20261114-Inline-Crafting-Gathering-Pins, not QA4c.
+That is why it still displayed the old FCM emblem on gathering nodes.
+
+SAFE UPDATE (while WoW and the FCM companion are fully closed)
+
+1. Back up your existing ForeverCharacterManager folder and your FCM
+   SavedVariables in WTF/Account before updating.
+2. Extract FCM-v0.9.1-QA4d-Nearby-Gathering-Markers.zip into Downloads.
+3. In the extracted files, find the folder named ForeverCharacterManager.
+4. Copy THAT folder into:
+
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+
+   When Windows asks, choose to merge the folders and replace files with
+   the same names. Do not paste it into the FCM-Companion subfolder or
+   create an extra nested ForeverCharacterManager folder.
+5. DO NOT delete the installed addon directory. It contains your companion's
+   reference cache, encrypted key and local settings, which must survive.
+   The ZIP does not contain those private/generated files.
+
+VERIFY IN WINDOWS POWERSHELL (before opening WoW):
+
+Select-String -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\Core.lua" -Pattern "FCM.build"
+
+EXPECTED RESULT:
+
+FCM.build = "QA4d-20261114-Nearby-Node-Visibility"
+
+You can also open FCM > Diagnostics in-game. The first entry now displays
+the build ID directly, without needing /run print.
+
+GATHERING MARKER SETTINGS
+
+ /fcm gatherpins on          Show saved gathering markers
+ /fcm gatherpins off         Hide all FCM saved gathering markers
+ /fcm gatherpins near 15     Hide markers within 15 yards (default)
+ /fcm gatherpins near 25     Increase the close-range clearing distance
+ /fcm gatherpins near 0      Disable close-range hiding
+
+When nearby markers disappear, Blizzard's own tracking dots are visible
+if the appropriate in-game tracking is enabled. The FCM launcher button
+remains displayed. These are historical gathering locations, not guaranteed
+active spawns.

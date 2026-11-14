@@ -4,7 +4,7 @@ An account-wide character management addon for **World of Warcraft: Forever**, w
 
 ## Current source: v0.9.1 QA4 (combined test candidate)
 
-The **v0.9.1 QA4c preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box, with a live right-side estimate of owned items, crafts, reagents, stock by character and possible eligible material transfers. The Crafting request button saves the draft explicitly; the Requests quantity editor retains its popup for editing existing requests. Gathering now draws nearby saved nodes inside the minimap using FCM's own account-wide records, with distinct Peacebloom and Silverleaf icons. Hover a saved node to see FCM's account-wide personal gather count at that location; older discoveries report minimum counts because prior builds did not track repeat gathers. `/fcm gatherpins on|off` controls the nodes independently of the launcher. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
+The **v0.9.1 QA4d preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box, with a live right-side estimate of owned items, crafts, reagents, stock by character and possible eligible material transfers. The Crafting request button saves the draft explicitly; the Requests quantity editor retains its popup for editing existing requests. Gathering now draws nearby saved nodes inside the minimap using FCM's own account-wide records, with distinct Peacebloom and Silverleaf icons. Hover a saved node to see FCM's account-wide personal gather count at that location; older discoveries report minimum counts because prior builds did not track repeat gathers. Saved gathering markers automatically hide within 15 yards so they do not obscure native minimap dots; use `/fcm gatherpins near 0-50` to adjust. `/fcm gatherpins on|off` controls the nodes independently of the launcher. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -66,6 +66,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `FCM_v091_QA2_CRAFTING_TEST_NOTES.md`: follow-up profession-search and Reach Total QA checklist.
 - `FCM_v091_QA3_COMPANION_TEST_NOTES.md`: focused companion quota-ledger repair and Clam Meat search checks.
 - `FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md`: inline quantity, candidate material-transfer, and nearby gathering-minimap live tests.
+- `INSTALL-QA4d.txt`: exact in-place Windows installation steps and PowerShell build verification.
 
 ## Important limitations
 

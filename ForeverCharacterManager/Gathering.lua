@@ -186,12 +186,14 @@ end
 -- world units; map-coordinate percentages alone cannot provide that scale.
 -- This pure helper also covers rotating minimaps, and can be regression-tested
 -- without starting a WoW client.
-function FCM:GatherMinimapOffset(playerX,playerY,nodeX,nodeY,radius,facing,rotating)
+function FCM:GatherMinimapOffset(playerX,playerY,nodeX,nodeY,radius,facing,rotating,hideWithinYards)
     if type(playerX)~="number" or type(playerY)~="number" or
        type(nodeX)~="number" or type(nodeY)~="number" or
        type(radius)~="number" or radius<=0 then return nil end
     local dx,dy=playerX-nodeX,playerY-nodeY
     local distance=math.sqrt(dx*dx+dy*dy)
+    if type(hideWithinYards)=="number" and hideWithinYards>0 and
+       distance<=hideWithinYards then return nil end
     -- Pin centers stay inside the round minimap edge instead of clipping.
     if distance>radius*0.89 then return nil end
     if rotating then
@@ -351,7 +353,10 @@ function FCM:UpdateGatherMinimap()
                     if close then
                         local nodeContinent,wx,wy=gatherWorldPosition(mapID,nx,ny)
                         if wx and nodeContinent==continent then
-                            local ox,oy,dist=self:GatherMinimapOffset(px,py,wx,wy,radius,facing,turning)
+                            local near=(self.db.settings and self.db.settings.gatherPinHideYards)
+                                or 15
+                            local ox,oy,dist=self:GatherMinimapOffset(px,py,wx,wy,
+                                radius,facing,turning,near)
                             if ox then
                                 matches[#matches+1]={ox=ox,oy=oy,dist=dist,kind=kind,
                                     name=node.name,x=node.x,y=node.y,personal=node.personal,

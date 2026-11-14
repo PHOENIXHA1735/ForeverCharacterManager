@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA4c-20261114-Gathering-Counts"
+FCM.build = "QA4d-20261114-Nearby-Node-Visibility"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -69,6 +69,10 @@ function FCM:InitDB()
     -- An existing v0.1.0 SavedVariables file remains compatible.
     db.settings.minimap = db.settings.minimap or { x = -66, y = 66 }
     db.settings.gatherPins = db.settings.gatherPins ~= false
+    -- Once close enough to inspect the actual node, stop covering the
+    -- game's own tracking dot with FCM's historical location marker.
+    db.settings.gatherPinHideYards=math.max(0,math.min(50,
+        math.floor(tonumber(db.settings.gatherPinHideYards) or 15)))
     db.craftingQueue = db.craftingQueue or {}
     db.gates = db.gates or {} -- User-entered recipe ID -> { factionID, standing, note }
     db.notes = db.notes or {}
@@ -696,12 +700,17 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         if FCM.Toggle and (not FCM.window or not FCM.window:IsShown()) then FCM:Toggle() end
     elseif cmd == "gatherpins" then
         local requested=string.lower(rest or "")
-        if requested=="on" or requested=="off" then
+        local proximity=requested:match("^near%s+(%d+)$")
+        if proximity and tonumber(proximity)<=50 then
+            FCM.db.settings.gatherPinHideYards=tonumber(proximity)
+            FCM._gatherMinimapDirty=true
+            FCM:Say("Hide saved gathering markers within "..proximity.." yards of your character.")
+        elseif requested=="on" or requested=="off" then
             FCM.db.settings.gatherPins=(requested=="on")
             FCM._gatherMinimapDirty=true
             if requested=="off" and FCM.HideGatherMinimapPins then FCM:HideGatherMinimapPins() end
             FCM:Say("Saved gathering markers on minimap: "..requested)
-        else FCM:Say("Usage: /fcm gatherpins on|off") end
+        else FCM:Say("Usage: /fcm gatherpins on|off or /fcm gatherpins near <0-50 yards>") end
     elseif cmd == "minimap" then
         if string.lower(rest or "") == "reset" then
             if FCM.UI and FCM.UI.ResetMinimap then FCM.UI:ResetMinimap() end

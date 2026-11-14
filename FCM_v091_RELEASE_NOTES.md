@@ -2,6 +2,13 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4d close-range markers:** Saved herb, mining, fishing and treasure
+  markers automatically hide once the character is within **15 yards** of
+  the saved location, leaving the game's native tracking dot unobscured.
+  `/fcm gatherpins near 0` disables the proximity hiding; use any whole
+  number up to 50 yards to choose a different cutoff. The FCM launcher icon
+  remains visible. The Diagnostics tab now displays the complete build ID
+  directly, to help identify installs still running older QA4 files.
 - **QA4c repeat-harvest counts:** Hovering a saved minimap node shows how many
   successful personal gathers FCM has recorded there across characters.
   Repeated harvests at the same spot (including small standing-position changes
