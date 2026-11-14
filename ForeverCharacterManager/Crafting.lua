@@ -228,14 +228,32 @@ function FCM:MaterialLocations(itemID, receivingChar)
     return total, accessible, locations
 end
 
-function FCM:MaterialsFor(recipe, craftingChar)
+-- Requested quantity means desired OUTPUT ITEMS, not recipe casts. A recipe
+-- that produces 2 food per cast needs 10 casts for a request of 20 food.
+function FCM:ValidCraftQuantity(quantity)
+    local n=tonumber(quantity)
+    return n and n%1==0 and n>=1 and n<=999 and n or nil
+end
+function FCM:CraftRequestQuantity(request)
+    return self:ValidCraftQuantity(request and request.quantity) or 1
+end
+function FCM:CraftRuns(recipe, requestedQuantity)
+    local quantity=self:ValidCraftQuantity(requestedQuantity) or 1
+    local yield=math.max(1,math.floor(tonumber(recipe and recipe.quantity) or 1))
+    local runs=math.ceil(quantity/yield)
+    return runs,runs*yield,yield
+end
+
+function FCM:MaterialsFor(recipe, craftingChar, requestedQuantity)
     local result, allReady = {}, true
+    local runs=self:CraftRuns(recipe,requestedQuantity)
     for _, mat in ipairs(recipe.reagents or {}) do
         local total, usable, locations = self:MaterialLocations(mat.itemID, craftingChar)
-        local missing = math.max(0, (mat.count or 0) - usable)
+        local required=(mat.count or 0)*runs
+        local missing = math.max(0, required - usable)
         if missing > 0 then allReady = false end
         result[#result + 1] = { id = mat.itemID, name = itemName(mat.itemID),
-            required = mat.count, owned = total, usable = usable, missing = missing, locations = locations }
+            required = required, owned = total, usable = usable, missing = missing, locations = locations }
     end
     if recipe.complex then allReady = false end
     return result, allReady
@@ -314,8 +332,11 @@ function FCM:RecipeByID(recipeID)
     return nil
 end
 
-function FCM:QueueCraft(recipeID, recipientKey, crafterKey)
+function FCM:QueueCraft(recipeID, recipientKey, crafterKey, requestedQuantity)
     if not self.db then return false, "Character database has not loaded." end
+    if requestedQuantity==nil then requestedQuantity=1 end
+    local quantity=self:ValidCraftQuantity(requestedQuantity)
+    if not quantity then return false, "Quantity must be a whole number of output items from 1 to 999." end
     local recipient = self.db.characters[recipientKey]
     local recipe = self:RecipeByID(recipeID)
     if not recipient then return false, "Select a scanned recipient character first." end
@@ -345,9 +366,27 @@ function FCM:QueueCraft(recipeID, recipientKey, crafterKey)
     local key = tostring(recipeID) .. ":" .. recipientKey
     self.db.craftingQueue[#self.db.craftingQueue + 1] = {
         key=key, recipeID=recipeID, recipientKey=recipientKey,
-        crafterKey=crafterKey, created=self:Now(), status="requested",
+        crafterKey=crafterKey, quantity=quantity,created=self:Now(), status="requested",
     }
     return true
+end
+
+function FCM:UpdateQueuedCraftQuantity(request,requestedQuantity)
+    local quantity=self:ValidCraftQuantity(requestedQuantity)
+    if not quantity then return false,"Quantity must be a whole number from 1 to 999." end
+    if not request or not self.db then return false,"No queued craft request selected." end
+    local found=false
+    for _,existing in ipairs(self.db.craftingQueue or {}) do
+        if existing==request then found=true;break end
+    end
+    if not found then return false,"That request is no longer queued." end
+    if request.status=="crafted" or request.status=="delivered" or request.status=="cancelled" then
+        return false,"A completed request cannot change quantity; create a new request instead."
+    end
+    request.quantity=quantity
+    request.updated=self:Now()
+    if request.status=="ready" then request.status="gathering" end
+    return true,"Requested output updated to "..quantity.." item(s)."
 end
 
 function FCM:AssignQueuedCraft(request, crafterKey)
@@ -424,8 +463,9 @@ function FCM:ReservedMaterials(exceptKey, craftingChar)
                 and (not craftingChar or self:CanCollaborate(assigned,craftingChar)) then
             local recipe = byID[planned.recipeID]
             if recipe then
+                local runs=self:CraftRuns(recipe,self:CraftRequestQuantity(planned))
                 for _, reagent in ipairs(recipe.reagents or {}) do
-                    reserved[reagent.itemID] = (reserved[reagent.itemID] or 0) + reagent.count
+                    reserved[reagent.itemID] = (reserved[reagent.itemID] or 0) + reagent.count*runs
                 end
             end
         end
@@ -435,8 +475,10 @@ end
 
 -- Multistep material planner. It only unfolds learned, single-reagent-choice
 -- recipes. This is an estimate; it cannot perform crafts or move materials.
-function FCM:ExpandedCraftingPlan(recipe, craftingChar)
-    local byOutput, reservations, stock = {}, self:ReservedMaterials(tostring(recipe.id)..":"..(craftingChar and craftingChar.key or ""),craftingChar), {}
+function FCM:ExpandedCraftingPlan(recipe, craftingChar, requestedQuantity, excludeRequestKey)
+    -- The queued request's key is recipeID:recipientKey, not recipeID:crafterKey.
+    -- Explicit exclusion prevents a request from reserving its own materials.
+    local byOutput, reservations, stock = {}, self:ReservedMaterials(excludeRequestKey,craftingChar), {}
     for _, r in ipairs(self:AllRecipes()) do
         if r.outputID and not r.complex and r.outputID ~= recipe.outputID then
             byOutput[r.outputID] = byOutput[r.outputID] or r
@@ -486,6 +528,7 @@ function FCM:ExpandedCraftingPlan(recipe, craftingChar)
         end
         plan.missing[itemID] = (plan.missing[itemID] or 0)+needed
     end
-    for _,r in ipairs(recipe.reagents or {}) do consume(r.itemID,r.count,0,{}) end
+    local runs=self:CraftRuns(recipe,requestedQuantity)
+    for _,r in ipairs(recipe.reagents or {}) do consume(r.itemID,r.count*runs,0,{}) end
     return plan
 end

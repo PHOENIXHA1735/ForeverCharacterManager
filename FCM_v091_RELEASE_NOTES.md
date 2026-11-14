@@ -1,5 +1,15 @@
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
+## QA1 combined candidate (awaiting player verification)
+
+The QA1 source and install test package also include the QA6e finished-output
+crafting quantity popup fix, Zygor/Pawn numerical Frost Mage weight profiles,
+and the complete tree-specific Legacy Point Advisor with manual snapshots.
+Both addon `.toc` variants load `LegacyAdvisor.lua`, `Gathering.lua`, and the
+optional community data stub. See `FCM_v091_QA1_COMBINED_TEST_NOTES.md` for
+the combined test checklist. This candidate has **not** been published to
+GitHub; the release workflow is manual-only until those tests pass.
+
 ## Implemented
 
 - Added a **Gathering** sidebar tab and `/fcm gather`, `/fcm gather status`, `/fcm gather import`.

@@ -4,7 +4,7 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "Gathering-Local-GitHub-Preview"
+FCM.build = "QA1-20261114-Gathering-Craft-Legacy"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
@@ -451,7 +451,6 @@ f:SetScript("OnEvent", function(_, event, ...)
         return
     end
     if not FCM.db then return end
-    if FCM.GatherEvent then FCM:GatherEvent(event,...) end
     if event == "PLAYER_LOGOUT" then
         FCM:ScanBasic(); FCM:ScanBags(); FCM:ScanGear()
     elseif event == "BAG_UPDATE_DELAYED" then
@@ -480,6 +479,7 @@ f:SetScript("OnEvent", function(_, event, ...)
             if tip then FCM:Say(tip .. ". Open /fcm > Talents for source and verification.") end
         end
     end
+    if FCM.GatherEvent then FCM:GatherEvent(event,...) end
     if FCM.Refresh and FCM.window and FCM.window:IsShown() then FCM:Refresh() end
 end)
 
@@ -500,12 +500,60 @@ end
 
 SLASH_FOREVERCHARACTERMANAGER1 = "/fcm"
 SLASH_FOREVERCHARACTERMANAGER2 = "/forevercm"
+local function importPawnWeights(text)
+    local ch=FCM:Current()
+    if not FCM.Gear or not FCM.Gear.ImportPawnScale then
+        FCM:Say("Pawn import is not available."); return
+    end
+    local ok,message=FCM.Gear:ImportPawnScale(ch,text)
+    FCM:Say(message or (ok and "Pawn weights imported." or "Pawn import failed."))
+    if ok and FCM.Refresh then FCM:Refresh() end
+end
+if StaticPopupDialogs then
+    StaticPopupDialogs.FCM_PAWN_WEIGHT_IMPORT={
+        text="Paste a complete Pawn v1 scale for the current character/spec/activity/style. Imported weights apply only to the current level bracket; unmatched stats are rejected.",
+        button1="Import",button2="Cancel",hasEditBox=true,maxLetters=4096,
+        OnShow=function(self)
+            if self.editBox then
+                self.editBox:SetMaxLetters(4096)
+                self.editBox:SetText("")
+                self.editBox:SetFocus()
+            end
+        end,
+        OnAccept=function(self)
+            importPawnWeights(self.editBox and self.editBox:GetText() or "")
+        end,
+        EditBoxOnEnterPressed=function(self)
+            local parent=self:GetParent()
+            if parent and parent.button1 then parent.button1:Click() end
+        end,
+        EditBoxOnEscapePressed=function(self) self:GetParent():Hide() end,
+        timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
+    }
+end
 SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     local cmd, rest = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")
     cmd = string.lower(cmd or "")
     if cmd == "scan" then
         local ok, count, total=FCM:ScanAll()
         FCM:Say("Manual scan "..(ok and "completed" or "partially completed").." ("..tostring(count).."/"..tostring(total).."). Open profession and bank windows for those snapshots.")
+    elseif cmd == "gather" or cmd == "gathering" then
+        local sub=string.lower(rest or "")
+        if sub=="import" then
+            local added,report=FCM:ImportGatherMate()
+            FCM:Say(report or "GatherMate2 import failed.")
+            if added and FCM.Refresh then FCM:Refresh() end
+        elseif sub=="status" then
+            local totals=FCM:GatherCounts()
+            FCM:Say("Saved nodes: herbs "..totals.herbalism..", mining "..totals.mining..
+                ", fishing "..totals.fishing..", treasure "..totals.treasure..
+                ". Personal "..totals.personal..", imported "..totals.gathermate..", community "..totals.community..".")
+        elseif sub=="" then
+            if FCM.UI then FCM.UI.tab="Gathering" end
+            if FCM.Toggle then
+                if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
+            end
+        else FCM:Say("Use /fcm gather, /fcm gather status, or /fcm gather import.") end
     elseif cmd == "ahdiag" then
         local itemID=tonumber(rest) or 4537
         if type(FCM.AHPriceDiagnostic)=="function" then
@@ -543,23 +591,6 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             local assessment=FCM:BoEProtectionCheck(id,FCM:Current())
             for _,line in ipairs(FCM:BoEProtectionLines(assessment,8)) do FCM:Say(line) end
         else FCM:Say("BoE advisor unavailable.") end
-    elseif cmd == "gather" or cmd == "gathering" then
-        local sub=string.lower(rest or "")
-        if sub=="import" then
-            local added,report=FCM:ImportGatherMate()
-            FCM:Say(report or "GatherMate2 import failed.")
-            if added and FCM.Refresh then FCM:Refresh() end
-        elseif sub=="status" then
-            local totals=FCM:GatherCounts()
-            FCM:Say("Saved nodes: herbs "..totals.herbalism..", mining "..totals.mining..
-                ", fishing "..totals.fishing..", treasure "..totals.treasure..
-                ". Personal "..totals.personal..", imported "..totals.gathermate..", community "..totals.community..".")
-        elseif sub=="" then
-            if FCM.UI then FCM.UI.tab="Gathering" end
-            if FCM.Toggle then
-                if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
-            end
-        else FCM:Say("Use /fcm gather, /fcm gather status, or /fcm gather import.") end
     elseif cmd == "farm" then
         local itemID,count=(rest or ""):match("^(%d+)%s*(%d*)$")
         itemID,count=tonumber(itemID),tonumber(count) or 1
@@ -587,6 +618,43 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         FCM:Current().legacyGoal=rest or ""
         FCM:Say("Legacy goal updated (manual note; not a verified point count).")
         if FCM.Refresh then FCM:Refresh() end
+    elseif cmd == "legacytree" then
+        local typed=(rest or ""):lower():gsub("^%s+",""):gsub("%s+$","")
+        local trees={all="all",adventure="Adventure",
+            professions="Professions",resourcefulness="Resourcefulness"}
+        local selected=trees[typed]
+        if selected and FCM.SetLegacyTree and FCM:SetLegacyTree(FCM:Current(),selected) then
+            FCM:Say("Legacy tree: "..FCM.legacyTreeLabels[selected].." (only this character's advisor).")
+            if FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Usage: /fcm legacytree all|adventure|professions|resourcefulness") end
+    elseif cmd == "legacypriority" then
+        local selected=(rest or ""):lower():gsub("^%s+",""):gsub("%s+$","")
+        if FCM.SetLegacyPriority and FCM:SetLegacyPriority(FCM:Current(),selected) then
+            FCM:Say("Legacy priority: "..FCM:LegacyPriorityLabel(FCM:LegacyTree(FCM:Current()),selected).." (saved for this tree and character).")
+            if FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Choose a goal offered by the selected Legacy tree. All keys: leveling|travel|survival|skills|gathering|crafting|gold|pve|pvp|reputation|balanced") end
+    elseif cmd == "legacyaccess" then
+        local name,state=(rest or ""):match("^(.+)%s+(%a+)%s*$")
+        if state then state=state:lower() end
+        if name and state and FCM.SetLegacyAccess then
+            local ok,why=FCM:SetLegacyAccess(FCM:Current(),name,state)
+            FCM:Say(ok and why or ("Legacy unlock status not saved: "..tostring(why)))
+            if ok and FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Usage: /fcm legacyaccess <perk name> available|locked|unknown") end
+    elseif cmd == "legacyavailable" then
+        local value=tonumber(rest)
+        if value and FCM.SetLegacyAvailable and
+            FCM:SetLegacyAvailable(FCM:Current(),value) then
+            FCM:Say("Recorded "..value.." unspent Legacy point(s) for this character from the in-game panel (manual snapshot).")
+            if FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Usage: /fcm legacyavailable <0-16> (manually verified unspent points)") end
+    elseif cmd == "legacyrank" then
+        local name,rank=(rest or ""):match("^(.+)%s+(%d+)%s*$")
+        if name and rank and FCM.SetLegacyRank then
+            local ok,reason=FCM:SetLegacyRank(FCM:Current(),name,tonumber(rank))
+            FCM:Say(ok and reason or ("Legacy rank not saved: "..tostring(reason)))
+            if ok and FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Usage: /fcm legacyrank <perk name> <0-max rank>; e.g. /fcm legacyrank High Alert 1") end
     elseif cmd == "catalogadd" then
         local profession,name=(rest or ""):match("^(%S+)%s+(.+)$")
         if profession and name and FCM:CatalogAdd(name,profession) then
@@ -614,6 +682,13 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         local req=FCM.db.craftingQueue[tonumber(number or "") or 0]
         local ok,reason=FCM:ChangeRequestStatus(req,string.lower(status or ""))
         FCM:Say(ok and "Request updated." or (reason or "Invalid request"))
+    elseif cmd == "requestqty" then
+        local number,quantity=(rest or ""):match("^(%d+)%s+(%d+)$")
+        local req=FCM.db.craftingQueue[tonumber(number or "") or 0]
+        local ok,reason=FCM:UpdateQueuedCraftQuantity(req,quantity)
+        FCM:Say(ok and (reason or "Request quantity updated.") or
+            (reason or "Usage: /fcm requestqty <queue index> <output quantity 1-999>"))
+        if ok and FCM.Refresh then FCM:Refresh() end
     elseif cmd == "respec" then
         if FCM.UI then FCM.UI.tab="Talents" end
         if FCM.Toggle and (not FCM.window or not FCM.window:IsShown()) then FCM:Toggle() end
@@ -638,6 +713,44 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             FCM:Say("Gear style ("..FCM.gearActivityLabels[FCM:GearActivity(ch)].."): "..FCM.modeLabels[requested])
             if FCM.Refresh then FCM:Refresh() end
         else FCM:Say("Usage: /fcm gearstyle dps|balanced|survival") end
+    elseif cmd == "pawnimport" then
+        if rest and rest~="" then
+            importPawnWeights(rest)
+        elseif StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs.FCM_PAWN_WEIGHT_IMPORT then
+            StaticPopup_Show("FCM_PAWN_WEIGHT_IMPORT")
+        else
+            FCM:Say('Usage: /fcm pawnimport ( Pawn: v1: "Name": SpellDamage=1, Intellect=0.3, ... )')
+        end
+    elseif cmd == "weightprofile" then
+        local ch=FCM:Current()
+        if not ch or not FCM.Gear then
+            FCM:Say("No active character weight profile.")
+        elseif string.lower(rest or "")=="reset" then
+            local removed=FCM.Gear:ResetImportedWeightProfile(ch)
+            FCM:Say(removed and "Imported profile removed for this spec/activity/style/level bracket; manual custom weights preserved."
+                or "No imported profile to remove for this spec/activity/style/level bracket.")
+            if removed and FCM.Refresh then FCM:Refresh() end
+        else
+            FCM:Say("Gear weights: "..FCM.Gear:WeightSource(ch))
+            FCM:Say("Use /fcm pawnimport to paste an exported numerical scale; /fcm weightprofile reset removes the active import.")
+        end
+    elseif cmd == "hitrating" then
+        local ch=FCM:Current()
+        local input=string.lower(rest or "")
+        local current,cap=input:match("^(%d+%.?%d*)%s+(%d+%.?%d*)$")
+        if input=="reset" and ch then
+            ch.gearHitRatingContext=nil
+            FCM:Say("Manual hit-rating cap snapshot cleared.")
+        elseif current and cap and ch and FCM.Gear and
+            FCM.Gear:SetManualHitRating(ch,tonumber(current),tonumber(cap)) then
+            FCM:Say("Manual hit rating: current "..current..", cap "..cap.." (RATING points, NOT %). "..
+                "FCM adjusts swap comparisons only. Update this snapshot after changing gear or talents.")
+        else
+            local c=ch and FCM.Gear and FCM.Gear:HitRatingContext(ch)
+            FCM:Say(c and ("Active manual hit rating: "..c.current.."/"..c.cap.." RATING (refresh after gear changes).")
+                or "No validated hit-rating cap snapshot. Use /fcm hitrating <current rating> <cap rating>, or /fcm hitrating reset. Never enter hit percentages here.")
+        end
+        if FCM.Refresh then FCM:Refresh() end
     elseif cmd == "gearweight" then
         local ch=FCM:Current()
         local input=string.lower(rest or "")
@@ -743,7 +856,12 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     elseif cmd == "help" then
         FCM:Say("/fcm | scan | upgrades | shopping | item <name or ID> | farm <itemID> [quantity] | ahdiag [itemID] | diag | minimap reset | ui reset")
         FCM:Say("/fcm threshold <score> | notifications on|off | legacygoal <goal>")
+        FCM:Say("/fcm legacyavailable <0-16> | legacyrank <perk name> <0-max rank> (manual confirmations)")
+        FCM:Say("/fcm legacytree all|adventure|professions|resourcefulness")
+        FCM:Say("/fcm legacypriority leveling|travel|survival|skills|gathering|crafting|gold|pve|pvp|reputation|balanced (tree-specific)")
+        FCM:Say("/fcm legacyaccess <perk name> available|locked|unknown (manually verify node availability)")
         FCM:Say("/fcm requeststatus <number> requested|gathering|ready|crafted|delivered|cancelled")
+        FCM:Say("/fcm requestqty <queue index> <finished-item quantity 1-999>")
         FCM:Say("Characters tab: select a saved character and choose Remove Saved Character. Confirmation required. The active character is protected.")
         FCM:Say("Requests tab: see crafts assigned to you, mark them complete, or cancel them.")
         FCM:Say("/fcm talentbuild <profile ID> | /fcm talentsource icy|custom | /fcm talentspec <name>")

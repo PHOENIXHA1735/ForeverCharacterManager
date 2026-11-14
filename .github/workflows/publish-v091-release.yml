@@ -1,10 +1,7 @@
 name: Publish FCM v0.9.1 Gathering Preview
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/publish-v091-release.yml
-      - FCM_v091_RELEASE_NOTES.md
+  # QA1 is a local test candidate. A maintainer explicitly starts the release
+  # only after confirming the in-game Gathering, Legacy and crafting tests.
   workflow_dispatch:
 permissions:
   contents: write

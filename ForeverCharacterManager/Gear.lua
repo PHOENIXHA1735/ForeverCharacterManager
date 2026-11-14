@@ -19,6 +19,12 @@ local stats = {
     haste = {"ITEM_MOD_HASTE_RATING_SHORT", "ITEM_MOD_SPELL_HASTE_RATING_SHORT"},
     dps = {"ITEM_MOD_DAMAGE_PER_SECOND_SHORT"},
     mp5 = {"ITEM_MOD_MANA_REGENERATION_SHORT"},
+    -- Direct item bonuses only.  Intellect/stamina already affect the character's
+    -- mana/health pools, but we do not invent a second bonus for those effects.
+    mana = {"ITEM_MOD_MANA_SHORT"},
+    health = {"ITEM_MOD_HEALTH_SHORT"},
+    health_regen = {"ITEM_MOD_HEALTH_REGENERATION_SHORT", "ITEM_MOD_HEALTH_REGEN_SHORT"},
+    spell_pen = {"ITEM_MOD_SPELL_PENETRATION_SHORT"},
     def = {"ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", "ITEM_MOD_DODGE_RATING_SHORT", "ITEM_MOD_PARRY_RATING_SHORT"},
     resist = {"ITEM_MOD_FIRE_RESISTANCE_SHORT", "ITEM_MOD_FROST_RESISTANCE_SHORT", "ITEM_MOD_NATURE_RESISTANCE_SHORT", "ITEM_MOD_SHADOW_RESISTANCE_SHORT", "ITEM_MOD_ARCANE_RESISTANCE_SHORT"},
 }
@@ -60,6 +66,31 @@ local weights = {
         physical = {str=0.45,agi=0.75,ap=0.15,stam=2.8,armor=0.014,resist=0.3,def=1.0,dps=0.7},
     },
 }
+
+-- Exact numbers transcribed from the user's Zygor Item Score / Mage / Frost
+-- recording (Nov 13, 2026).  Zygor's fields are NOT all interchangeable with
+-- WoW's GetItemStats rating fields: in particular Spell Hit % and Spell Crit %
+-- are percentage-point bonuses, not rating points.  Only a directly read
+-- percent tooltip is scored against those two values.  This is a user-supplied
+-- reference preset, not a simulation, an endorsed Zygor integration, or proof
+-- that the values are optimal for the current WoW Forever build.
+local zygorFrostDps = {
+    agi=0.05, int=0.87, spi=0.06, stam=0.50, armor=0.005,
+    spell_crit_pct=0.58, def=0.05, haste=0.63,
+    health_regen=1.00, health=0.05, spell_hit_pct=1.22,
+    mana=0.032, mp5=0.80, spell=1.00, spell_pen=0.07,
+    spell_fire=0.05, spell_frost=0.95, spell_arcane=0.13,
+    resist=0.04,
+}
+G.zygorFrostDps = zygorFrostDps
+local zygorFrostSource = "Zygor Frost Mage reference (user-recorded numerical weights; scan-limited, not simulated)"
+function G:DefaultReferenceProfile(ch,mode,activity)
+    if type(ch)=="table" and ch.class=="MAGE" and ch.talentSpec=="Frost" and
+        mode=="dps" and (activity=="leveling" or activity=="pve") then
+        return zygorFrostDps
+    end
+    return nil
+end
 
 function G:Info(item)
     if not C_Item then return nil end
@@ -118,12 +149,22 @@ local function spellTooltip(item)
     return lines
 end
 local function scanSpellEffects(item)
-    local effects={specific={},generic=0,hasExplicit=false,hasTooltip=false}
+    local effects={specific={},generic=0,hasExplicit=false,hasTooltip=false,
+        spellHitPct=0,spellCritPct=0}
     local lines=spellTooltip(item)
     effects.hasTooltip=#lines>0
     for _,line in ipairs(lines) do
         local cleaned=line:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
             :gsub("|T.-|t", ""):lower()
+        -- Old-style equip bonuses can be percentage points in the tooltip,
+        -- whereas GetItemStats may expose only *rating*. Do not equate them.
+        local hitPct=cleaned:match("chance to hit with spells by%s+([%d%.]+)%%") or
+            cleaned:match("spell hit chance by%s+([%d%.]+)%%")
+        local critPct=cleaned:match("chance to get a critical strike with spells by%s+([%d%.]+)%%") or
+            cleaned:match("critical strike chance of your spells by%s+([%d%.]+)%%") or
+            cleaned:match("spell critical strike chance by%s+([%d%.]+)%%")
+        if hitPct then effects.spellHitPct=effects.spellHitPct+(tonumber(hitPct) or 0) end
+        if critPct then effects.spellCritPct=effects.spellCritPct+(tonumber(critPct) or 0) end
         local school,amount=cleaned:match("damage done by%s+(%a+)%s+spells.-by up to%s+([%d,]+)")
         if school and spellSchools[school] and amount then
             effects.specific[school]=math.max(effects.specific[school] or 0,
@@ -193,6 +234,8 @@ function G:StatValues(item)
         if value~=0 then result[category]=value end
     end
     local effects=scanSpellEffects(item)
+    if effects.spellHitPct~=0 then result.spell_hit_pct=effects.spellHitPct end
+    if effects.spellCritPct~=0 then result.spell_crit_pct=effects.spellCritPct end
     if effects.hasExplicit then
         -- Explicit tooltip effects are more reliable than the generic stats API:
         -- the latter often labels +4 Frost damage as +4 generic spell power.
@@ -218,7 +261,9 @@ end
 G.statLabels={str="Strength",agi="Agility",int="Intellect",stam="Stamina",
     spi="Spirit",spell="Spell Power",ap="Attack Power",crit="Critical Strike",
     hit="Hit Rating",haste="Haste Rating",dps="Weapon DPS",mp5="Mana Regeneration",
-    armor="Armor",def="Defense",resist="Resistance",
+    armor="Armor",def="Defense",resist="Resistance",mana="Mana",health="Health",
+    health_regen="Health Regeneration",spell_pen="Spell Penetration",
+    spell_hit_pct="Spell Hit %",spell_crit_pct="Spell Crit %",
     spell_frost="Frost Spell Damage",spell_fire="Fire Spell Damage",
     spell_shadow="Shadow Spell Damage",spell_arcane="Arcane Spell Damage",
     spell_nature="Nature Spell Damage",spell_holy="Holy Spell Damage"}
@@ -226,6 +271,190 @@ G.statAliases={intellect="int",stamina="stam",strength="str",agility="agi",
     spirit="spi",spellpower="spell",attackpower="ap",critical="crit",
     criticalstrike="crit",hitrate="hit",hitrating="hit",
     haste_rating="haste"}
+-- Pawn is a separate project. Importing a user-supplied v1 scale does not
+-- bundle or redistribute Pawn's copyrighted class/spec weight tables.
+-- A scale's numerical values must never be multiplied by our heuristic
+-- activity/spec factors: the original model has already assigned the units.
+local pawnStatKeys={
+    strength="str",agility="agi",intellect="int",stamina="stam",spirit="spi",
+    spellpower="spell",spelldamage="spell",spellpowerfromequip="spell",
+    frostspelldamage="spell_frost",firespelldamage="spell_fire",
+    shadowspelldamage="spell_shadow",arcanespelldamage="spell_arcane",
+    naturespelldamage="spell_nature",holyspelldamage="spell_holy",
+    attackpower="ap",rangedattackpower="ap",
+    critrating="crit",spellcritrating="crit",meleecritrating="crit",
+    hitrating="hit",spellhitrating="hit",meleehitrating="hit",
+    hasterating="haste",
+    spellhasterating="haste",meleehasterating="haste",
+    dps="dps",meleedps="dps",rangeddps="dps",weapondps="dps",
+    manaper5="mp5",mp5="mp5",manaregenper5="mp5",
+    armor="armor",bonusarmor="armor",defenserating="def",
+    dodgerating="def",parryrating="def",resistall="resist",
+}
+-- Do not silently discard Pawn attributes that FCM cannot score from its
+-- current in-game item-stat scanner. Unsupported nonzero fields reject import.
+local pawnMetadata={class=true,spec=true,scalecolor=true}
+local function trim(s) return (s:gsub("^%s+",""):gsub("%s+$","")) end
+local function profileBracket(level)
+    level=tonumber(level)
+    if not level or level<1 or level>60 then return nil,nil end
+    if level<40 then return 1,39 end
+    if level<60 then return 40,59 end
+    return 60,60
+end
+local function normalKey(value)
+    return type(value)=="string" and value:lower():gsub("[^%w]","") or ""
+end
+function G:ParsePawnScale(text)
+    if type(text)~="string" or #text>4096 then return nil,"Pawn scale must be text no longer than 4096 characters." end
+    local name,body=text:match('^%s*%(%s*Pawn:%s*v1:%s*"([^"\n\r]+)"%s*:%s*([%s%S]-)%)%s*$')
+    if not name or not body then return nil,'Paste a complete ( Pawn: v1: "Name": Stat=number, ... ) export.' end
+    if #name>100 or #name==0 then return nil,"Scale name is invalid." end
+    local result={name=name,weights={},class=nil,spec=nil}
+    local count=0
+    for part in (body..","):gmatch("(.-),") do
+        part=trim(part)
+        if part~="" then
+            local field,value=part:match("^([%a][%w_]*)%s*=%s*(.-)%s*$")
+            if not field then return nil,"Invalid Pawn field: "..part:sub(1,70) end
+            local key=normalKey(field)
+            value=trim(value)
+            if key=="class" or key=="spec" then
+                if not value:match("^[%w ]+$") then return nil,"Invalid Pawn "..field.." value." end
+                result[key]=value
+            elseif pawnMetadata[key] then
+                -- Color is scale decoration, not a measured item stat.
+            else
+                local numeric=tonumber(value)
+                if not numeric or numeric~=numeric or numeric==math.huge or numeric== -math.huge or
+                    not value:match("^[%+%-]?[%d%.]+[eE]?[%+%-]?%d*$") or
+                    numeric < -10000 or numeric > 10000 then
+                    return nil,"Invalid numeric Pawn weight for "..field.."."
+                end
+                local stat=pawnStatKeys[key]
+                if not stat then
+                    if numeric~=0 then return nil,"Unsupported nonzero Pawn stat: "..field..". No partial import was saved." end
+                elseif result.weights[stat]~=nil and math.abs(result.weights[stat]-numeric)>0.00001 then
+                    return nil,"Conflicting Pawn values for "..stat.." ("..field.."). No import was saved."
+                else
+                    result.weights[stat]=numeric
+                    count=count+1
+                end
+            end
+        end
+    end
+    if count==0 then return nil,"No FCM-readable numerical weights were found." end
+    return result
+end
+function G:ImportPawnScale(ch,text,activity,style)
+    if type(ch)~="table" then return false,"No active character." end
+    local parsed,err=self:ParsePawnScale(text)
+    if not parsed then return false,err end
+    local currentClass=normalKey(ch.class)
+    local currentSpec=normalKey(ch.talentSpec)
+    if currentClass=="" or currentSpec=="" then
+        return false,"Choose this character's specialization on the Talents tab first."
+    end
+    if parsed.class and normalKey(parsed.class)~=currentClass then
+        return false,"Pawn class does not match the selected character ("..tostring(ch.class)..")."
+    end
+    if parsed.spec and normalKey(parsed.spec)~=currentSpec then
+        return false,"Pawn spec does not match the selected character ("..tostring(ch.talentSpec)..")."
+    end
+    local lower,upper=profileBracket(ch.level)
+    if not lower then return false,"Character level is missing or outside 1-60." end
+    local activityKey=activity or FCM:GearActivity(ch)
+    local modeKey=style or FCM:Mode(ch,activityKey)
+    if not activityFactors[activityKey] or not weights[modeKey] then return false,"Invalid gear activity or style." end
+    local saved={name=parsed.name,weights=parsed.weights,class=ch.class,spec=ch.talentSpec,
+        activity=activityKey,style=modeKey,levelMin=lower,levelMax=upper,
+        source="Pawn v1 user import",sourceType="user-import",importedAt=(FCM.Now and FCM:Now()) or 0}
+    local list=ch.gearImportedWeightProfiles or {}
+    -- Replace only the matching context, never character inventory, other
+    -- builds, previous activity profiles or manual gearCustomWeights.
+    for i=#list,1,-1 do
+        local p=list[i]
+        if p.class==saved.class and p.spec==saved.spec and p.activity==activityKey and
+            p.style==modeKey and p.levelMin==lower and p.levelMax==upper then
+            table.remove(list,i)
+        end
+    end
+    list[#list+1]=saved
+    while #list>30 do table.remove(list,1) end
+    ch.gearImportedWeightProfiles=list
+    return true,"Imported '"..parsed.name.."' for "..ch.class.."/"..ch.talentSpec..
+        ", "..activityKey.."/"..modeKey..", levels "..lower.."-"..upper.."."
+end
+function G:ActiveWeightProfile(ch,mode,activity)
+    if type(ch)~="table" then return nil end
+    local activityKey=activity or FCM:GearActivity(ch)
+    local modeKey=mode or FCM:Mode(ch,activityKey)
+    for i=#(ch.gearImportedWeightProfiles or {}),1,-1 do
+        local p=ch.gearImportedWeightProfiles[i]
+        if type(p)=="table" and type(p.weights)=="table" and
+            p.class==ch.class and p.spec==ch.talentSpec and
+            p.activity==activityKey and p.style==modeKey and
+            type(ch.level)=="number" and
+            ch.level>=(p.levelMin or 61) and ch.level<=(p.levelMax or 0) then
+            return p
+        end
+    end
+    return nil
+end
+function G:WeightSource(ch,mode,activity)
+    local p=self:ActiveWeightProfile(ch,mode,activity)
+    if p then return "Pawn user import: "..p.name.." ("..p.levelMin.."-"..p.levelMax..")" end
+    local activityKey=activity or (type(ch)=="table" and FCM:GearActivity(ch)) or "leveling"
+    local modeKey=mode or (type(ch)=="table" and FCM:Mode(ch,activityKey)) or "dps"
+    if self:DefaultReferenceProfile(ch,modeKey,activityKey) then return zygorFrostSource end
+    return "FCM provisional heuristic (Icy Veins priority reference; not simulation-derived)"
+end
+function G:ResetImportedWeightProfile(ch,mode,activity)
+    if type(ch)~="table" then return false end
+    local activityKey=activity or FCM:GearActivity(ch)
+    local modeKey=mode or FCM:Mode(ch,activityKey)
+    local low,high=profileBracket(ch.level)
+    local list=ch.gearImportedWeightProfiles or {}
+    local removed=false
+    for i=#list,1,-1 do
+        local p=list[i]
+        if p.class==ch.class and p.spec==ch.talentSpec and p.activity==activityKey and
+            p.style==modeKey and p.levelMin==low and p.levelMax==high then
+            table.remove(list,i);removed=true
+        end
+    end
+    return removed
+end
+-- Optional cap handling uses numerical HIT RATING units only, not hit percent.
+-- Without a trustworthy client-derived total and cap, guessing conversions by
+-- level or treating 17% as 17 rating would create misleading recommendations.
+function G:SetManualHitRating(ch,current,cap,activity)
+    if type(ch)~="table" then return false end
+    if type(current)~="number" or type(cap)~="number" or current<0 or cap<=0 or
+        current>10000 or cap>10000 or current~=current or cap~=cap or
+        not tonumber(ch.level) then return false end
+    ch.gearHitRatingContext={current=current,cap=cap,activity=activity or FCM:GearActivity(ch),
+        class=ch.class,spec=ch.talentSpec,level=ch.level,
+        recordedAt=(FCM.Now and FCM:Now()) or 0}
+    return true
+end
+function G:HitRatingContext(ch,activity)
+    if type(ch)~="table" then return nil end
+    local c=ch.gearHitRatingContext
+    if type(c)=="table" and c.class==ch.class and c.spec==ch.talentSpec and
+        c.level==ch.level and c.activity==(activity or FCM:GearActivity(ch)) and
+        type(c.current)=="number" and type(c.cap)=="number" and c.cap>0 then return c end
+    return nil
+end
+function G:CappedHitImpact(ch,oldStats,newStats,mode,activity)
+    local c=self:HitRatingContext(ch,activity)
+    if not c then return nil end
+    local changed=(newStats.hit or 0)-(oldStats.hit or 0)
+    local before=math.min(c.cap,math.max(0,c.current))
+    local after=math.min(c.cap,math.max(0,c.current+changed))
+    local weight=self:Weight("hit",ch,mode,activity)
+    return (after-before)*weight,changed*weight
+end
 -- Users can set custom baseline weights per character and activity with
 -- /fcm gearweight spell 5 (or reset). Specialization/activity factors still apply.
 local schoolBySpec={
@@ -237,22 +466,46 @@ local schoolBySpec={
     PALADIN={Holy={holy=true}},
 }
 function G:Weight(category,ch,mode,activity)
+    local activityKey=activity or (type(ch)=="table" and FCM:GearActivity(ch)) or "leveling"
+    if not activityFactors[activityKey] then activityKey="leveling" end
+    local modeKey=mode or (type(ch)=="table" and FCM:Mode(ch,activityKey)) or "dps"
+    local imported=self:ActiveWeightProfile(ch,modeKey,activityKey)
+    local reference=self:DefaultReferenceProfile(ch,modeKey,activityKey)
+    local custom=type(ch)=="table" and ch.gearCustomWeights and ch.gearCustomWeights[activityKey]
     local school=type(category)=="string" and category:match("^spell_(%a+)$")
     if school then
+        -- An explicit numerical scale can weight off-school spells (e.g.
+        -- Arcane Explosion on a Frost Mage). Respect those precise entries.
+        if imported then
+            if type(custom)=="table" and type(custom[category])=="number" then return custom[category] end
+            return imported.weights[category] or 0
+        end
+        if reference then
+            if type(custom)=="table" and type(custom[category])=="number" then return custom[category] end
+            return reference[category] or 0
+        end
         local class=type(ch)=="table" and ch.class or ch
         local spec=type(ch)=="table" and ch.talentSpec or nil
         local specMap=schoolBySpec[class] and schoolBySpec[class][spec or ""]
         -- Unconfirmed spec is not enough evidence for a school-only upgrade.
-        return (specMap and specMap[school]) and self:Weight("spell",ch,mode,activity) or 0
+        if not (specMap and specMap[school]) then return 0 end
+        if imported and type(imported.weights[category])=="number" then
+            return type(custom)=="table" and custom[category] or imported.weights[category]
+        end
+        return self:Weight("spell",ch,modeKey,activityKey)
+    end
+    if imported then
+        if type(custom)=="table" and type(custom[category])=="number" then return custom[category] end
+        return imported.weights[category] or 0
+    end
+    if reference then
+        if type(custom)=="table" and type(custom[category])=="number" then return custom[category] end
+        return reference[category] or 0
     end
     local class=type(ch)=="table" and ch.class or ch
     local spec=type(ch)=="table" and ch.talentSpec or nil
     local profile=(caster[class] or (casterSpecs[class] and casterSpecs[class][spec])) and "caster" or "physical"
-    local activityKey=activity or (type(ch)=="table" and FCM:GearActivity(ch)) or "leveling"
-    if not activityFactors[activityKey] then activityKey="leveling" end
-    local modeKey=mode or (type(ch)=="table" and FCM:Mode(ch,activityKey)) or "dps"
     local base=(weights[modeKey] or weights.dps)[profile][category] or 0
-    local custom=type(ch)=="table" and ch.gearCustomWeights and ch.gearCustomWeights[activityKey]
     if type(custom)=="table" and type(custom[category])=="number" then base=custom[category] end
     local factor=type(ch)=="table" and specFactors[class] and specFactors[class][spec or ""]
     return base*((factor and factor[category]) or 1)*((activityFactors[activityKey][profile] or {})[category] or 1)
@@ -437,10 +690,13 @@ function G:CompareItem(item,ch,preferredSlot,options)
             end
             if valid then
                 local delta=newScore-oldScore
+                local capped,uncapped=self:CappedHitImpact(ch,oldStats,candidateStats,mode,activity)
+                if capped then delta=delta-uncapped+capped end
                 if not choice or delta>choice.delta then
                     choice={status="ok",info=info,slot=slot,oldName=oldName,oldStats=oldStats,
                         newStats=candidateStats,newScore=newScore,oldScore=oldScore,delta=delta,
-                        activity=activity,style=mode,empty=not oldRef}
+                        activity=activity,style=mode,empty=not oldRef,
+                        hitCapAdjusted=capped~=nil and uncapped~=0}
                 end
             end
         end
@@ -456,6 +712,9 @@ function G:CompareItem(item,ch,preferredSlot,options)
         if change~=0 then
             local percent=before~=0 and (change/math.abs(before))*100 or nil
             local impact=change*self:Weight(key,ch,mode,activity)
+            if key=="hit" and choice.hitCapAdjusted then
+                impact=self:CappedHitImpact(ch,choice.oldStats,choice.newStats,mode,activity) or impact
+            end
             changes[#changes+1]={key=key,label=self.statLabels[key] or key,before=before,after=after,
                 change=change,percent=percent,impact=impact,weight=self:Weight(key,ch,mode,activity)}
         end
@@ -465,7 +724,10 @@ function G:CompareItem(item,ch,preferredSlot,options)
         return math.abs(a.impact)>math.abs(b.impact)
     end)
     choice.changes=changes
-    if choice.oldScore>0 then choice.scorePct=choice.delta/choice.oldScore*100 end
+    choice.weightSource=self:WeightSource(ch,mode,activity)
+    if choice.oldScore>0 and not choice.hitCapAdjusted then
+        choice.scorePct=choice.delta/choice.oldScore*100
+    end
     local plus,minus=nil,nil
     for _,c in ipairs(changes) do
         if c.impact>0 and (not plus or c.impact>plus.impact) then plus=c end
@@ -519,8 +781,10 @@ function G:ComparisonLines(comparison)
     local outcome=delta>0.01 and "GAIN" or (delta< -0.01 and "LOSS" or "TIE")
     local shade=delta>0.01 and "76e59a" or (delta< -0.01 and "ff8888" or "c9d1de")
     local marker=delta>0.01 and upTexture or (delta< -0.01 and downTexture or "=")
-    lines[#lines+1]=tint(marker.." "..outcome..": "..signed(delta).." weighted pts"..
-        (comparison.scorePct and string.format(" (%+.1f%%)",comparison.scorePct) or " (no old baseline)"),shade)
+    lines[#lines+1]=tint(marker.." "..outcome..": "..signed(delta).." est. weighted pts",shade)
+    lines[#lines+1]=tint(comparison.scorePct and
+        string.format("%+.1f%% of equipped item's stat score (NOT DPS)",comparison.scorePct)
+        or "No equipped-item score baseline (NOT DPS)","aab8ca")
     lines[#lines+1]=tint("STAT DIFFERENCES (equipped -> new)","ffd76d")
     for _,c in ipairs(comparison.changes) do
         local up=c.change>0
@@ -538,7 +802,13 @@ function G:ComparisonLines(comparison)
     lines[#lines+1]="Why: "..comparison.reason
     lines[#lines+1]=tint("Estimated: "..(FCM.gearActivityLabels[comparison.activity] or comparison.activity)..
         " / "..(FCM.modeLabels[comparison.style] or comparison.style).."; not DPS.","aab8ca")
-    lines[#lines+1]=tint("Not modeled: caps, procs, sets, PvP effects, unique restrictions.","aab8ca")
+    lines[#lines+1]=tint("Weight source: "..(comparison.weightSource or "Unspecified"),"aab8ca")
+    if comparison.hitCapAdjusted then
+        lines[#lines+1]=tint("Hit cap: manual rating snapshot used; refresh after changing gear.","aab8ca")
+    else
+        lines[#lines+1]=tint("Hit cap: unknown (no validated rating snapshot).","aab8ca")
+    end
+    lines[#lines+1]=tint("Not modeled: procs, sets, PvP effects, unique restrictions.","aab8ca")
     return lines
 end
 

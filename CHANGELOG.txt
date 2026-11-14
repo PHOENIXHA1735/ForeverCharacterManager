@@ -1,3 +1,10 @@
+v0.9.1 QA1 — Combined QA6e crafting/Legacy + Gathering Preview (not yet published)
+- Merged the tested finished-item quantity/Enter popup, tree-specific Legacy goals,
+  first-point manual snapshots, and Zygor Frost Mage weight profiles.
+- Preserved v0.9.1 Gathering tab, resource events, GatherMate2 import, community
+  data download and voluntary anonymous export.
+- All offline regression suites pass; in-game and Windows tests still needed.
+
 v0.9.1 — Local gathering database and optional GitHub community sync (preview)
 - Added independent per-account resource location storage and read-only GatherMate2 import.
 - Added Gathering sidebar, gather status and import commands, and provenance markers.

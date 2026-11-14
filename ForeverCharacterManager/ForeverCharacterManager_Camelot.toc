@@ -18,6 +18,7 @@ TalentData.lua
 Talents.lua
 TalentAudit.lua
 Progression.lua
+LegacyAdvisor.lua
 RecipeCatalog.lua
 ExternalData.lua
 ExternalData.generated.lua

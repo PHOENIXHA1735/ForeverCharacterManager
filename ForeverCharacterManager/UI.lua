@@ -1066,11 +1066,11 @@ function UI:Create()
             self:Refresh()
             return
         end
-        self:ShowCrafterMenu(self.activeRecipe, recipient.key, nil, self.activeCrafters)
+        self:PromptCraftQuantity(self.activeRecipe, recipient.key, nil, self.activeCrafters)
     end)
     self.action:SetPoint("TOPLEFT",detailPanel,"BOTTOMLEFT",9,-8)
     self.action:Hide()
-    self.cancelRequestButton = button(panel,"Set Status",129,29,function()
+    self.cancelRequestButton = button(panel,"Status / Qty",129,29,function()
         self:ShowRequestStatusMenu()
     end)
     self.cancelRequestButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
@@ -1148,11 +1148,17 @@ function UI:Create()
     self.talentSourceButton:SetPoint("LEFT",self.talentBuildButton,"RIGHT",1,0)
     self.talentSourceButton:Hide()
 
+    self.legacyTreeButton = button(panel,"Tree: All",175,29,function() self:ShowLegacyTreeMenu() end)
+    self.legacyTreeButton:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",10,12)
+    self.legacyTreeButton:Hide()
+    self.legacyPriorityButton = button(panel,"Goal: Leveling",155,29,function() self:ShowLegacyPriorityMenu() end)
+    self.legacyPriorityButton:SetPoint("LEFT",self.legacyTreeButton,"RIGHT",5,0)
+    self.legacyPriorityButton:Hide()
     self.openLegacyButton = button(panel,"Open Legacy Panel",174,29,function()
         if type(ToggleLegacySystemUI)=="function" then ToggleLegacySystemUI()
         else FCM:Say("Forever's Legacy window API is not available in this client build.") end
     end)
-    self.openLegacyButton:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",322,12)
+    self.openLegacyButton:SetPoint("LEFT",self.legacyPriorityButton,"RIGHT",10,0)
     self.openLegacyButton:Hide()
     self.clearDiagButton = button(panel,"Clear Error Log",174,29,function()
         if FCM.db and FCM.db.diagnostics then FCM.db.diagnostics.errors={} end
@@ -1363,7 +1369,11 @@ end
 function UI:ShowRequestStatusMenu()
     local req=self.activeRequest
     if not req then return end
-    local options={}
+    local options={{label="Change Requested Quantity...",run=function()
+        local recipe=FCM:RecipeByID(req.recipeID)
+        if recipe then self:PromptCraftQuantity(recipe,req.recipientKey,req)
+        else FCM:Say("Recipe not found; scan the profession before editing quantity.") end
+    end}}
     for _,row in ipairs({{"Requested","requested"},{"Gathering Materials","gathering"},{"Ready to Craft","ready"},
         {"Crafted - Awaiting Delivery","crafted"},{"Delivered / Archive","delivered"},{"Cancel / Archive","cancelled"}}) do
         local label,code=row[1],row[2]
@@ -1517,6 +1527,34 @@ function UI:ShowModesMenu()
     self:MakeMenu(self.modeButton,options,160)
 end
 
+function UI:ShowLegacyTreeMenu()
+    local ch=self:GetCharacter()
+    if not ch then return end
+    local options={}
+    for _,tree in ipairs(FCM.legacyTreeOrder or {}) do
+        local selected=tree
+        options[#options+1]={label=FCM.legacyTreeLabels[selected],run=function()
+            FCM:SetLegacyTree(ch,selected)
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.legacyTreeButton,options,197,true)
+end
+function UI:ShowLegacyPriorityMenu()
+    local ch=self:GetCharacter()
+    if not ch then return end
+    local options={}
+    local tree=FCM:LegacyTree(ch)
+    for _,priority in ipairs(FCM:LegacyPriorityChoices(tree)) do
+        local selected=priority
+        options[#options+1]={label=FCM:LegacyPriorityLabel(tree,selected),run=function()
+            FCM:SetLegacyPriority(ch,selected)
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.legacyPriorityButton,options,211,true)
+end
+
 function UI:ShowTalentSpecsMenu()
     local ch=self:GetCharacter()
     if not ch then return end
@@ -1560,9 +1598,90 @@ function UI:ShowTalentSourceMenu()
     },185,true)
 end
 
+-- Quantity means desired output ITEMS, not crafting casts. Prompt before
+-- crafter assignment so food/consumables with yields >1 use correct reagents.
+-- Forever clients may expose the StaticPopup edit field as `editBox`,
+-- `EditBox`, GetEditBox() or a named StaticPopup*EditBox child. Also capture
+-- Enter before the dialog closes (some clients clear the box on dismissal).
+local function quantityPopupEditBox(dialog)
+    if not dialog then return nil end
+    if dialog.editBox then return dialog.editBox end
+    if dialog.EditBox then return dialog.EditBox end
+    if type(dialog.GetEditBox)=="function" then
+        local ok,box=pcall(dialog.GetEditBox,dialog)
+        if ok and box then return box end
+    end
+    local name=type(dialog.GetName)=="function" and dialog:GetName()
+    return name and _G and _G[name.."EditBox"] or nil
+end
+function UI:PromptCraftQuantity(recipe, recipientKey, existing, eligibleCrafters)
+    if not recipe or not FCM.db or not FCM.db.characters[recipientKey] then return end
+    if not StaticPopupDialogs or not StaticPopup_Show then
+        FCM:Say("Quantity dialog unavailable. No craft request was changed.")
+        return
+    end
+    local ui=self
+    local request={recipe=recipe,recipientKey=recipientKey,existing=existing,
+        eligibleCrafters=eligibleCrafters,enteredText=nil,lastText=nil}
+    local function acceptQuantity(dialog)
+        local box=quantityPopupEditBox(dialog)
+        local raw=request.enteredText
+        if raw==nil then
+            raw=box and box.GetText and box:GetText() or nil
+            if raw==nil or raw=="" then raw=request.lastText end
+        end
+        local quantity=FCM:ValidCraftQuantity(raw)
+        if not quantity then
+            FCM:Say("Enter a whole-number quantity from 1 to 999. Nothing changed.")
+            return
+        end
+        if request.existing then
+            local ok,why=FCM:UpdateQueuedCraftQuantity(request.existing,quantity)
+            FCM:Say(why or (ok and "Quantity updated." or "Could not update quantity."))
+            if ok then ui.selectedRow=nil;ui:Refresh() end
+        else
+            ui:ShowCrafterMenu(request.recipe,request.recipientKey,nil,request.eligibleCrafters,quantity)
+        end
+    end
+    StaticPopupDialogs.FCM_CRAFT_REQUEST_QUANTITY={
+        text="How many %s do you want? Enter desired output ITEMS (1-999). Materials account for recipe yield.",
+        button1="Continue",button2="Cancel",hasEditBox=true,maxLetters=3,
+        OnShow=function(dialog)
+            local box=quantityPopupEditBox(dialog)
+            if box then
+                local saved=request.existing and FCM:CraftRequestQuantity(request.existing) or 1
+                box:SetText(tostring(saved))
+                request.lastText=tostring(saved)
+                box:HighlightText()
+                box:SetFocus()
+            end
+        end,
+        OnHide=function(dialog)
+            local box=quantityPopupEditBox(dialog)
+            if box and box.GetText then request.lastText=box:GetText() end
+        end,
+        OnAccept=function(dialog)
+            acceptQuantity(dialog)
+        end,
+        EditBoxOnTextChanged=function(box)
+            if box and box.GetText then request.lastText=box:GetText() end
+        end,
+        EditBoxOnEnterPressed=function(box)
+            -- This value must be saved BEFORE the button click/hide cycle.
+            request.enteredText=box:GetText()
+            local dialog=box:GetParent()
+            if dialog and dialog.button1 then dialog.button1:Click()
+            else acceptQuantity(dialog) end
+        end,
+        EditBoxOnEscapePressed=function(box) box:GetParent():Hide() end,
+        timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
+    }
+    StaticPopup_Show("FCM_CRAFT_REQUEST_QUANTITY",recipe.name or "this item",nil,request)
+end
+
 -- When there are several learned crafters, let the requester choose who sees
 -- the request. An unassigned migrated request can also be claimed here.
-function UI:ShowCrafterMenu(recipe, recipientKey, existing, eligibleCrafters)
+function UI:ShowCrafterMenu(recipe, recipientKey, existing, eligibleCrafters, quantity)
     if not recipe then return end
     local candidates = eligibleCrafters or recipe.crafters or {}
     local options = {}
@@ -1577,11 +1696,12 @@ function UI:ShowCrafterMenu(recipe, recipientKey, existing, eligibleCrafters)
                 if existing then
                     success, why = FCM:AssignQueuedCraft(existing, crafter.key)
                 else
-                    success, why = FCM:QueueCraft(recipe.id, recipientKey, crafter.key)
+                    success, why = FCM:QueueCraft(recipe.id, recipientKey, crafter.key, quantity)
                 end
                 if success then
                     FCM:Say("Craft request assigned to " .. FCM:DisplayCharacter(crafter) ..
-                        " for " .. (recipient and FCM:DisplayCharacter(recipient) or "the recipient") .. ".")
+                        " for " .. (recipient and FCM:DisplayCharacter(recipient) or "the recipient") ..
+                        " ("..tostring(quantity or (existing and FCM:CraftRequestQuantity(existing)) or 1).." output item(s)).")
                 else
                     FCM:Say(why or "Could not save craft request.")
                 end
@@ -1760,9 +1880,8 @@ local function buildRows(ui)
                 ", community "..count.community..".")
         local categories={"herbalism","mining","fishing","treasure"}
         for _,kind in ipairs(categories) do
-            local rows=FCM:GatherNodes(kind,nil,70)
-            for _,n in ipairs(rows) do
-                local point=n
+            local nodes=FCM:GatherNodes(kind,nil,70)
+            for _,point in ipairs(nodes) do
                 local place=string.format("Map %d at %.2f, %.2f",point.mapID or 0,point.x/100,point.y/100)
                 add("gather:"..kind..":"..point.mapID..":"..point.x..":"..point.y..":"..point.name,
                     point.name,kind.." | "..place,
@@ -2152,7 +2271,8 @@ local function buildRows(ui)
                 "Activity profiles: Leveling (sustain), PvP (stamina and pressure), Endgame PvE (damage priorities)."..
                 "\nChoose Activity and Style in the header; saved independently for each character."..
                 "\nEach activity can remember its own DPS/Balanced/Survivability style."..
-                "\nEstimates use heuristic stat weights, NOT verified Icy Veins weights, hit caps, DPS simulations or set-bonus calculations."..
+                "\nCurrent weight source: "..FCM.Gear:WeightSource(ch)..
+                "\nFrost Mage Leveling/PvE DPS uses user-recorded Zygor numerical values. Other defaults are provisional heuristics. These are item stat scores, NOT DPS simulations, hit caps or set-bonus calculations."..
                 "\nChange spec on Talents tab to refresh spec-based weighting.")
             local results=FCM.Gear:Candidates(ch)
             for i,r in ipairs(results) do
@@ -2251,7 +2371,10 @@ local function buildRows(ui)
                 ((#eligible==0) and "Not available to selected character" or
                 (listedPlan.ready and "Materials ready" or ("Missing "..listedPlan.missing.." / verify"))),function()
                 local d={"|cffffd983"..r.name.."|r","","Recipe ID: "..r.id,
-                    "Profession: "..(r.profession or "Unknown"),"","Known by:"}
+                    "Profession: "..(r.profession or "Unknown"),
+                    "Output per craft: "..tostring(math.max(1,math.floor(tonumber(r.quantity) or 1))),
+                    "Request Craft asks for the quantity of finished items (1-999).",
+                    "Material and shopping estimates scale to the number of recipe casts.","","Known by:"}
                 for _,c in ipairs(r.crafters or {}) do
                     d[#d+1]="  "..FCM:DisplayCharacter(c)..
                         ((ch and not FCM:CanCollaborate(c,ch)) and " (different faction/ruleset)" or "")
@@ -2284,18 +2407,20 @@ local function buildRows(ui)
     elseif tab=="Planner" then
         add("planner-summary","Smart Crafting Planner | unified v0.9.0",
             "Select a known recipe or pending request to calculate an account-wide crafting chain.",
-            "This planner uses cached materials and learned recipes. It selects eligible crafters, reserves existing requests, recursively expands simple recipes, and shows missing ingredients and potential transfers.\n\nAlternative reagent slots and unknown bind restrictions require manual verification. Nothing is moved, bought, crafted, or mailed automatically.")
+            "This planner uses cached materials and learned recipes. It selects eligible crafters, reserves existing requests, recursively expands simple recipes, and shows missing ingredients and potential transfers. Pending plans honor requested finished-item quantities, rounding up recipe casts when yield exceeds one.\n\nAlternative reagent slots and unknown bind restrictions require manual verification. Nothing is moved, bought, crafted, or mailed automatically.")
         for _,pending in ipairs(FCM:VisibleRequests()) do
             local row=pending
             if row.recipe and row.recipient then
                 local r=row.recipe
                 local request=row.request
                 local who=row.crafter
-                add("plan-request:"..tostring(request.key),"REQUEST: "..(r.name or "Recipe"),
-                    "For "..FCM:DisplayCharacter(row.recipient).." | "..
+                local wanted=FCM:CraftRequestQuantity(request)
+                local runs=FCM:CraftRuns(r,wanted)
+                add("plan-request:"..tostring(request.key),"REQUEST: "..wanted.."x "..(r.name or "Recipe"),
+                    "For "..FCM:DisplayCharacter(row.recipient).." | "..runs.." craft(s) | "..
                         (who and FCM:DisplayCharacter(who) or "Unassigned crafter"),
                     function()
-                        local plan=FCM:SmartCraftingPlan(r,row.recipient,who,1,request.key)
+                        local plan=FCM:SmartCraftingPlan(r,row.recipient,who,runs,request.key)
                         return table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
                     end)
                 rows[#rows].itemID=tonumber(r.outputID)
@@ -2332,11 +2457,16 @@ local function buildRows(ui)
             local recipientName = recipient and FCM:DisplayCharacter(recipient) or "Recipient record missing"
             local crafterName = crafter and FCM:DisplayCharacter(crafter) or "Unassigned - choose crafter"
             local mine = crafter and crafter.key == FCM.currentKey
-            local title = (mine and "[FOR YOU] " or "") .. recipeName
-            local summary = "For: " .. short(recipientName,20) .. " | Crafter: " .. short(crafterName,22)
+            local wanted=FCM:CraftRequestQuantity(req)
+            local runs,produced,yieldPerCraft=FCM:CraftRuns(recipe,wanted)
+            local title = (mine and "[FOR YOU] " or "") .. wanted .. "x " .. recipeName
+            local summary = "For: " .. short(recipientName,20) .. " | "..runs.." craft(s) | Crafter: " .. short(crafterName,22)
             local captured = entry
             add("request:" .. tostring(req.key), title, summary, function()
                 local d={"|cffffd983Craft Request|r", "", "Item: " .. recipeName,
+                    "Requested finished items: "..wanted,
+                    "Yield per craft: "..yieldPerCraft.." | Recipe casts: "..runs..
+                        " | Expected output: "..produced,
                     "Requested for: " .. recipientName, "Assigned to: " .. crafterName,
                     "Requested: " .. FCM:Age(req.created), "Status: " .. (req.status or "requested"), ""}
                 if crafter and crafter.key == FCM.currentKey then
@@ -2345,7 +2475,7 @@ local function buildRows(ui)
                     d[#d+1]="No known crafter is assigned. Use Assign Crafter below."
                 end
                 if recipe and crafter then
-                    local plan = FCM:CraftAvailability(recipe, crafter, req.key)
+                    local plan = FCM:CraftAvailability(recipe, crafter, req.key, wanted)
                     local mats, ready = plan.lines, plan.ready
                     d[#d+1]=""
                     d[#d+1]="Materials (last scanned):"
@@ -2372,13 +2502,13 @@ local function buildRows(ui)
                 end
                 if recipe and recipient then
                     d[#d+1]=""
-                    local expanded=FCM:SmartCraftingPlan(recipe,recipient,crafter,1,req.key)
+                    local expanded=FCM:SmartCraftingPlan(recipe,recipient,crafter,runs,req.key)
                     for _,line in ipairs(FCM:SmartCraftingPlanLines(expanded)) do
                         d[#d+1]=line
                     end
                 end
                 d[#d+1]=""
-                d[#d+1]="Use Assign/Reassign and Set Status to track requested > gathering > ready > crafted > delivered."
+                d[#d+1]="Use Assign/Reassign and Status / Qty to change the quantity or track requested > gathering > ready > crafted > delivered."
                 d[#d+1]="Materials are not automatically moved, crafted, or mailed."
                 return table.concat(d,"\n")
             end, nil, req)
@@ -2621,19 +2751,118 @@ local function buildRows(ui)
         table.sort(rows,sortByName)
         if #rows==0 then add("no-inventory","Inventory is empty or unscanned","Log in to each toon. Open bank to capture storage.","The item search tracks last-scanned counts, not live offline inventories.") end
     elseif tab=="Legacy" then
+        local milestones,evidence=FCM:LegacyClassMilestoneEstimate()
+        local available=ch and type(ch.legacyAvailable)=="number" and tostring(ch.legacyAvailable) or "Not manually recorded"
+        local spent=ch and FCM:LegacySpent(ch) or 0
+        local tree=ch and FCM:LegacyTree(ch) or "all"
+        local priority=ch and FCM:LegacyPriority(ch) or "leveling"
+        add("legacy-progress","Legacy progress — scanned class milestones: "..milestones,
+            "Unspent (manual snapshot): "..available.." | Ranks manually recorded: "..spent.."/16",
+            "Scanned class milestones: "..(#evidence>0 and table.concat(evidence,", ") or "none yet")..
+                "\nThis is an estimate from saved levels, NOT the game's available-point total."..
+                "\nThe unspent point count is a manual snapshot that may become stale."..
+                "\nPoints are unlocked account-wide; spending decisions and rank notes belong to each character."..
+                "\nUpdate with /fcm legacyavailable <number> after using the actual Legacy panel.")
+        add("legacy-advisor","Next Legacy Point Advisor",
+            "Tree: "..FCM.legacyTreeLabels[tree].." | Goal: "..FCM:LegacyPriorityLabel(tree,priority),
+            "The Goal menu changes with the selected tree and remembers a separate choice for each tree and character. Gear activity/style remains independent."..
+            "\nOnly perks with a reviewed relationship to this goal are ranked. Some tree/goal combinations have no direct fit."..
+            "\nRecommendations are contextual preferences, NOT a DPS simulation or a verified in-game unlock path."..
+            "\nCurrent available-point snapshot: "..available..
+            "\nOnly your manually recorded ranks and manually confirmed unlock/lock states can be considered."..
+            "\nA missing rank is treated as zero for planning, NOT as confirmed unlearned."..
+            "\nCheck each node in the actual Legacy panel before spending. FCM never purchases perks.")
+        if ch then
+            local picks=FCM:LegacyRecommendations(ch,tree,priority,3)
+            if #picks==0 then
+                local matching=FCM:LegacyMatchingTrees(priority)
+                local treeFits=tree=="all"
+                for _,candidateTree in ipairs(matching) do
+                    if candidateTree==tree then treeFits=true end
+                end
+                add("legacy-no-picks","No eligible perks in this view",
+                    spent>=16 and "Manual recorded ranks reach the 16-point budget" or
+                        (not treeFits and "No direct "..FCM:LegacyPriorityLabel(tree,priority).." match in "..FCM.legacyTreeLabels[tree]) or
+                        "Matching perks are full or manually marked locked",
+                    "Goal-related trees: "..(#matching>0 and table.concat(matching,", ") or "none identified").."."..
+                    "\nTry All Trees or a listed tree, or select another goal. Confirm actual ranks and availability in the game."..
+                    "\nFCM never assumes that a greyed-out in-game node can be purchased.")
+            else
+                for index,pick in ipairs(picks) do
+                    local r=pick
+                    local status=r.access=="available" and "Confirmed available (manual)" or
+                        "Unlock unknown — verify in game"
+                    local prior=r.recordedRank and ("Recorded "..r.rank.."/"..r.perk.max) or
+                        ("Rank unverified (assumed 0/"..r.perk.max.." for planning)")
+                    add("legacy-pick:"..index..":"..r.perk.id,
+                        (index==1 and "Recommended next: " or ("Alternative "..index..": "))..r.perk.name,
+                        r.tree.." | Next rank "..r.nextRank.."/"..r.perk.max.." | "..status,
+                        "Selected goal: "..FCM:LegacyPriorityLabel(tree,priority)..
+                        "\nWhy: "..r.reason..
+                        (r.context and ("\nCharacter context: "..r.context) or "")..
+                        "\nPer-rank benefit: "..r.perk.bonus..
+                        "\n"..prior..
+                        "\nLive node availability: "..status..
+                        "\n\nTo mark this node: /fcm legacyaccess "..r.perk.name.." available"..
+                        "\nTo record a spent point: /fcm legacyrank "..r.perk.name.." "..r.nextRank..
+                        "\nRefresh your available points separately with /fcm legacyavailable <number>."..
+                        "\nRecommendations do not check unknown prerequisites or spend points.")
+                end
+            end
+        end
         if ch then add("legacy-goal","Legacy goal for "..ch.name,short(FCM:LegacyGoal(ch),70),
-            "Manual goal: "..FCM:LegacyGoal(ch).."\n\nUse /fcm legacygoal <goal> to change it.\n\nThis is not an automatically validated Legacy point total.") end
-        add("legacy","Legacy window and planning","Open the actual Legacy window using the button below",
-            "FCM can open Forever's built-in Legacy UI when the client exposes ToggleLegacySystemUI.\n\nAutomated Legacy point and tree scanning remains unverified; this build does not invent points or unlocks.")
+            "Manual goal: "..FCM:LegacyGoal(ch).."\n\nUse /fcm legacygoal <goal> to change it.\n\nThis is a manual planning note.") end
+        add("legacy","Live Legacy window and reference guide","Open the game's Legacy panel using the button below",
+            "The in-game Legacy panel is the authority for points, purchases and requirements."..
+            "\nThis catalog uses the reviewed Mobalytics guide and your gameplay video."..
+            "\nProfessions/Resourcefulness labels were corrected to match your video."..
+            "\nGuide: "..(FCM.legacyGuideUrl or "Mobalytics WoW Forever Legacy guide")..
+            "\nAutomatic unlock and rank scanning are NOT confirmed for this client.")
+        for _,catalogTree in ipairs({"Adventure","Professions","Resourcefulness"}) do
+          if tree=="all" or tree==catalogTree then
+            add("legacy-tree:"..catalogTree,catalogTree.." Legacy perks",
+                "Skill catalog — click for details and rank limits",
+                "The game panel controls actual purchases. This view is informational."..
+                "\nRecord available/locked nodes with /fcm legacyaccess <name> available|locked|unknown.")
+            for _,perk in ipairs(FCM.legacyPerks or {}) do
+                if perk.tree==catalogTree then
+                    local p=perk
+                    local rank=ch and ch.legacyRanks and ch.legacyRanks[p.id]
+                    local recorded=type(rank)=="number" and (tostring(rank).."/"..p.max) or "not recorded"
+                    local access=ch and ch.legacyAccess and ch.legacyAccess[p.id] or "unknown"
+                    add("legacy-perk:"..p.id,p.name,
+                        catalogTree.." | Max: "..p.max.." | Rank: "..recorded.." | "..access,
+                        p.effect.."\n\nPer-rank benefit: "..p.bonus..
+                        "\n\nTo save an observed rank: /fcm legacyrank "..p.name.." <0-"..p.max..">"..
+                        "\nTo save whether it is unlocked: /fcm legacyaccess "..p.name.." available|locked|unknown"..
+                        "\nA blank rank record does not mean zero was observed. Check the in-game Legacy window before spending.")
+                end
+            end
+          end
+        end
     elseif tab=="Settings" then
+        add("legacy-advisor-settings","Legacy tree and goal", "Choose Adventure, Professions or Resourcefulness; then choose your goal.",
+            "Legacy uses two separate selectors at the bottom of the Legacy tab:\n"..
+            "Tree: All Trees, Adventure, Professions, Resourcefulness.\n"..
+            "Adventure goals: Leveling, Exploration & Travel, Survivability, Balanced.\n"..
+            "Professions goals: Skill-Ups, Gathering & Fishing, Crafting, Gold, Balanced.\n"..
+            "Resourcefulness goals: Endgame PvE, PvP & Honor, Reputation, Cost Savings, Balanced.\n"..
+            "All Trees offers the complete goal list.\n\n"..
+            "Each character remembers a goal for EACH tree, separate from Gear activity/style. FCM ranks next-rank possibilities but does not spend points or confirm that an unverified node is unlocked.\n"..
+            "Commands: /fcm legacytree <tree>; /fcm legacypriority <goal>; /fcm legacyaccess <perk name> available|locked|unknown.\n"..
+            "Confirm purchases with /fcm legacyrank <perk name> <rank> and unspent points with /fcm legacyavailable <0-16>.")
         add("minimap", "Round movable minimap icon", "Left-drag to reposition; right-click to reset.",
             "The round FCM emblem appears as soon as you log in. Drag it around the minimap to a preferred spot. Its location is saved for the whole account across sessions.\n\nRight-click the icon, click Reset Minimap Icon below, or type /fcm minimap reset to return it to its default location.")
         add("settings","Gear activity and priority","Choose both dropdowns above (saved per character)",
             "Activity: Leveling, PvP, or Endgame PvE.\nSecondary style: DPS, Balanced, or Survivability.\n\n"..
             "Each character remembers its activity and its style for EACH activity. Changing spec on Talents changes weightings.\n"..
             "Slash commands: /fcm gearprofile leveling|pvp|pve and /fcm gearstyle dps|balanced|survival.\n"..
-            "Custom stat weight: /fcm gearweight spell 5 (per toon/activity); /fcm gearweight reset.\n\n"..
-            "Score comparisons are approximate weighted stats, not actual DPS, PvP win rates, healing simulations, hit-cap modeling or verified IV weights.")
+            "Numerical profile: /fcm pawnimport (paste a Pawn v1 scale in the dialog), /fcm weightprofile to inspect, /fcm weightprofile reset to remove it.\n"..
+            "A user-imported scale is tied to this toon, specialization, activity, style and level bracket (1-39, 40-59, or 60). FCM does not rescale it with speculative factors.\n"..
+            "Optional cap-aware comparisons: /fcm hitrating <current HIT RATING> <cap HIT RATING>. Both numbers must be rating points, never percentages; /fcm hitrating reset clears the manual snapshot. Refresh after gear/talent changes.\n"..
+            "Custom stat override: /fcm gearweight spell 5 (per toon/activity); /fcm gearweight reset. Manual overrides are preserved on import.\n\n"..
+            "Selected source: "..(ch and FCM.Gear and FCM.Gear:WeightSource(ch) or "No character selected").."\n\n"..
+            "Scores are estimated ITEM stat scores, not percent DPS, PvP success, measured healing or complete simulator models. Frost Mage Leveling/PvE DPS uses weights transcribed from your Zygor Item Score recording, including separately scanned spell-hit/crit percentages; unsupported bonuses cannot be scored. Existing imports and manual overrides take precedence. Hit-cap handling applies only when valid rating units are entered. Other fallback defaults remain provisional heuristics, not verified IV numerical weights.")
         add("guide","Talent plan customization","Use slash commands to add or clear planned talent steps.",
             "/fcm talentbuild <profile ID> (see Talents tab for this spec's available profiles)\n/fcm talentsource icy|custom\n/fcm talentspec <spec>\n/fcm talentadd <level> <talent name>\n/fcm talentrank <level> <rank> <talent name>\n/fcm talentclear <level>\n/fcm talentaudit\n\nGuide modules include verified notes and selected exact steps. All 27 specializations have at least three profile slots; distinct IV alternate builds are added where verified. Full exact point order remains incomplete and is labeled clearly.")
         add("window","Resizable interface","Drag the lower-right corner; /fcm ui reset to restore defaults.",
@@ -2645,10 +2874,16 @@ local function buildRows(ui)
         add("manual-reputation","Recipe reputation requirements","Register verified gates by recipe ID and faction ID.",
             "/fcm repgate <recipeID> <factionID> <standing 1-8>\n/fcm clearrepgate <recipeID>\n\nStanding IDs: 1 Hated through 8 Exalted. Unregistered vendors are not automatically inferred.")
     elseif tab=="Help" then
+        add("legacy-advisor-help","Next Legacy Point Advisor","Pick the actual Legacy tree and a separate activity goal.",
+            "Open Legacy; choose Tree: Adventure / Professions / Resourcefulness (or All Trees). Goal options change to match that tree's perks. Each character remembers its choice for each tree.\n\n"..
+            "FCM shows three ranked suggestions with reasons. Your character's saved professions, class and level can influence the ranking; the game panel remains authoritative for prerequisites and purchases.\n\n"..
+            "For an available perk, type /fcm legacyaccess <name> available; for locked use locked. Once purchased, record the new rank with /fcm legacyrank <name> <rank>. No Legacy point is spent automatically.")
         add("advanced","What's new in unified v0.9.0","Reference provenance, safer import merges, offline data-health audit",
             "The Windows companion now records reference provider, fetch date and evidence caveats, retains multiple dungeon sources, and reports incomplete data using its Audit Reference Data button. Partial API replies no longer discard known recipe output/reagents or cached boss loot.\n\nThese are public reference records, not verified game drops or vendor stock. No live Icy Veins sync, automatic Legacy totals, DPS simulation, mailing or crafting automation is claimed.")
+        add("weighting","Gear weight sources and imports","Use /fcm pawnimport to paste your Pawn v1 numerical scale.",
+            "On the Talents tab, select the class specialization. Set activity and style at the top, then use /fcm pawnimport to paste a complete Pawn export.\n\nFCM validates all nonzero fields. If a stat cannot be scanned, it rejects the entire import rather than pretending that stat has zero importance. The new scale applies only to this character/spec/activity/style/level bracket; other toons keep their own settings.\n\nFrost Mage Leveling/PvE DPS includes a user-recorded Zygor numerical reference preset. Spell Hit % and Spell Crit % are scanned as tooltip percentages, never confused with rating. Other builds remain provisional.\n\nUse /fcm weightprofile to confirm the active source, or /fcm weightprofile reset to remove a user import. Your earlier /fcm gearweight custom values are not deleted.\n\nIcy Veins guides are useful stat-priority references but do not provide universal numeric Pawn values for every Forever level and spec. This is not a DPS simulation or official Zygor integration.")
         add("requests", "Cross-character crafting requests", "Open Requests to see work assigned to the crafter.",
-            "From Gear or Crafting choose a recipient in the top dropdown, select a recipe or suggested upgrade, and click Request Craft. If multiple characters know it, choose the crafter.\n\nLog into that crafter: FCM announces pending assignments and Requests lists the item, recipient, and materials. Assign/Reassign changes the crafter. Set Status moves it through requested, gathering, ready, and crafted; Delivered or Cancelled archives it. Nothing is crafted or mailed automatically.")
+            "From Gear or Crafting choose a recipient in the top dropdown, select a recipe or suggested upgrade, and click Request Craft. Enter the quantity of FINISHED items (1-999), then select the crafter if several characters know it. Material totals account for recipe yield.\n\nLog into that crafter: FCM announces pending assignments and Requests lists the item, quantity, recipient and materials. Assign/Reassign changes the crafter. Status / Qty edits the requested output or moves it through requested, gathering, ready, and crafted; Delivered or Cancelled archives it. Nothing is crafted or mailed automatically.")
         add("delete", "Removing a saved character", "Characters tab > select a toon > Remove Saved Character",
             "You must be logged into a different toon than the record being removed. Select its row in Characters, then press Remove Saved Character and confirm the prompt.\n\nOnly FCM's saved data and that character's queued crafts are removed. The actual WoW character is untouched. Log into the removed character again if you want to re-add it.\n\nOther characters' records remain intact.")
         add("factions","Horde and Alliance support","Use Faction: All / Alliance / Horde above the list.",
@@ -2866,9 +3101,19 @@ function UI:Refresh()
     self.talentSpecButton:Hide()
     self.talentBuildButton:Hide()
     self.talentSourceButton:Hide()
+    self.legacyTreeButton:Hide()
+    self.legacyPriorityButton:Hide()
     self.openLegacyButton:Hide()
     self.clearDiagButton:Hide()
-    if tab=="Legacy" then self.openLegacyButton:Show() end
+    if tab=="Legacy" then
+        self.openLegacyButton:Show()
+        if ch then
+            self.legacyTreeButton:SetText("Tree: "..FCM.legacyTreeLabels[FCM:LegacyTree(ch)])
+            self.legacyPriorityButton:SetText("Goal: "..FCM:LegacyPriorityLabel(FCM:LegacyTree(ch),FCM:LegacyPriority(ch),true))
+            self.legacyTreeButton:Show()
+            self.legacyPriorityButton:Show()
+        end
+    end
     if tab=="Diagnostics" then self.clearDiagButton:Show() end
     if tab == "Talents" and ch then
         local spec=FCM:TalentSpec(ch)
@@ -2905,7 +3150,7 @@ function UI:Refresh()
             self.action:SetWidth(125)
             self.action:SetText("Assign / Reassign")
             self.action:Show()
-            self.cancelRequestButton:SetText("Set Status")
+            self.cancelRequestButton:SetText("Status / Qty")
             self.cancelRequestButton:Show()
         elseif tab=="Gathering" then
             self.action:SetWidth(190)

@@ -11,8 +11,9 @@ local function sortedKeys(t)
     table.sort(out,function(a,b)return tostring(a)<tostring(b) end)
     return out
 end
-local function availableFor(recipe, crafter, excludeKey)
+local function availableFor(recipe, crafter, excludeKey, requestedQuantity)
     local reservations=FCM:ReservedMaterials(excludeKey,crafter)
+    local runs=FCM:CraftRuns(recipe,requestedQuantity)
     local rows,transfers,complete={}, {}, true
     if not recipe or recipe.complex or not recipe.reagents or #recipe.reagents==0 then
         return {ready=false,uncertain=true,lines={},transfers={},missing=0,reason="Incomplete, optional or unresolved recipe ingredients"}
@@ -20,7 +21,7 @@ local function availableFor(recipe, crafter, excludeKey)
     local totalMissing=0
     for _,reagent in ipairs(recipe.reagents) do
         local id=tonumber(reagent.itemID or reagent.id)
-        local requested=num(reagent.count or reagent.qty)
+        local requested=num(reagent.count or reagent.qty)*runs
         if not id or requested==0 then
             complete=false
         else
@@ -61,8 +62,8 @@ local function availableFor(recipe, crafter, excludeKey)
         reason=complete and "Recorded materials are sufficient, subject to snapshot/trade restrictions" or "Shortages or unverified ingredients"}
 end
 
-function FCM:CraftAvailability(recipe, crafter, excludeKey)
-    return availableFor(recipe,crafter,excludeKey)
+function FCM:CraftAvailability(recipe, crafter, excludeKey, requestedQuantity)
+    return availableFor(recipe,crafter,excludeKey,requestedQuantity)
 end
 
 function FCM:SmartUpgradeRows(ch)

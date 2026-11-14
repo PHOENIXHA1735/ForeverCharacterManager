@@ -2,9 +2,9 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 (local gathering preview)
+## Current source: v0.9.1 QA1 (combined test candidate)
 
-The **v0.9.1 preview** adds local resource tracking, optional GatherMate2 import, and community snapshot downloads from GitHub. The v0.9.0 improvements and QA corrections remain intact. Live WoW Forever gathering events and the Windows companion UI still require player testing.
+The **v0.9.1 QA1 preview** combines local gathering tracking, optional GatherMate2 import and GitHub community snapshots with the verified QA6e quantity-entry fix, tree-specific Legacy advisor and Frost Mage weight-profile support. Live WoW Forever gathering events and the Windows companion UI still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -14,6 +14,8 @@ The **v0.9.1 preview** adds local resource tracking, optional GatherMate2 import
 - Gear scoring, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
 - Windows companion scripts for read-only public reference import, auction reference updates and local tooling.
 - Gathering tab: account-wide personally observed nodes, one-time read-only GatherMate2 import, and versioned public resource snapshots.
+- Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); numerically imported Zygor/Pawn weight profiles for character-specific gear comparisons.
+- Crafting requests accept finished-item quantities (including multi-output recipes), with a client-safe Enter/Continue popup handler.
 
 ## Installation
 
@@ -52,6 +54,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `tests/`: portable offline Lua regressions (`texlua` from repository root).
 - `SOURCE_MANIFEST_SHA256.txt`: release-source file hashes.
 - `FCM_v091_RELEASE_NOTES.md`: gathering preview and manual test notes; older release documentation retained.
+- `FCM_v091_QA1_COMBINED_TEST_NOTES.md`: the QA6e/Gathering merge and first combined in-game test checklist.
 
 ## Important limitations
 

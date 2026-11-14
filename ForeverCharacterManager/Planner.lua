@@ -19,6 +19,7 @@ function FCM:ChangeRequestStatus(req, status)
         self.db.requestHistory=self.db.requestHistory or {}
         self.db.requestHistory[#self.db.requestHistory+1]={
             recipeID=req.recipeID,recipientKey=req.recipientKey,crafterKey=req.crafterKey,
+            quantity=self:CraftRequestQuantity(req),
             itemName=(self:RecipeByID(req.recipeID) or {}).name,
             status=status,updated=req.updated,created=req.created,
         }
@@ -49,10 +50,11 @@ function FCM:ShoppingList(factionView)
         local recipe=self:RecipeByID(req.recipeID)
         local crafter=self:ResolveRequestCrafter(req,recipe)
         if recipe and crafter and not recipe.complex then
+            local runs=self:CraftRuns(recipe,self:CraftRequestQuantity(req))
             for _,mat in ipairs(recipe.reagents or {}) do
                 local id=mat.itemID
                 if id then
-                    local needed=tonumber(mat.count) or 0
+                    local needed=(tonumber(mat.count) or 0)*runs
                     local outstanding=needed
                     local _,_,locations=self:MaterialLocations(id,crafter)
                     for _,loc in ipairs(locations) do
