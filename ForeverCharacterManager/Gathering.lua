@@ -535,7 +535,9 @@ end
 -- older Forever clients can instead expose the legacy WorldMapButton.
 local function gatherWorldMapSurface()
     local world=_G.WorldMapFrame
-    if not world or type(world.IsShown)~="function" or not world:IsShown() then return end
+    if not world or type(world.IsShown)~="function" or not world:IsShown() then
+        return nil,"World map not open"
+    end
     local scroll=world.ScrollContainer
     local canvas=scroll and scroll.Child
     if not canvas and scroll and type(scroll.GetCanvas)=="function" then
@@ -544,7 +546,7 @@ local function gatherWorldMapSurface()
     end
     canvas=canvas or world.MapCanvas or _G.WorldMapButton or _G.WorldMapDetailFrame
     if not canvas or type(canvas.GetWidth)~="function" or
-       type(canvas.GetHeight)~="function" then return end
+       type(canvas.GetHeight)~="function" then return nil,"Map canvas unavailable" end
     local mapID
     if type(world.GetMapID)=="function" then
         local ok,value=pcall(world.GetMapID,world)
@@ -560,11 +562,48 @@ local function gatherWorldMapSurface()
         if ok then mapID=value end
     end
     mapID=tonumber(mapID)
-    if not mapID or mapID<1 or mapID~=math.floor(mapID) then return end
+    if not mapID or mapID<1 or mapID~=math.floor(mapID) then
+        return nil,"Selected map ID unavailable"
+    end
     local width,height=canvas:GetWidth(),canvas:GetHeight()
     if type(width)~="number" or type(height)~="number" or
-       width<=0 or height<=0 then return end
+       width<=0 or height<=0 then return nil,"Map canvas has no usable size" end
     return canvas,mapID,width,height
+end
+
+-- Some Forever integrations expose Teldrassil as map 41, while the modern
+-- player-position API records its zone as 1438. The same saved coordinates
+-- must remain readable through either zone-map ID. Avoid converting other
+-- zones until a verified mapping is available.
+local gatheringMapAliases={[41]={1438},[1438]={41}}
+local function gatherZoneMaps(nodes,mapID)
+    local result={}
+    local wanted={[mapID]=true}
+    for _,alias in ipairs(gatheringMapAliases[mapID] or {}) do wanted[alias]=true end
+    for id in pairs(wanted) do
+        local zone=type(nodes)=="table" and (nodes[id] or nodes[tostring(id)])
+        if type(zone)=="table" then result[#result+1]=zone end
+    end
+    return result
+end
+
+local function gatherMapIDs(g)
+    local ids={}
+    for _,maps in pairs(g.nodes or {}) do
+        if type(maps)=="table" then
+            for mapID in pairs(maps) do
+                local id=tonumber(mapID)
+                if id and id>0 then ids[id]=true end
+            end
+        end
+    end
+    local sorted={}
+    for id in pairs(ids) do sorted[#sorted+1]=id end
+    table.sort(sorted)
+    local names={}
+    for i=1,math.min(#sorted,10) do names[#names+1]=tostring(sorted[i]) end
+    if #sorted>10 then names[#names+1]="..." end
+    return #sorted>0 and table.concat(names,",") or "none"
 end
 
 function FCM:HideGatherWorldMapPins()
@@ -581,7 +620,11 @@ function FCM:UpdateGatherWorldMap()
         return
     end
     local canvas,mapID,width,height=gatherWorldMapSurface()
-    if not canvas then self:HideGatherWorldMapPins(); return end
+    if not canvas then
+        self._gatherWorldDiagnostic=tostring(mapID)
+        self:HideGatherWorldMapPins()
+        return
+    end
     local g=self:GatherDB()
     if not g then self:HideGatherWorldMapPins(); return end
     local iconSize=math.max(8,math.min(32,
@@ -596,8 +639,7 @@ function FCM:UpdateGatherWorldMap()
        self._gatherWorldRenderedSize==iconSize then return end
     local matches={}
     for kind,maps in pairs(g.nodes) do
-        local zone=type(maps)=="table" and (maps[mapID] or maps[tostring(mapID)])
-        if type(zone)=="table" then
+        for _,zone in ipairs(gatherZoneMaps(maps,mapID)) do
             for _,node in pairs(zone) do
                 if type(node)=="table" and type(node.name)=="string" and
                    type(node.x)=="number" and type(node.y)=="number" and
@@ -609,6 +651,9 @@ function FCM:UpdateGatherWorldMap()
             end
         end
     end
+    self._gatherWorldDiagnostic="Map "..mapID.." | "..#matches..
+        " matching saved locations | stored map IDs: "..gatherMapIDs(g)..
+        " | canvas "..width.."x"..height
     -- Prefer personally discovered nodes if an unusually large imported zone
     -- exceeds the safety cap. This is display-only; no records are deleted.
     table.sort(matches,function(a,b)

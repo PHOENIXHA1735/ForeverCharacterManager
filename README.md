@@ -2,7 +2,21 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA4i (combined test candidate)
+## Current source: v0.9.1 QA4j (combined test candidate)
+
+**QA4j shows bag capacity:** In FCM's Item Explorer or Global Search, select a bag
+to see its slot count in the item preview and details panel. Hover an item
+row to open the game's original tooltip beside the list. FCM uses an explicit
+reference count or scans the loaded game's item tooltip; if neither supplies
+a number, it says the capacity is unavailable instead of guessing, especially
+for new Forever bags. The saved gathering database is unchanged.
+
+**QA4j world-map follow-up:** Teldrassil's two known map IDs, 41 and 1438,
+are now reconciled when displaying saved nodes. Open the map and then FCM >
+Diagnostics to see the selected map ID, how many nodes matched, the available
+saved-zone IDs and canvas dimensions. If the herbs still do not appear, send
+that diagnostic text; the UI may be using a different map surface in Forever.
+These changes have offline tests but still need live-client verification.
 
 **QA4i adds saved resource icons to the full world map:** Open a **zone** map (such as Teldrassil) and see FCM's recorded herbs, ore, fishing locations and treasure at their original map coordinates, not just the minimap. Hover for the resource and personal gather count. **FCM > Gathering > World Map: On/Off** or `/fcm gatherpins world on|off` controls this overlay independently from the minimap pin toggle. The world-map display ignores minimap view distance and near-hide distance, so saved locations remain visible across the selected zone; it is not live-spawn tracking. The regular gathering Size control scales map icons too. Up to 500 pins per selected zone are displayed, prioritizing personally confirmed observations. This preview still needs in-game validation of the Forever world-map canvas.
 
@@ -72,10 +86,11 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `FCM_v091_QA4_INLINE_CRAFTING_TEST_NOTES.md`: inline quantity, candidate material-transfer, and nearby gathering-minimap live tests.
 - `INSTALL-QA4d.txt`: exact in-place Windows installation steps and PowerShell build verification.
 - `INSTALL-QA4e.txt`: current safe install and live test steps for circular markers and chest tracking.
-- `INSTALL-QA4f.txt`: latest safe install and compass-rim test instructions.
+- `INSTALL-QA4f.txt`: previous compass-rim test instructions.
 - `INSTALL-QA4g.txt`: prior safe installation and marker-sizing test guide.
-- `INSTALL-QA4h.txt`: current safe installation and book-style rim placement test guide.
-- `INSTALL-QA4i.txt`: latest safe installation and full world-map overlay test guide.
+- `INSTALL-QA4h.txt`: previous book-style rim placement test guide.
+- `INSTALL-QA4i.txt`: previous full world-map overlay test guide.
+- `INSTALL-QA4j.txt`: latest installation, bag-capacity and world-map diagnostic checks.
 
 ## Important limitations
 

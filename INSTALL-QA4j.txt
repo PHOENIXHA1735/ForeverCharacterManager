@@ -1,0 +1,33 @@
+FCM v0.9.1 QA4j — bag size preview and gathering world-map diagnostics
+Build: QA4j-20261114-Bag-Slots-Map-Diagnostics
+
+SAFE WINDOWS UPDATE
+1. Fully close World of Warcraft: Forever and the FCM Windows companion.
+2. Back up the installed ForeverCharacterManager folder and WTF SavedVariables.
+3. Open the ZIP. Merge its ForeverCharacterManager folder into your existing:
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\
+4. Replace matching addon source files but do NOT delete the old folder or
+   your SavedVariables, companion encrypted key, generated reference files,
+   gathering cache, or companion state.
+5. Start WoW, open /fcm > Diagnostics and confirm the exact build ID above.
+
+TEST BAG SLOT DETAILS
+1. In FCM > Item Explorer, search Linen Bag and select it.
+2. The top item preview and its details should say Bag capacity: 6 slots when
+   the live item/reference information supplies the slot count.
+3. Hover the item row: the game's full tooltip should appear to the left of
+   the list and disappear when you move away.
+4. Try another bag and a custom Forever bag. If FCM cannot verify its size,
+   it says capacity unavailable rather than inventing a number.
+
+TEST GATHERING WORLD MAP
+1. FCM > Gathering > World Map: On. Press M > Kalimdor > Teldrassil.
+2. Saved herbs indexed under either map 41 or map 1438 should be considered.
+3. Keep the map open; check /fcm > Diagnostics for:
+   Gathering world map: Map ... | ... matching saved locations | ...
+4. If no herbs appear, send that entire line and a world-map screenshot.
+   A positive count without visible icons points toward a map canvas/layer
+   mismatch, which requires live-client evidence to resolve safely.
+
+This QA candidate is not published to GitHub and has only offline tests.
+Neither local gathering records nor any other account data is deleted.

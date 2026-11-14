@@ -325,6 +325,15 @@ eq(worldFar.x,612,'world map x uses recorded normalized zone coordinate')
 eq(math.abs(worldFar.y+371.2)<.001,true,'world map y is measured down from top')
 eq(worldFar.width,16,'world map icon uses configured full item size')
 eq(worldFar.nodeRim,nil,'world map pins do not use minimap compass')
+local importedTeldrassil=false
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    if pin:IsShown() and pin.nodeName=='Silverleaf' and pin.nodeX==2314 then
+        importedTeldrassil=true
+    end
+end
+eq(importedTeldrassil,true,'legacy Teldrassil map 41 imports appear on modern map 1438')
+eq(FCM._gatherWorldDiagnostic:find('Map 1438',1,true)~=nil,true,
+    'world-map diagnostic records selected client map ID')
 FCM:UpdateGatherWorldMap()
 eq(worldFar:IsShown(),true,'unchanged map redraw is safely cached')
 worldFar.scripts.OnEnter(worldFar)
@@ -353,6 +362,16 @@ for _,pin in ipairs(FCM._gatherWorldPins) do
         'old zone herbs are not retained after switching map zones')
 end
 eq(worldCopper,true,'switching map shows only its saved gathering records')
+selectedMapID=41
+FCM:UpdateGatherWorldMap()
+local personalModernTeldrassil=false
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    if pin:IsShown() and pin.nodeName=='Far Silverleaf' then
+        personalModernTeldrassil=true
+    end
+end
+eq(personalModernTeldrassil,true,
+    'modern Teldrassil discoveries appear when client world map selects map 41')
 selectedMapID=1438
 WorldMapFrame.ScrollContainer=nil
 WorldMapButton=frame()

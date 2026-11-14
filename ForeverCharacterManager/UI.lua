@@ -278,9 +278,9 @@ local function itemStats(id,stored,game)
     if #lines==0 then lines[1]="Stats unavailable in current records" end
     return lines
 end
-function UI:DungeonTooltip(anchor,id)
+function UI:DungeonTooltip(anchor,id,side)
     if not GameTooltip or not id or id<=0 then return end
-    GameTooltip:SetOwner(anchor,"ANCHOR_RIGHT")
+    GameTooltip:SetOwner(anchor,side=="left" and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
     local ok=false
     if GameTooltip.SetItemByID then ok=pcall(GameTooltip.SetItemByID,GameTooltip,id) end
     if not ok and GameTooltip.SetHyperlink then ok=pcall(GameTooltip.SetHyperlink,GameTooltip,"item:"..tostring(id)) end
@@ -342,12 +342,17 @@ function UI:RenderItemPreview(row)
     local descriptors={}
     if meta.slot then descriptors[#descriptors+1]=tostring(meta.slot)
     elseif meta.typeName then descriptors[#descriptors+1]=tostring(meta.typeName) end
+    local capacity,isContainer=FCM:ContainerCapacity(id,store)
+    if capacity then descriptors[#descriptors+1]=capacity.." slots" end
     if meta.quality then descriptors[#descriptors+1]=qualityNames[meta.quality] or "Item" end
     local ilvl=tonumber((meta.game and meta.game.ilvl) or store.itemLevel or store.ilvl)
     if ilvl and ilvl>0 then descriptors[#descriptors+1]="iLvl "..ilvl end
     preview.kind:SetText(short(table.concat(descriptors,"  |  "),43))
     local stats=itemStats(id,store,meta.game)
-    if #stats>0 and stats[1]~="Stats unavailable in current records" then
+    if isContainer then
+        preview.stats:SetText(capacity and ("Bag capacity: "..capacity.." slots") or
+            "Bag capacity not available in current item data")
+    elseif #stats>0 and stats[1]~="Stats unavailable in current records" then
         local subtitle=stats[1]
         if #stats>1 and #subtitle+#stats[2]<51 then subtitle=subtitle.."  |  "..stats[2] end
         preview.stats:SetText(short(subtitle,58))
@@ -3366,6 +3371,22 @@ function UI:Refresh()
             end
             self:Refresh()
         end)
+        -- Item Explorer and search rows expose the actual client item tooltip
+        -- on hover. Place it to the left so it does not hide the stats panel.
+        -- The dedicated preview also includes bag capacity without hovering.
+        local hoveredID=previewItemID(row)
+        if hoveredID and (tab=="Item Explorer" or tab=="Global Search" or
+            tab=="Crafting" or tab:sub(1,11)=="Profession:") then
+            widget:SetScript("OnEnter",function(btn)
+                self:DungeonTooltip(btn,hoveredID,"left")
+            end)
+            widget:SetScript("OnLeave",function()
+                if GameTooltip then GameTooltip:Hide() end
+            end)
+        else
+            widget:SetScript("OnEnter",nil)
+            widget:SetScript("OnLeave",nil)
+        end
         widget:Show()
         if row.id==self.selectedRow then selected=row end
     end

@@ -1,6 +1,30 @@
-# FCM v0.9.1 QA4i — Inline crafting and gathering map QA
+# FCM v0.9.1 QA4j — Inline crafting, bag capacity and gathering map QA
 
-Build `QA4i-20261114-Gathering-World-Map` (not a GitHub release).
+Build `QA4j-20261114-Bag-Slots-Map-Diagnostics` (not a GitHub release).
+
+## Test A — bag size and item hover
+
+1. Open FCM > Item Explorer, search `Linen Bag`, and select the bag item.
+2. Check that the preview and the text details show `Bag capacity: 6 slots`
+   if the Forever client has cached the original item's slot count.
+3. Hover the item row and verify the game's full item tooltip appears beside
+   the FCM window. Move the cursor away and check that it closes.
+4. Repeat with a bag of another capacity, then a custom Forever bag. Capacity
+   must reflect a real reference/client tooltip, not be guessed by name.
+5. Also check Global Search and a crafting recipe producing a bag. Non-bag
+   equipment previews must still show normal stats and comparisons.
+
+## Test B — herbs on the full world map
+
+1. Select FCM > Gathering > World Map: On, then open M > Kalimdor > Teldrassil.
+2. Previously saved herbs should appear whether they were indexed under
+   Teldrassil 41 or 1438. The addon does not erase or re-import records.
+3. With the world map still open, open FCM > Diagnostics. Copy the line that
+   starts `Gathering world map:`; it should show the selected map ID, matching
+   saved locations, saved-zone IDs and map surface size.
+4. If you see a positive matching count but no icons, send that line and a
+   screenshot. It likely indicates a live map-layer/canvas mismatch. If the
+   count is zero, send the same diagnostic so zone IDs can be checked.
 
 ## Install
 
@@ -238,11 +262,11 @@ protect performance. All original locations remain in SavedVariables.
 
 ## Confirm that the installed files actually updated
 
-The previously provided PowerShell check showed `QA4-20261114-Inline-Crafting-Gathering-Pins`
-still installed, which is older than QA4b/QA4c and explains the identical
-emblem markers. See `INSTALL-QA4i.txt` and check the installed `Core.lua` after
-merging this release. The expected build marker is
-`QA4i-20261114-Gathering-World-Map`.
+The November 14 Diagnostics screenshots show **QA4h** currently installed.
+QA4h predates the **QA4i** world-map overlay; its absence there is expected.
+See `INSTALL-QA4j.txt` and check the installed `Core.lua` after merging the
+new combined source. The expected build marker is
+`QA4j-20261114-Bag-Slots-Map-Diagnostics`.
 
 ## Offline regressions
 
@@ -251,6 +275,8 @@ merging this release. The expected build marker is
 `texlua tests/qa_craft_target_and_filter_v091.lua`
 
 `texlua tests/qa_gathering_v091.lua`
+
+`texlua tests/qa_bag_capacity_v091.lua`
 
 `texlua tests/parse.lua`
 

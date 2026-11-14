@@ -101,6 +101,7 @@ function FCM:ItemCategory(item)
     local category=string.lower(clean(item.category))
     local name=string.lower(clean(item.name))
     if category:find("weapon",1,true) then return "weapon" end
+    if category:find("container",1,true) or category:find("bags",1,true) then return "container" end
     if category:find("armor",1,true) or category:find("armour",1,true) then return "armor" end
     if category:find("jewel",1,true) or category:find("trinket",1,true) then return "jewelry" end
     if category:find("consum",1,true) or category:find("potion",1,true) or category:find("food",1,true) then return "consumable" end
@@ -110,6 +111,90 @@ function FCM:ItemCategory(item)
     if category:find("profession",1,true) or category:find("tool",1,true) then return "profession" end
     if category:find("enchant",1,true) or category:find("gem",1,true) then return "enchant" end
     return "special"
+end
+
+-- Bag capacity is not an equipment stat. Prefer a numeric field from the
+-- imported reference; otherwise read the actual item's client tooltip. Do
+-- not derive the slot count from the name (custom Forever bags can differ).
+local function validCapacity(value)
+    local n=tonumber(value)
+    if n and n==math.floor(n) and n>=1 and n<=120 then return n end
+end
+
+local function capacityInLine(value)
+    if type(value)~="string" then return nil end
+    local n=value:match("^%s*(%d+)%s+[Ss]lots?%f[%A]") or
+        value:match("^%s*[Ss]lots?%s*:%s*(%d+)%f[%A]")
+    return validCapacity(n)
+end
+
+function FCM:ContainerCapacity(itemID,record)
+    itemID=tonumber(itemID)
+    if not itemID or itemID<=0 then return nil,false end
+    record=type(record)=="table" and record or
+        ((self.externalData and self.externalData.items or {})[itemID] or {})
+    local class=tonumber(record.classID or record.classId or record.itemClassID)
+    if not class and type(GetItemInfoInstant)=="function" then
+        local ok,_,_,_,_,_,itemClass=pcall(GetItemInfoInstant,itemID)
+        if ok then class=tonumber(itemClass) end
+    end
+    if not class and C_Item and type(C_Item.GetItemInfoInstant)=="function" then
+        local ok,_,_,_,_,_,itemClass=pcall(C_Item.GetItemInfoInstant,itemID)
+        if ok then class=tonumber(itemClass) end
+    end
+    if not class and type(GetItemInfo)=="function" then
+        local ok,_,_,_,_,_,_,_,_,_,_,_,itemClass=pcall(GetItemInfo,itemID)
+        if ok then class=tonumber(itemClass) end
+    end
+    local category=self:ItemCategory(record)
+    local isBag=class==1 or (not class and category=="container")
+    if not isBag then return nil,false end
+
+    local supplied=validCapacity(record.bagSlots or record.containerSlots or
+        record.slotCount or record.capacity)
+    if supplied then return supplied,true end
+    self._containerCapacityCache=self._containerCapacityCache or {}
+    if self._containerCapacityCache[itemID] then
+        return self._containerCapacityCache[itemID],true
+    end
+
+    local capacity
+    if C_TooltipInfo and type(C_TooltipInfo.GetItemByID)=="function" then
+        local ok,info=pcall(C_TooltipInfo.GetItemByID,itemID)
+        if ok and type(info)=="table" and type(info.lines)=="table" then
+            for _,line in ipairs(info.lines) do
+                capacity=capacityInLine(line.leftText) or capacityInLine(line.rightText)
+                if capacity then break end
+            end
+        end
+    end
+    if not capacity and type(CreateFrame)=="function" and UIParent then
+        if not self._containerCapacityScanner then
+            local ok,scanner=pcall(CreateFrame,"GameTooltip","FCMContainerCapacityScanner",
+                UIParent,"GameTooltipTemplate")
+            if ok then self._containerCapacityScanner=scanner end
+        end
+        local tip=self._containerCapacityScanner
+        if tip and type(tip.SetHyperlink)=="function" then
+            local ok=pcall(function()
+                if tip.SetOwner then tip:SetOwner(UIParent,"ANCHOR_NONE") end
+                if tip.ClearLines then tip:ClearLines() end
+                tip:SetHyperlink("item:"..itemID)
+            end)
+            if ok and type(tip.GetNumLines)=="function" then
+                for i=1,math.min(tip:GetNumLines() or 0,40) do
+                    local line=_G and _G["FCMContainerCapacityScannerTextLeft"..i]
+                    local value=line and line.GetText and line:GetText()
+                    capacity=capacityInLine(value)
+                    if capacity then break end
+                end
+            end
+            if tip.Hide then tip:Hide() end
+        end
+    end
+    -- Never cache a failed lookup: an uncached client item can load later.
+    if capacity then self._containerCapacityCache[itemID]=capacity end
+    return capacity,true
 end
 -- Three-level Auction House-style taxonomy. Imported data does not always
 -- contain subclass or equipment slot, so unknown types are NOT guessed.
@@ -339,6 +424,11 @@ function FCM:CatalogItemDetails(id,ch)
     field(lines,"Item level",item.itemLevel or item.ilvl)
     field(lines,"Required level",item.requiredLevel or item.minLevel)
     field(lines,"Equipment slot",item.equipLoc or item.inventoryType)
+    local capacity,isContainer=self:ContainerCapacity(id,item)
+    if isContainer then
+        lines[#lines+1]=capacity and ("Bag capacity: "..capacity.." slots") or
+            "Bag capacity: unavailable in current client/reference data"
+    end
     field(lines,"Class ID",item.classID)
     field(lines,"Subclass",item.subclass)
     field(lines,"Bind type",item.binding)

@@ -2,6 +2,19 @@
 
 ## QA4 inline crafting and gathering minimap preview (November 14; not published)
 
+- **QA4j bag-slot details and hover:** When an item is a container, FCM Item
+  Explorer / Global Search now shows `Bag capacity: N slots` in the preview
+  and details. FCM uses explicit saved reference capacity or the local game's
+  cached tooltip, including a hidden-tooltip fallback on older clients. It
+  does not infer the size of custom Forever bags from their names. Item-list
+  rows open the client's full tooltip on hover, beside the panel, without
+  changing the previous dungeon loot right-click behavior.
+- **QA4j Teldrassil world-map compatibility and diagnostics:** World-map
+  overlays accept the two observed Teldrassil zone-ID conventions, 41 and
+  1438, without altering saved coordinates or source data. FCM Diagnostics
+  now reports map ID, matching saved-node count, sampled saved map IDs and
+  surface dimensions when the world map is open. Offline validation covers
+  both ID directions; actual WoW Forever rendering remains unverified.
 - **QA4i full world-map gathering overlay:** The zone map now displays saved
   historical herb, mining, named fishing-pool and treasure locations at their
   normalized recorded map coordinates, even far from the active character.

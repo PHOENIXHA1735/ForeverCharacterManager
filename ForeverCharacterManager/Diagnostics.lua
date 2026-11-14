@@ -63,6 +63,7 @@ function FCM:DiagnosticsReport()
     rows[#rows+1] = "Craft requests: " .. #(self.db.craftingQueue or {})
     rows[#rows+1] = "Completed requests: " .. #(self.db.requestHistory or {})
     rows[#rows+1] = "Active registered events: " .. tostring(self.events and (function() local n=0 for _ in pairs(self.events) do n=n+1 end return n end)() or 0)
+    rows[#rows+1] = "Gathering world map: " .. tostring(self._gatherWorldDiagnostic or "Not checked yet")
     local own = self:Current()
     rows[#rows+1] = ""
     rows[#rows+1] = "Current character data:"
