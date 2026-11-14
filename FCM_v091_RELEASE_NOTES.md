@@ -5,6 +5,9 @@
 - **QA4d close-range markers:** Saved herb, mining, fishing and treasure
   markers automatically hide once the character is within **15 yards** of
   the saved location, leaving the game's native tracking dot unobscured.
+  Set the cutoff on **FCM > Gathering > Hide within: 15 yd**, choosing 0, 5,
+  10, 15 (recommended), 20, 25, 35 or 50 yards. The adjacent **Pins:
+  On/Off** button independently controls all FCM historical node markers.
   `/fcm gatherpins near 0` disables the proximity hiding; use any whole
   number up to 50 yards to choose a different cutoff. The FCM launcher icon
   remains visible. The Diagnostics tab now displays the complete build ID

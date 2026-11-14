@@ -110,14 +110,17 @@ the same name may require manual confirmation if they are within eight yards.
 
 ## Test 6 — do not cover the game's own gathering dot
 
-1. In-game, type `/fcm gatherpins on` and `/fcm gatherpins near 15`.
+1. In-game, open `/fcm` > **Gathering**, set **Pins: On** and choose
+   **Hide within: 15 yd** from the dropdown; it is the recommended default.
+   The equivalent commands are `/fcm gatherpins on` and `/fcm gatherpins near 15`.
 2. Walk toward a previously recorded herb, ore vein or fishing school while
    any relevant native tracking is enabled. FCM's historical item icon should
    disappear once you are within 15 yards, exposing the native minimap dot.
 3. Back away beyond 15 yards while still within minimap range. The FCM icon
    should reappear, retaining its name, count, and icon art.
-4. Run `/fcm gatherpins near 25`, then `/fcm gatherpins near 0` to verify the
-   cutoff changes and that zero disables close-range hiding entirely.
+4. In the Gathering tab change the dropdown to 25 yards, then 0 yards to
+   verify the cutoff adjusts and that zero disables close-range hiding.
+   Also toggle **Pins: Off** then **Pins: On** to check the separate control.
 5. The round launcher button must remain visible throughout. FCM only hides
    its *own* location markers; it does not control Blizzard tracking dots.
 

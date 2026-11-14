@@ -38,6 +38,16 @@ the build ID directly, without needing /run print.
 
 GATHERING MARKER SETTINGS
 
+ Open FCM > Gathering. The top row has two permanent controls:
+
+   Hide within: 15 yd       Adjustable dropdown: 0, 5, 10, 15, 20,
+                            25, 35 or 50 yards; 15 recommended.
+   Pins: On                 Toggle historical minimap gathering pins.
+
+ These options are saved across characters. 0 means don't auto-hide.
+
+ The matching PowerShell-free in-game slash commands are:
+
  /fcm gatherpins on          Show saved gathering markers
  /fcm gatherpins off         Hide all FCM saved gathering markers
  /fcm gatherpins near 15     Hide markers within 15 yards (default)

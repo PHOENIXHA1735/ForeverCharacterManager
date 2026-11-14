@@ -1091,6 +1091,22 @@ function UI:Create()
     self.craftQuantityEdit:SetScript("OnEnterPressed",function(edit) edit:ClearFocus();self:Refresh() end)
     self.craftQuantityEdit:SetScript("OnEscapePressed",function(edit) edit:ClearFocus() end)
     self.craftQuantityEdit:Hide()
+    self.gatherDistanceButton=button(panel,"Hide within: 15 yd",173,25,function()
+        self:ShowGatherDistanceMenu()
+    end)
+    self.gatherDistanceButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
+    self.gatherDistanceButton:Hide()
+    self.gatherPinsButton=button(panel,"Pins: On",105,25,function()
+        if not FCM.db or not FCM.db.settings then return end
+        FCM.db.settings.gatherPins=not FCM.db.settings.gatherPins
+        FCM._gatherMinimapDirty=true
+        if not FCM.db.settings.gatherPins and FCM.HideGatherMinimapPins then
+            FCM:HideGatherMinimapPins()
+        end
+        self:Refresh()
+    end)
+    self.gatherPinsButton:SetPoint("LEFT",self.gatherDistanceButton,"RIGHT",8,0)
+    self.gatherPinsButton:Hide()
 
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
@@ -1399,6 +1415,27 @@ function UI:ShowCraftRequestModeMenu()
             FCM.db.settings.craftQuantityMode="additional"
         end},
     },292,false)
+end
+
+function UI:ShowGatherDistanceMenu()
+    if not self.gatherDistanceButton or not FCM.db or not FCM.db.settings then return end
+    local options={}
+    -- Eight presets fit the existing menu on one page. Slash command accepts
+    -- every whole-yard value from 0 through 50 for finer adjustment.
+    for _,yards in ipairs({0,5,10,15,20,25,35,50}) do
+        local distance=yards
+        options[#options+1]={
+            label=distance==0 and "Never hide nearby markers" or
+                ("Hide within "..distance.." yards"..
+                (distance==15 and " (recommended)" or "")),
+            run=function()
+                FCM.db.settings.gatherPinHideYards=distance
+                FCM._gatherMinimapDirty=true
+                self:Refresh()
+            end,
+        }
+    end
+    self:MakeMenu(self.gatherDistanceButton,options,248,false)
 end
 function UI:ShowAdvisorSortMenu()
     local browsing=self.tab=="Item Explorer" or self.tab=="Global Search"
@@ -2060,10 +2097,11 @@ local function buildRows(ui)
             "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
                 count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
             "Saved nodes appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
-            "Markers hide within "..tostring(FCM.db.settings.gatherPinHideYards or 15)..
-                " yards of your character so they do not cover WoW's own tracking dots. "..
-            "Use /fcm gatherpins near 15 to change the hiding distance (0-50), "..
-                "or /fcm gatherpins off|on to toggle markers. They are not live spawn indicators.\n"..
+            "The Gathering tab has a Hide within distance dropdown (15 yards recommended), "..
+                "plus a separate Pins On/Off toggle. Close-range hiding keeps saved markers "..
+                "from covering WoW's own tracking dots; 0 yards disables proximity hiding. "..
+            "Alternatively use /fcm gatherpins near <0-50> and /fcm gatherpins on|off. "..
+                "They are not live spawn indicators.\n"..
             "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
                 ", community "..count.community..".")
         local categories={"herbalism","mining","fishing","treasure"}
@@ -3311,6 +3349,15 @@ function UI:Refresh()
         self.craftModeButton:SetShown(crafting)
         self.craftQuantityLabel:SetShown(crafting)
         self.craftQuantityEdit:SetShown(crafting)
+        local gathering=(tab=="Gathering")
+        self.gatherDistanceButton:SetShown(gathering)
+        self.gatherPinsButton:SetShown(gathering)
+        if gathering then
+            local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
+            self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or
+                ("Hide within: "..distance.." yd"))
+            self.gatherPinsButton:SetText(FCM.db.settings.gatherPins and "Pins: On" or "Pins: Off")
+        end
         if crafting then
             local selectedProfession=FCM.db.settings.craftProfession or "all"
             local name=selectedProfession=="all" and "All" or "Unknown"
@@ -3340,11 +3387,11 @@ function UI:Refresh()
         self.backSearchButton:SetShown(tab=="Global Search")
         -- Move content down only while the AH-style filter toolbar is visible.
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering) and -143 or -107)
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting) and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering) and -143 or -107)
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,68)
         local dungeonBrowsing=(tab=="Dungeons")
         self.dungeonViewButton:SetShown(dungeonBrowsing)
