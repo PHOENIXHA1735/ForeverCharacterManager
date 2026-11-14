@@ -19,7 +19,7 @@ function FCM:ChangeRequestStatus(req, status)
         self.db.requestHistory=self.db.requestHistory or {}
         self.db.requestHistory[#self.db.requestHistory+1]={
             recipeID=req.recipeID,recipientKey=req.recipientKey,crafterKey=req.crafterKey,
-            quantity=self:CraftRequestQuantity(req),
+            quantity=self:CraftRequestQuantity(req),quantityMode=self:CraftRequestMode(req),
             itemName=(self:RecipeByID(req.recipeID) or {}).name,
             status=status,updated=req.updated,created=req.created,
         }
@@ -49,8 +49,13 @@ function FCM:ShoppingList(factionView)
     for _,req in ipairs(queue) do
         local recipe=self:RecipeByID(req.recipeID)
         local crafter=self:ResolveRequestCrafter(req,recipe)
-        if recipe and crafter and not recipe.complex then
-            local runs=self:CraftRuns(recipe,self:CraftRequestQuantity(req))
+        local recipient=self.db.characters[req.recipientKey or ""]
+        local neededOutput=recipe and self:CraftRequestNeeded(recipe,req,recipient) or 1
+        if neededOutput==0 then
+            -- The recipient already has enough finished items. No shopping or
+            -- unresolved-reagent warning is warranted, even for complex crafts.
+        elseif recipe and crafter and not recipe.complex then
+            local runs=self:CraftRequestRuns(recipe,req,recipient)
             for _,mat in ipairs(recipe.reagents or {}) do
                 local id=mat.itemID
                 if id then

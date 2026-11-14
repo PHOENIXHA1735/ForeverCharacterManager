@@ -2,9 +2,9 @@
 
 An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
 
-## Current source: v0.9.1 QA1 (combined test candidate)
+## Current source: v0.9.1 QA2 (combined test candidate)
 
-The **v0.9.1 QA1 preview** combines local gathering tracking, optional GatherMate2 import and GitHub community snapshots with the verified QA6e quantity-entry fix, tree-specific Legacy advisor and Frost Mage weight-profile support. Live WoW Forever gathering events and the Windows companion UI still require player testing. This candidate is not a published GitHub release.
+The **v0.9.1 QA2 preview** combines local gathering tracking, optional GatherMate2 import, tree-specific Legacy advisor, Frost Mage weight profiles, the QA6e quantity-entry fix, and a new Crafting profession dropdown, recipe-only search, and two request quantity modes. Live WoW Forever gathering events and the Windows companion UI still require player testing. This candidate is not a published GitHub release.
 
 ## Features
 
@@ -16,6 +16,8 @@ The **v0.9.1 QA1 preview** combines local gathering tracking, optional GatherMat
 - Gathering tab: account-wide personally observed nodes, one-time read-only GatherMate2 import, and versioned public resource snapshots.
 - Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); numerically imported Zygor/Pawn weight profiles for character-specific gear comparisons.
 - Crafting requests accept finished-item quantities (including multi-output recipes), with a client-safe Enter/Continue popup handler.
+- The Crafting tab offers a saved profession dropdown and a separate search covering learned recipes, their output items and recipe IDs only.
+- New craft requests default to **Reach Total**: only the recipient's last-scanned bags and bank count toward the target. **Craft Additional** always requests new items; older saved requests retain their original additional-item meaning. Reservations and shopping lists adjust to the needed amount.
 
 ## Installation
 
@@ -61,6 +63,7 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `SOURCE_MANIFEST_SHA256.txt`: release-source file hashes.
 - `FCM_v091_RELEASE_NOTES.md`: gathering preview and manual test notes; older release documentation retained.
 - `FCM_v091_QA1_COMBINED_TEST_NOTES.md`: the QA6e/Gathering merge and first combined in-game test checklist.
+- `FCM_v091_QA2_CRAFTING_TEST_NOTES.md`: follow-up profession-search and Reach Total QA checklist.
 
 ## Important limitations
 

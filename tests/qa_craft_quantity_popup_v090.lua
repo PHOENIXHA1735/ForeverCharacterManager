@@ -3,7 +3,7 @@
 local function eq(got,want,label)
     if got~=want then error((label or 'mismatch')..': expected '..tostring(want)..', got '..tostring(got),2) end
 end
-local function fixture(variant,hideFirst)
+local function fixture(variant,hideFirst,recordedOwned)
     local fcm={db={characters={spotty={key='spotty'}}},messages={}}
     function fcm:Say(message) self.messages[#self.messages+1]=message end
     function fcm:ValidCraftQuantity(raw)
@@ -11,11 +11,18 @@ local function fixture(variant,hideFirst)
         return n and n>=1 and n<=999 and n%1==0 and n or nil
     end
     function fcm:CraftRequestQuantity(req) return req.quantity or 1 end
-    function fcm:UpdateQueuedCraftQuantity(req,n) req.quantity=n;return true,'Updated' end
+    function fcm:CraftRequestMode(req) return req and req.quantityMode or 'additional' end
+    function fcm:DefaultCraftRequestMode() return 'total' end
+    function fcm:OwnedFinishedItems() return recordedOwned or 0,true end
+    function fcm:UpdateQueuedCraftQuantity(req,n,mode)
+        req.quantity=n
+        if mode then req.quantityMode=mode end
+        return true,'Updated'
+    end
     assert(loadfile('ForeverCharacterManager/UI.lua'))('ForeverCharacterManager',fcm)
     function fcm.UI:Refresh() fcm.refreshed=true end
-    function fcm.UI:ShowCrafterMenu(recipe,key,existing,crafters,qty)
-        fcm.accepted={recipe=recipe.id,key=key,qty=qty}
+    function fcm.UI:ShowCrafterMenu(recipe,key,existing,crafters,qty,mode)
+        fcm.accepted={recipe=recipe.id,key=key,qty=qty,mode=mode}
     end
     StaticPopupDialogs={}
     local popup={}
@@ -52,7 +59,7 @@ local function fixture(variant,hideFirst)
         def.OnShow(dialog)
         return dialog
     end
-    local recipe={id=99,name='Red Linen Bag'}
+    local recipe={id=99,name='Red Linen Bag',outputID=901}
     fcm.UI:PromptCraftQuantity(recipe,'spotty')
     return fcm,popup,recipe
 end
@@ -68,6 +75,7 @@ test('Enter saves typed 3 even when client clears input before accepting',functi
     popup.edit:SetText('3')
     popup.definition.EditBoxOnEnterPressed(popup.edit)
     eq(fcm.accepted.qty,3)
+    eq(fcm.accepted.mode,'total','Reach Total default')
     eq(#fcm.messages,0)
 end)
 
@@ -77,6 +85,15 @@ test('Continue button accepts 6 using capitalized EditBox field',function()
     popup.edit:SetText('6')
     popup.dialog.button1:Click()
     eq(fcm.accepted.qty,6)
+end)
+
+test('Reach Total sees two banked bags and suggests target of three',function()
+    local fcm,popup=fixture('lower',false,2)
+    eq(popup.edit:GetText(),'3','suggest one above recorded stock')
+    assert(popup.definition.text:find('Recorded owned: 2',1,true),'popup must state stock')
+    popup.dialog.button1:Click()
+    eq(fcm.accepted.qty,3)
+    eq(fcm.accepted.mode,'total')
 end)
 
 test('Continue uses captured value if input was cleared before callback',function()

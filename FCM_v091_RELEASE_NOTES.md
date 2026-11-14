@@ -1,5 +1,23 @@
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
+## QA2 crafting preview (November 14; not published)
+
+- The Crafting tab now has a **Profession** dropdown listing only professions
+  found in the account-wide learned recipe library. The dedicated **Recipe
+  search** matches learned recipe names, output-item names and recipe IDs,
+  without returning ordinary item-catalog hits.
+- **Goal: Reach Total** is the default for new requests. The requested number
+  represents the total finished items the recipient should have; the plan
+  subtracts matching items in that character's last-recorded bags/bank.
+  **Goal: Craft More** preserves the alternative "make N additional items".
+- Shopping lists, material reservations, Requests and Planner use the number
+  still needed, with recipe-yield rounding. A satisfied target requires zero
+  new materials. Items on other toons are not silently counted as delivered.
+- Existing requests without a quantity-mode field keep their original
+  **Craft Additional** meaning; upgrading the addon does not reinterpret them.
+- Live bank/character inventory and interface validation is still required.
+  See `FCM_v091_QA2_CRAFTING_TEST_NOTES.md`.
+
 ## QA1 combined candidate (awaiting player verification)
 
 The QA1 source and install test package also include the QA6e finished-output
