@@ -38,8 +38,19 @@ SAFETY
 - The installer merges only addon code/assets. It does not remove any other
   addon, character, SavedVariables, account data, or FCM companion scripts.
 - Existing *.generated.lua sources remain untouched.
+- The AHHistory tree is entirely excluded from addon update copying. Existing
+  private scan history is never replaced by this installer.
 - Crafting, mailing, buying, item movement, and item delivery remain manual.
 - R6.1 is a TEST ZIP, not a public GitHub release. Keep R6 as rollback.
+
+OPTIONAL AH SCAN HISTORY FOLDER SETUP
+Run SETUP-FCM-AH-HISTORY.cmd from this folder to create the nine archive
+subfolders in your existing addon installation. This creates folders only:
+no AHledger copying, scan schedule, cleanup, or backup task is enabled.
+The archive is at:
+C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\ForeverCharacterManager\AHHistory
+Personal scan files stay local, and downloaded provider price tables must not
+be stored there. If Windows denies access, run the setup .cmd as Administrator.
 
 FOCUSED IN-GAME CHECKS
 A. Inventory > search "clam meat": confirm the heading says

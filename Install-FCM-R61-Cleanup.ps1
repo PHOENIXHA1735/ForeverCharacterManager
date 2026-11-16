@@ -94,10 +94,16 @@ try {
     $skipped = @()
     $files = @(Get-ChildItem -LiteralPath $package -File -Recurse | Sort-Object FullName)
     foreach ($file in $files) {
+        $relative = $file.FullName.Substring($package.Length + 1)
+        if ($relative -match '^AHHistory[\\/]') {
+            # Private scan history belongs to the player and is NEVER part of
+            # an addon code update, even if a ZIP accidentally contains it.
+            $skipped += $relative
+            continue
+        }
         if (@('.lua', '.toc', '.png', '.tga') -notcontains $file.Extension.ToLowerInvariant()) {
             throw ('Unexpected file in package: ' + $file.Name)
         }
-        $relative = $file.FullName.Substring($package.Length + 1)
         if ($relative -match '(^|[\\/])FCM-Companion[\\/]') {
             throw 'Companion scripts must not be overwritten by this addon update.'
         }
@@ -120,7 +126,7 @@ try {
     Write-Host ('Destination: ' + $target)
     Write-Host ('Files to merge: ' + $updates.Count)
     Write-Host ('Existing generated data files preserved: ' + $skipped.Count)
-    Write-Host 'Preserved: SavedVariables, user-generated data, companion scripts, other addons.'
+    Write-Host 'Preserved: SavedVariables, AHHistory scans, user-generated data, companion scripts, other addons.'
     $answer = Read-Host 'Type INSTALL to back up and merge the R6.1 files (anything else cancels)'
     if ($answer -cne 'INSTALL') {
         Write-Host 'Cancelled. No files changed.'

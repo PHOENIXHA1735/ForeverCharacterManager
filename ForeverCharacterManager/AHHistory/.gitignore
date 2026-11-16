@@ -1,0 +1,7 @@
+# This directory is for local, user-owned auction-house scan history.
+# Never commit or ship user scans or generated reports.
+*
+!.gitignore
+!README.txt
+!*/
+!**/.gitkeep
