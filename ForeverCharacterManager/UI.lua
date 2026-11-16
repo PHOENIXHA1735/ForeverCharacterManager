@@ -46,6 +46,7 @@ local tabPalettes={
     gear={accent="73e6b4",summary="b6dfcd",row={0.06,0.19,0.15},selected={0.12,0.33,0.24}},
     craft={accent="ffcb76",summary="e4cda6",row={0.20,0.15,0.08},selected={0.34,0.24,0.11}},
     gather={accent="9ee47c",summary="c5dcad",row={0.12,0.20,0.09},selected={0.22,0.32,0.13}},
+    gold={accent="ffda7b",summary="e2d1a4",row={0.20,0.16,0.07},selected={0.34,0.26,0.11}},
     reference={accent="84c0ff",summary="b8cde6",row={0.08,0.14,0.24},selected={0.13,0.24,0.39}},
     progression={accent="d3a3ff",summary="d7c2eb",row={0.16,0.11,0.23},selected={0.26,0.17,0.37}},
     system={accent="aebdd4",summary="c1cad7",row={0.13,0.16,0.20},selected={0.23,0.28,0.35}},
@@ -55,6 +56,7 @@ local tabPaletteGroups={
     Gear="gear",Upgrades="gear",["Upgrade Plan"]="gear",
     Crafting="craft",Planner="craft",Requests="craft",Shopping="craft",Professions="craft",
     Gathering="gather",Inventory="gather",
+    ["Gold Finder"]="gold",
     Catalog="reference",["Item Explorer"]="reference",Dungeons="reference",Auction="reference",
     Talents="progression",Legacy="progression",Reputation="progression",
     Settings="system",Diagnostics="system",Help="system",["Global Search"]="reference",
@@ -904,6 +906,12 @@ function UI:CharacterRecipeProfessions(ch)
 end
 function UI:Navigate(tab)
     self.tab=tab
+    if tab=="Settings" then self.flipMarginDraft=nil end
+    -- Read actual open-session bags when Gold Finder is entered; the Core
+    -- BAG_UPDATE_DELAYED event already keeps them current while playing.
+    if tab=="Gold Finder" and FCM.ScanBags and self:GetCharacter()==FCM:Current() then
+        FCM:ScanBags()
+    end
     if (tab=="Item Explorer" or tab=="Global Search") and FCM.db then
         local settings=FCM.db.settings
         settings.itemCategory="all";settings.itemType="all";settings.itemSlot="all"
@@ -1143,7 +1151,7 @@ function UI:Create()
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
     background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
+    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Gold Finder", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
     -- Sidebar can exceed the window height when a character has multiple
     -- profession tabs. Keep every destination reachable with wheel or arrows.
     local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
@@ -1232,6 +1240,74 @@ function UI:Create()
     end)
     self.requestViewButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
     self.requestViewButton:Hide()
+    self.goldViewButton=button(panel,"Opportunities: All",183,25,function()
+        self:ShowGoldViewMenu()
+    end)
+    self.goldViewButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
+    self.goldViewButton:Hide()
+    self.goldRecheckButton=button(panel,"Recheck loaded prices",177,25,function()
+        if self:GetCharacter()==FCM:Current() then FCM:ScanBags() end
+        self.selectedRow=nil
+        self:Refresh()
+    end)
+    self.goldRecheckButton:SetPoint("LEFT",self.goldViewButton,"RIGHT",10,0)
+    self.goldRecheckButton:Hide()
+    self.flipMarginButton=button(panel,"Flip minimum: 30%",185,25,function()
+        self:ShowFlipMarginMenu()
+    end)
+    self.flipMarginButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
+    self.flipMarginButton:Hide()
+    self.flipMarginHint=text(panel,"Minimum net return on merchant cost (0-500%)",
+        "GameFontHighlightSmall",16,-140,375)
+    self.flipMarginHint:Hide()
+    self.flipMarginSlider=CreateFrame("Slider","FCMFlipMarginSlider",panel,"OptionsSliderTemplate")
+    self.flipMarginSlider:SetSize(260,18)
+    self.flipMarginSlider:SetPoint("TOPLEFT",panel,"TOPLEFT",19,-169)
+    self.flipMarginSlider:SetOrientation("HORIZONTAL")
+    self.flipMarginSlider:SetMinMaxValues(0,500)
+    self.flipMarginSlider:SetValueStep(0.5)
+    if _G and _G.FCMFlipMarginSliderLow then _G.FCMFlipMarginSliderLow:SetText("0%") end
+    if _G and _G.FCMFlipMarginSliderHigh then _G.FCMFlipMarginSliderHigh:SetText("500%") end
+    if _G and _G.FCMFlipMarginSliderText then _G.FCMFlipMarginSliderText:SetText("") end
+    if self.flipMarginSlider.SetObeyStepOnDrag then
+        self.flipMarginSlider:SetObeyStepOnDrag(true)
+    end
+    self.flipMarginSlider:Hide()
+    self.flipMarginEdit=CreateFrame("EditBox",nil,panel,"InputBoxTemplate")
+    self.flipMarginEdit:SetSize(74,24)
+    self.flipMarginEdit:SetAutoFocus(false)
+    self.flipMarginEdit:SetMaxLetters(6)
+    self.flipMarginEdit:SetPoint("LEFT",self.flipMarginSlider,"RIGHT",20,0)
+    self.flipMarginEdit:Hide()
+    self.flipMarginApply=button(panel,"Apply",83,25,function()
+        self:ApplyFlipMargin()
+    end)
+    self.flipMarginApply:SetPoint("LEFT",self.flipMarginEdit,"RIGHT",12,0)
+    self.flipMarginApply:Hide()
+    self.flipMarginState=text(panel,"Saved","GameFontHighlightSmall",0,0,90)
+    self.flipMarginState:ClearAllPoints()
+    self.flipMarginState:SetPoint("LEFT",self.flipMarginApply,"RIGHT",12,0)
+    self.flipMarginState:Hide()
+    self.flipMarginSlider:SetScript("OnValueChanged",function(_,raw)
+        if self.suppressFlipUpdate then return end
+        local value=math.floor(math.max(0,math.min(500,tonumber(raw) or 0))*2+0.5)/2
+        self.flipMarginDraft=value
+        self.flipMarginEdit:SetText(string.format("%g",value))
+        self.flipMarginState:SetText("Not saved")
+    end)
+    self.flipMarginEdit:SetScript("OnTextChanged",function(edit,userInput)
+        if self.suppressFlipUpdate or not userInput then return end
+        self.flipMarginDraft=edit:GetText()
+        self.flipMarginState:SetText("Not saved")
+    end)
+    self.flipMarginEdit:SetScript("OnEnterPressed",function(edit)
+        edit:ClearFocus()
+        self:StageFlipMarginInput()
+    end)
+    self.flipMarginEdit:SetScript("OnEscapePressed",function(edit)
+        edit:ClearFocus();self.flipMarginDraft=nil
+        self:SyncFlipMarginControls(FCM.db.settings.flipMinProfitPct or 30,"Saved")
+    end)
     if self.searchPending then self.search:SetText(self.searchPending); self.searchPending=nil end
 
     -- This toolbar filters learned recipes only. Global item search is hidden
@@ -1886,6 +1962,68 @@ function UI:ShowRequestViewMenu()
     self:MakeMenu(self.requestViewButton,options,240,true)
 end
 
+function UI:ShowGoldViewMenu()
+    local choices={{"All opportunities + bag value","all"},{"My bag sale estimates","bags"},
+        {"Farming & gathering","farm"},{"Fishing","fish"},{"Cooking profits","cook"}}
+    local options={}
+    for _,choice in ipairs(choices) do
+        local label,key=choice[1],choice[2]
+        options[#options+1]={label=label,run=function()
+            FCM.db.settings.goldView=key
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.goldViewButton,options,220,true)
+end
+
+function UI:ShowFlipMarginMenu()
+    local options={}
+    for _,pct in ipairs({15,25,30,50,75,100}) do
+        local value=pct
+        options[#options+1]={label=tostring(value).."% minimum projected return",run=function()
+            self.flipMarginDraft=value
+            self:SyncFlipMarginControls(value,"Not saved")
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.flipMarginButton,options,235,true)
+end
+
+function UI:SyncFlipMarginControls(value,state)
+    value=math.max(0,math.min(500,tonumber(value) or 30))
+    if not (self.flipMarginSlider and self.flipMarginEdit) then return end
+    self.suppressFlipUpdate=true
+    self.flipMarginSlider:SetValue(value)
+    self.flipMarginEdit:SetText(string.format("%g",value))
+    self.suppressFlipUpdate=false
+    if self.flipMarginState then self.flipMarginState:SetText(state or "Saved") end
+end
+
+function UI:StageFlipMarginInput()
+    local value=tonumber(self.flipMarginEdit and self.flipMarginEdit:GetText())
+    if not value or value<0 or value>500 or value~=value then
+        if self.flipMarginState then self.flipMarginState:SetText("Use 0-500") end
+        return nil
+    end
+    self.flipMarginDraft=value
+    self:SyncFlipMarginControls(value,"Not saved")
+    return value
+end
+
+function UI:ApplyFlipMargin()
+    local value=self:StageFlipMarginInput()
+    if not value then
+        FCM:Say("Enter a flip profit percentage between 0 and 500, then Apply.")
+        return false
+    end
+    FCM.db.settings.flipMinProfitPct=value
+    self.flipMarginDraft=nil
+    self:SyncFlipMarginControls(value,"Saved")
+    FCM:Say("Merchant flip minimum saved: "..string.format("%g",value).."% net return.")
+    self:Refresh()
+    return true
+end
+
 function UI:ShowCraftProgressQuantity(req)
     local recipe=req and FCM:RecipeByID(req.recipeID)
     if not recipe or not FCM:CanCraftRequest(req,FCM:Current(),recipe) then
@@ -2385,6 +2523,72 @@ local function buildRows(ui)
         end
         if #rows==0 then add("no-upgrades","No actionable upgrades found","Scan gear and recipes on the appropriate characters.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
+    elseif tab=="Gold Finder" then
+        if not ch then
+            add("gold-no-character","Choose a character to find gold opportunities",
+                "Character level, profession skills, and market are required.",
+                "Log into a character to scan their level and skills. FCM will never substitute another faction's market prices.")
+        else
+            local view=FCM.db.settings.goldView or "all"
+            local found=view=="bags" and {} or FCM:GoldOpportunities(ch,view)
+            local bag=FCM:BagSaleEstimate(ch)
+            local count={farm=0,fish=0,cook=0}
+            for _,entry in ipairs(found) do count[entry.kind]=count[entry.kind]+1 end
+            if view=="all" or view=="bags" then
+                add("gold-bag-summary","My bags: estimated sale value",
+                    "Unbound after AH fee "..FCM:MoneyLabel(bag.confirmedNet)..
+                    " | binding unverified "..FCM:MoneyLabel(bag.uncertainNet),
+                    "BAG VALUE — "..(ch.name or "selected character").."\n\n"..
+                    "Last bag scan: "..FCM:Age(ch.bagsStamp).."\n"..
+                    "Confirmed UNBOUND stack value at AH median after 5% cut: "..FCM:MoneyLabel(bag.confirmedNet).."\n"..
+                    "Confirmed unbound value using lowest observed buyouts: "..FCM:MoneyLabel(bag.confirmedLowNet).."\n"..
+                    "Binding UNKNOWN value (not counted as sellable): "..FCM:MoneyLabel(bag.uncertainNet).."\n"..
+                    "Bound items excluded: "..tostring(bag.bound).." units\n"..
+                    "Units without current pricing: "..tostring(bag.unpriced).."\n\n"..
+                    "CURRENT PRICE CHECK\n"..
+                    "Open the AH and type /ahl scan. When it finishes, check the cheapest actual listing before posting. "..
+                    "AHledger Sync downloads public tables about every 30 minutes; an updated table may require /reload. "..
+                    "Recheck loaded prices only reads what the game currently has; it cannot initiate an internet refresh.\n\n"..
+                    "Estimated sales are asking prices, not completed transactions. No listing deposits, bind-unknown items or personal travel time included.")
+                for i,record in ipairs(bag.rows) do
+                    if view=="bags" or i<=12 then
+                        local r=record
+                        add("gold-bag:"..r.itemID,r.name,
+                            tostring(r.unbound).." unbound | "..FCM:MoneyLabel(r.confirmedNet)..
+                            " net | "..tostring(r.unknown).." binding unknown",
+                            function() return FCM:BagSaleEstimateLines(r,ch) end)
+                        rows[#rows].itemID=r.itemID
+                    end
+                end
+            end
+            add("gold-guide","Gold opportunities for "..(ch.name or "selected character"),
+                count.cook.." cooking | "..count.fish.." fishing | "..count.farm.." farming",
+                "GOLD FINDER — PRICES FROM AHLEDGER (ahledger.com)\n\n"..
+                "FCM reads the freshest price table already loaded by AHledger Sync. The AHledger addon can scan while the auction house is open; FCM cannot open or scan the AH from anywhere in the world or download new prices while WoW is running.\n\n"..
+                "COOK: Only actually learned, scanned Cooking recipes are ranked. Ingredient cost is subtracted and the 5% auction cut is included. Unknown reagent prices are excluded rather than guessed.\n\n"..
+                "FISH/FARM: Reported sources are checked against recorded character level and gathering skill where provided. Select a row to see its source and zone; unknown locations/levels are flagged, not invented. Without a measured catch/kill pace, values are potential sales AFTER the AH cut, NOT farm profit or gold/hour.\n\n"..
+                "Market/day is an estimate from recent AH scans, not proof of a sale or your personal income. Items with an explicit zero sold/day estimate are excluded; items with unknown demand are marked unknown. Fresh AHledger Sync data requires /reload or logging in to become visible in game; a newer own scan can load locally on your next login. Recheck loaded prices only refreshes what FCM currently has.\n\n"..
+                "To populate Cooking: open the Cooking profession window and use Scan. To populate Farming: update the companion's reference item sources. No private character data is uploaded.")
+            for _,entry in ipairs(found) do
+                local e=entry
+                local label=e.kind=="cook" and "COOK" or (e.kind=="fish" and "FISH" or "FARM")
+                local value=e.kind=="cook" and "profit/item " or "net sale/item "
+                local summary=label.." | "..value..FCM:MoneyLabel(e.unitValue)..
+                    " | "..(e.salesPerDay and string.format("~%.0f sold/day",e.salesPerDay) or "sales unknown")
+                if e.source and e.source.zone and e.source.zone~="" then
+                    summary=summary.." | "..short(tostring(e.source.zone),25)
+                end
+                add("gold:"..e.kind..":"..e.itemID,e.name,summary,
+                    function() return FCM:GoldOpportunityLines(e,ch) end)
+                rows[#rows].itemID=e.itemID
+            end
+            if #found==0 and view~="bags" then
+                add("gold-empty","No fully priced, eligible opportunities yet",
+                    "Requires AHledger Sync, scanned skills/recipes and source records.",
+                    "FCM deliberately excludes bundled price snapshots, unsourced high-level fish, unlearned recipes, and crafts with unknown ingredient costs.\n\n"..
+                    "Check AHledger Sync, log back in or /reload, open Cooking and scan, and use the companion's source import. Other characters' faction and ruleset prices are never substituted.")
+            end
+        end
     elseif tab=="Gathering" then
         local count=FCM:GatherCounts()
         local total=count.herbalism+count.mining+count.fishing+count.treasure
@@ -3578,6 +3782,14 @@ local function buildRows(ui)
           end
         end
     elseif tab=="Settings" then
+        add("flip-margin","Merchant flipping threshold",
+            "Minimum projected return: "..tostring(FCM.db.settings.flipMinProfitPct or 30).."% after AH cut",
+            "MERCHANT FLIP TOOLTIP\n\n"..
+            "Move your cursor over an item for sale at a merchant. If FCM can identify the merchant's actual gold price and a recent AHledger lowest buyout, it subtracts a 5% auction cut, then calculates the projected return on your purchase.\n\n"..
+            "Choose a preset or drag the slider. Type an exact percentage (0-500, decimals allowed) in the number box, press Enter to preview, then click Apply to save it for all characters. You can also type /fcm flipmargin 35.\n\n"..
+            "BAG TOOLTIP\n\n"..
+            "Hover an item in your bags to compare its likely AH proceeds after the auction cut against its vendor sell value. Bound or uncertain items never receive a confident auction recommendation.\n\n"..
+            "Only recent, non-snapshot prices qualify. Listings can expire or fail to sell. Deposits and travel time are excluded; FCM never purchases or posts automatically.")
         add("legacy-advisor-settings","Legacy tree and goal", "Choose Adventure, Professions or Resourcefulness; then choose your goal.",
             "CHOOSE A TREE\n"..
             "Use the two selectors at the bottom of the Legacy tab.\n"..
@@ -3720,7 +3932,7 @@ function UI:Refresh()
             end
         end
     end
-    if (FCM.db.settings.advisorSort or "recommended")=="name" then
+    if tab~="Gold Finder" and (FCM.db.settings.advisorSort or "recommended")=="name" then
         table.sort(entries,sortByName)
     end
     -- The box is also useful for looking up ordinary inventory items while on
@@ -3806,7 +4018,7 @@ function UI:Refresh()
         -- on hover. Place it to the left so it does not hide the stats panel.
         -- The dedicated preview also includes bag capacity without hovering.
         local hoveredID=previewItemID(row)
-        if hoveredID and (tab=="Item Explorer" or tab=="Global Search" or
+        if hoveredID and (tab=="Gold Finder" or tab=="Item Explorer" or tab=="Global Search" or
             tab=="Crafting" or tab:sub(1,11)=="Profession:") then
             widget:SetScript("OnEnter",function(btn)
                 self:DungeonTooltip(btn,hoveredID,"left")
@@ -3866,6 +4078,29 @@ function UI:Refresh()
         self.craftQuantityLabel:SetShown(crafting)
         self.craftQuantityEdit:SetShown(crafting)
         local gathering=(tab=="Gathering")
+        local gold=(tab=="Gold Finder")
+        self.goldViewButton:SetShown(gold)
+        self.goldRecheckButton:SetShown(gold)
+        local settingsPage=(tab=="Settings")
+        self.flipMarginButton:SetShown(settingsPage)
+        self.flipMarginHint:SetShown(settingsPage)
+        self.flipMarginSlider:SetShown(settingsPage)
+        self.flipMarginEdit:SetShown(settingsPage)
+        self.flipMarginApply:SetShown(settingsPage)
+        self.flipMarginState:SetShown(settingsPage)
+        if settingsPage then
+            self.flipMarginButton:SetText("Flip preset: "..
+                tostring(tonumber(self.flipMarginDraft) or FCM.db.settings.flipMinProfitPct or 30).."%")
+            if self.flipMarginDraft==nil then
+                self:SyncFlipMarginControls(FCM.db.settings.flipMinProfitPct or 30,"Saved")
+            elseif type(self.flipMarginDraft)=="number" then
+                self:SyncFlipMarginControls(self.flipMarginDraft,"Not saved")
+            end
+        end
+        if gold then
+            local choices={all="All",bags="Bags",farm="Farm",fish="Fish",cook="Cook"}
+            self.goldViewButton:SetText("Opportunities: "..(choices[FCM.db.settings.goldView or "all"] or "All"))
+        end
         self.gatherDistanceButton:SetShown(gathering)
         self.gatherPinsButton:SetShown(gathering)
         self.gatherRimButton:SetShown(gathering)
@@ -3920,11 +4155,13 @@ function UI:Refresh()
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
         -- Move content down only while the AH-style filter toolbar is visible.
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,settingsPage and -215 or
+            ((browsing or crafting or gathering or requests or gold) and -143 or -107))
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,settingsPage and -215 or
+            ((browsing or crafting or gathering or requests or gold) and -143 or -107))
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
             tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
