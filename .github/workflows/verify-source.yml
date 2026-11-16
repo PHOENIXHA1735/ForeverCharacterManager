@@ -14,21 +14,39 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y lua5.1
-      - name: Validate Lua syntax
+      - name: Validate Lua 5.1 syntax
         run: |
           find ForeverCharacterManager -name '*.lua' -type f -print0 | xargs -0 -r luac5.1 -p
-          lua5.1 tests/qa_gear_evidence.lua
-          lua5.1 tests/qa_zygor_frost_v090.lua
-          lua5.1 tests/qa_weight_profiles_v091.lua
-          lua5.1 tests/qa_gathering_v091.lua
+      - name: Run every Lua 5.1 regression suite and report all failures
+        shell: bash
+        run: |
+          failures=0
+          for suite in tests/qa_*.lua; do
+            echo "::group::$suite"
+            if lua5.1 "$suite"; then
+              echo "PASS: $suite"
+            else
+              echo "::error title=FCM regression failure::$suite"
+              failures=$((failures + 1))
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$failures" -ne 0 ]; then
+            echo "::error::$failures Lua 5.1 regression suite(s) failed"
+            exit 1
+          fi
+          echo "All Lua 5.1 regression suites passed"
       - name: Validate overnight catalog schedule safeguards
+        if: success() || failure()
         run: python3 tests/qa_overnight_catalog.py
       - name: Validate private history and Gold Advisor using synthetic data
+        if: success() || failure()
         run: |
           python3 tests/check_private_paths.py
           python3 tests/qa_ah_history.py
           lua5.1 tests/qa_gold_advisor.lua
       - name: Validate public gathering snapshot schema
+        if: success() || failure()
         shell: python
         run: |
           import json
@@ -46,6 +64,7 @@ jobs:
                   assert all(isinstance(n[k],int) and 0<=n[k]<=10000 for k in ('x','y'))
                   assert isinstance(n['name'],str) and 2<=len(n['name'])<=100
       - name: Validate TOC manifests and absence of local saves
+        if: success() || failure()
         shell: python
         run: |
           from pathlib import Path
