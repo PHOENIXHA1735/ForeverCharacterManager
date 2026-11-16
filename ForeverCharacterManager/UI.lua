@@ -507,7 +507,7 @@ function UI:RenderItemPreview(row)
         tostring(store.category or ""):lower()~="armor" and
         tostring(store.category or ""):lower()~="weapons" then
         -- Ordinary reagents and recipe items should not show equipment advice.
-        preview.stats:SetText("")
+        preview.stats:SetText("Crafting material - no combat stats")
     else
         preview.stats:SetText("Equipment stats not yet recorded")
     end
@@ -2631,7 +2631,7 @@ local function buildRows(ui)
             add("searchitem:"..e.id,e.name,"#"..e.id.." | "..e.group..
                 (e.itemType~="all" and " / "..e.itemType or "")..
                 (e.owned and " | Owned" or ""),
-                function() return FCM:CatalogItemDetails(e.id,ch) end)
+                function() return FCM:ReadableItemDetails(e.id,ch) end)
         end
         -- Learned recipe matches are account-wide. The Item Details pane also
         -- performs reverse-reagent lookups through ExpandedItemDetails.
@@ -2679,7 +2679,7 @@ local function buildRows(ui)
                 (selected.uncertain and "  |  Review availability" or "")..
                 (not selected.externallySourced and "  |  Reference missing" or "")
             add("item:"..tostring(entry.id),entry.name,summary,
-                function() return FCM:CatalogItemDetails(selected.id,ch) end)
+                function() return FCM:ReadableItemDetails(selected.id,ch) end)
         end
         if total==0 then
             add("item-explorer-help", "No items match these filters", "Clear filters or run the companion's Reference Data sync.",
@@ -2828,7 +2828,7 @@ local function buildRows(ui)
                     local item=result
                     add("overview-item:"..item.id,item.name,
                         "Item search: "..searchTerm.." | #"..item.id.." | "..item.group,
-                        function() return FCM:CatalogItemDetails(item.id,ch) end)
+                        function() return FCM:ReadableItemDetails(item.id,ch) end)
                 end
                 if total==0 then
                     add("overview-item-help:"..searchTerm,
