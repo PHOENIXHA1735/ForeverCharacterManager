@@ -25,6 +25,8 @@ local function setup()
     function fcm:Now() return 12345 end
     function fcm:DisplayCharacter(ch) return ch and ch.name or "Unknown" end
     function fcm:CanCollaborate(a,b) return a and b and a.faction==b.faction end
+    function fcm:InFactionView(ch) return ch~=nil end
+    function fcm:VisibleCharacters() return self:Characters() end
     function fcm:NormalizeFaction(v) return v end
     function fcm:Refresh() end
     assert(loadfile("ForeverCharacterManager/Crafting.lua"))("ForeverCharacterManager",fcm)
