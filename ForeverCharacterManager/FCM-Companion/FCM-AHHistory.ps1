@@ -5,6 +5,7 @@ param(
     [string]$AddonRoot = '',
     [string]$GameRoot = '',
     [string[]]$Sources = @(),
+    [switch]$IncludeProviderTables,
     [switch]$SkipAnalysis
 )
 $ErrorActionPreference = 'Stop'
@@ -18,7 +19,9 @@ if (-not $GameRoot) { $GameRoot = Split-Path -Parent (Split-Path -Parent (Split-
 if ($Mode -eq 'Status') { Get-ScheduledTask -TaskName $taskName -ErrorAction Stop; return }
 if ($Mode -eq 'Disable') { Disable-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null; return }
 if ($Mode -eq 'Enable') {
-    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -AddonRoot "{1}"' -f $MyInvocation.MyCommand.Path,$AddonRoot)
+    $taskArgs = ('-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -AddonRoot "{1}"' -f $MyInvocation.MyCommand.Path,$AddonRoot)
+    if ($IncludeProviderTables) { $taskArgs += ' -IncludeProviderTables' }
+    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $taskArgs
     $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 30)
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 25) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
@@ -44,14 +47,23 @@ try {
     if (-not $Sources.Count) {
         $wtf = Join-Path $GameRoot 'WTF'
         $Sources = @(Get-ChildItem -LiteralPath $wtf -Filter 'AHledger.lua' -File -Recurse -ErrorAction Stop | Where-Object { $_.Directory.Name -eq 'SavedVariables' } | Select-Object -ExpandProperty FullName)
-        $Sources += Join-Path $GameRoot 'Interface\AddOns\AHledger\AHledger_Data.lua'
+        # Provider snapshots are NOT personal AH scans. Never archive them
+        # by default: authorization for retention beyond cache expiry varies.
+        if ($IncludeProviderTables) {
+            $Sources += Join-Path $GameRoot 'Interface\AddOns\AHledger\AHledger_Data.lua'
+        }
     }
     foreach ($source in $Sources) {
         $temp = $null
         try {
             $info = Get-Item -LiteralPath $source -ErrorAction Stop
             if ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked source refused' }
-            if ($info.Name -ieq 'AHledger_Data.lua') { $kind='MarketTables' }
+            if ($info.Name -ieq 'AHledger_Data.lua') {
+                if (-not $IncludeProviderTables) {
+                    throw 'Provider-table archival requires explicit -IncludeProviderTables and retention permission'
+                }
+                $kind='MarketTables'
+            }
             elseif ($info.Name -ieq 'AHledger.lua') { $kind='RawScans' }
             else { throw 'Unexpected source name' }
             $sha = [Security.Cryptography.SHA256]::Create()
