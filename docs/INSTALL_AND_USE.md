@@ -96,7 +96,7 @@ The companion writes data files that WoW reads at the **next login or reload**. 
 
 1. Exit WoW and protect `WTF`. Run the repository's `SETUP-FCM-AH-HISTORY.cmd` once to create folders without deleting existing files.
 2. Locate `FCM-Companion\\FCM-AHHistory.ps1` inside the installed addon.
-3. From PowerShell in that folder, run `powershell.exe -NoProfile -File .\\FCM-AHHistory.ps1 -Mode Sync` for a **manual** safe archive/analysis, or `-Mode Status` to check scheduled status.
+3. From PowerShell in that folder, run `powershell.exe -NoProfile -File .\\FCM-AHHistory.ps1 -Mode Sync` for a **manual** safe archive/analysis, or `-Mode Status` to check scheduled status. Only **personal AHledger.lua scans** are archived by default; provider tables require separately verified permission and the explicit `-IncludeProviderTables` switch.
 4. To explicitly schedule future checks every 30 minutes while signed in, run the provided `ENABLE-FCM-HISTORY.cmd`. This is **optional**, not enabled by installing FCM.
 5. To stop future runs without deleting the archive, use `DISABLE-FCM-HISTORY.cmd`. Examine `AHHistory\\Index\\status.json` and `AHHistory\\Logs` for results.
 6. Python 3.10+ and Windows `tzdata` may be required for the history processor. Test on the actual Windows PC. A scheduler reporting errors is **not** an active history pipeline.
