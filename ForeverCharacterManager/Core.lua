@@ -621,6 +621,9 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             local added,report=FCM:ImportGatherMate()
             FCM:Say(report or "GatherMate2 import failed.")
             if added and FCM.Refresh then FCM:Refresh() end
+        elseif sub=="fishstatus" then
+            FCM:Say(type(FCM.FishingStatus)=="function" and FCM:FishingStatus() or
+                "Fishing diagnostics are not loaded.")
         elseif sub=="status" then
             local totals=FCM:GatherCounts()
             FCM:Say("Saved nodes: herbs "..totals.herbalism..", mining "..totals.mining..
@@ -631,7 +634,7 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             if FCM.Toggle then
                 if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
             end
-        else FCM:Say("Use /fcm gather, /fcm gather status, or /fcm gather import.") end
+        else FCM:Say("Use /fcm gather, /fcm gather status, /fcm gather fishstatus, or /fcm gather import.") end
     elseif cmd == "ahdiag" then
         local itemID=tonumber(rest) or 4537
         if type(FCM.AHPriceDiagnostic)=="function" then
