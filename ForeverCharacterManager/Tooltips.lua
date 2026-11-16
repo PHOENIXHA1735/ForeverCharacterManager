@@ -37,15 +37,16 @@ local function extraLines(tooltip,data)
         if ok and result and result.info and result.info.bindType==2 then boe=result end
     end
     local market=nil
-    local quality, vendor
+    local quality, vendor, bindType
     if C_Item and type(C_Item.GetItemInfo)=="function" then
-        local ok,_,_,q,_,_,_,_,_,_,_,v=pcall(C_Item.GetItemInfo,itemID)
-        if ok then quality=q;vendor=tonumber(v) end
+        local ok,_,_,q,_,_,_,_,_,_,_,v,_,binding=pcall(C_Item.GetItemInfo,itemID)
+        if ok then quality=q;vendor=tonumber(v);bindType=tonumber(binding) end
     end
     -- Prefer a precise bag-stack count when the tooltip owner exposes the bag
     -- and slot. Never infer stack size from an account-wide inventory total.
     local qty=data and tonumber(data.quantity)
-    if (not qty or qty<1) and tooltip and type(tooltip.GetOwner)=="function" then
+    local bagItem,bagBound=false,nil
+    if tooltip and type(tooltip.GetOwner)=="function" then
         local ok,owner=pcall(tooltip.GetOwner,tooltip)
         if ok and owner and type(owner.GetBagID)=="function" and type(owner.GetID)=="function" and
             C_Container and type(C_Container.GetContainerItemInfo)=="function" then
@@ -54,7 +55,15 @@ local function extraLines(tooltip,data)
             if good and slotGood and type(bag)=="number" and type(slot)=="number" then
                 local infoOK,bagInfo=pcall(C_Container.GetContainerItemInfo,bag,slot)
                 if infoOK and type(bagInfo)=="table" and tonumber(bagInfo.itemID)==itemID then
-                    qty=tonumber(bagInfo.stackCount)
+                    bagItem=true
+                    if not qty or qty<1 then qty=tonumber(bagInfo.stackCount) end
+                    if type(bagInfo.isBound)=="boolean" then bagBound=bagInfo.isBound end
+                    if bagBound==nil then
+                        local saved=active and active.bags and active.bags[tostring(bag)..":"..tostring(slot)]
+                        if saved and tonumber(saved.itemID)==itemID and type(saved.bound)=="boolean" then
+                            bagBound=saved.bound
+                        end
+                    end
                 end
             end
         end
@@ -62,13 +71,25 @@ local function extraLines(tooltip,data)
     if active and type(FCM.MarketItemAdvice)=="function" then
         market=FCM:MarketItemAdvice(itemID,active,qty,quality,vendor)
     end
+    local merchantOffer=active and FCM.MerchantOfferAtTooltip and
+        FCM:MerchantOfferAtTooltip(itemID,tooltip) or nil
+    local flip
+    if active and FCM.AHFlipDecision then
+        if merchantOffer then
+            -- BoP and account-bound purchases are not resale inventory.
+            local cannotSell=bindType==1 or bindType==4 or bindType==5
+            flip=FCM:AHFlipDecision(itemID,active,merchantOffer.pricePerUnit,"merchant",cannotSell)
+        elseif bagItem then
+            flip=FCM:AHFlipDecision(itemID,active,vendor,"bag",bagBound)
+        end
+    end
     local showFarm=false
     if type(FCM.FarmSources)=="function" and
         (market and market.promising or recipe) then
         local ok,sources=pcall(FCM.FarmSources,FCM,itemID)
         showFarm=ok and type(sources)=="table" and #sources>0
     end
-    if not recipe and #known==0 and not upgradeText and not boe and not market and not showFarm then return end
+    if not recipe and #known==0 and not upgradeText and not boe and not market and not showFarm and not flip then return end
     tooltip:AddLine(" ")
     tooltip:AddLine("Forever Character Manager v"..tostring(FCM.version),0.43,0.82,1)
     if market then
@@ -100,6 +121,45 @@ local function extraLines(tooltip,data)
         if market.snapshot then tooltip:AddLine("AHledger bundled snapshot - verify prices before acting",1,0.70,0.40,true) end
         if market.promising then tooltip:AddLine("FCM: CHECK AH BEFORE VENDORING",0.5,1,0.62,true) end
         tooltip:AddLine("AHledger (ahledger.com): asking prices are not confirmed sales.",0.60,0.69,0.82,true)
+    end
+    if flip then
+        local coin=function(n) return FCM:MoneyLabel(n) end
+        local prefix=flip.mode=="merchant" and "MERCHANT FLIP" or "BAG: AH VS VENDOR"
+        tooltip:AddLine(prefix.." | minimum gain "..tostring(flip.threshold).."%",1,0.78,0.36)
+        if flip.mode=="merchant" then
+            tooltip:AddLine("Merchant purchase: "..coin(flip.cost).." each",0.88,0.88,0.88)
+        elseif flip.cost and flip.cost>0 then
+            tooltip:AddLine("Vendor sell value: "..coin(flip.cost).." each",0.88,0.88,0.88)
+        end
+        if flip.net then
+            tooltip:AddLine("Lowest AH after 5% cut: "..coin(flip.net).." each",0.84,0.91,1)
+        end
+        if flip.roi then
+            tooltip:AddLine("Projected advantage: "..coin(flip.profit).." / item ("..
+                string.format("%+.0f%%",flip.roi).." vs cost)",0.86,0.86,0.86)
+        end
+        local message,r,g,b
+        if flip.status=="candidate" then
+            message=flip.mode=="merchant" and "POTENTIAL FLIP - CHECK AH BEFORE BUYING" or
+                "AH MAY BE BETTER THAN VENDOR - VERIFY LISTING"
+            r,g,b=0.42,1,0.60
+        elseif flip.status=="below_threshold" then
+            message="BELOW YOUR PROFIT THRESHOLD - SKIP/REVIEW";r,g,b=1,0.67,0.44
+        elseif flip.status=="low_demand" then
+            message="NO REPORTED SALES/DAY - DO NOT ASSUME IT SELLS";r,g,b=1,0.70,0.39
+        elseif flip.status=="bound" then
+            message="BOUND ITEM - NOT AN AUCTION CANDIDATE";r,g,b=1,0.55,0.55
+        elseif flip.status=="binding_unknown" then
+            message="BINDING UNKNOWN - CONFIRM THIS COPY IS TRADEABLE";r,g,b=1,0.70,0.39
+        elseif flip.status=="stale" then
+            message="AH DATA STALE/UNVERIFIED - NO FLIP VERDICT";r,g,b=1,0.70,0.39
+        elseif flip.status=="no_listing" then
+            message="NO CURRENT LOWEST LISTING - VERIFY AT AH";r,g,b=1,0.70,0.39
+        else
+            message="NO VERIFIED COST - CANNOT CALCULATE MARGIN";r,g,b=0.72,0.76,0.80
+        end
+        tooltip:AddLine(message,r,g,b,true)
+        tooltip:AddLine("Projections exclude deposits and unsold auctions. Never auto-buy or auto-post.",0.60,0.69,0.82,true)
     end
     if showFarm then
         local summary=FCM:FarmQuickLine(itemID,active,1)

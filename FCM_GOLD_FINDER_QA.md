@@ -9,6 +9,7 @@ Status: code-complete candidate; **not yet verified in the WoW Forever client**.
 - Item rows show stack counts, per-item market prices, and expected sale value. The bag summary updates after normal bag changes, when visiting Gold Finder, and when clicking **Recheck loaded prices**.
 - **Farm/Fish**: source-specific level/skill checks when reference data supplies them, sale value per unit and per 20 units, market demand as context. It does **not** invent catch rates, hourly yields, or gold/hour.
 - **Cook**: only actually learned/scanned recipes with priced ingredients and a positive projected margin; materials are charged at AH median, or a verified regular vendor baseline for three common spices. Output is valued at AH median less 5% fee.
+- **Item hover / merchant flip**: bag tooltips compare conservative net AH proceeds to the vendor sell value; merchant stock tooltips compare net AH proceeds with the actual merchant purchase cost (including per-bundle quantity). The default minimum projected return is **30%**, adjustable with the **Flip minimum** selector in Settings or `/fcm flipmargin 35`. No buying/posting automation.
 
 ## AHledger boundaries
 
@@ -28,6 +29,10 @@ Status: code-complete candidate; **not yet verified in the WoW Forever client**.
 - [ ] Open Cooking, scan known recipes. Check one profitable recipe, one ingredient with no quote, and one unlearned recipe; only the valid positive-margin result should appear.
 - [ ] Switch to a Horde character (or select a saved Horde character while logged in on Alliance). Confirm an unavailable Horde quote yields **no** false Alliance price.
 - [ ] Disable AHledger or block its data update: FCM must show missing/unpriced info without crashing. SavedVariables must contain no downloaded AH tables, tokens or external personal uploads.
+- [ ] Hover a normal merchant stock button and confirm the item's item ID, the merchant's actual gold price (including reputation discounts and bundles), AH lowest buyout, after-cut proceeds, and net percentage. Test a poor flip and a strong flip. Move the cursor from merchant stock into your bag with the merchant still open: bag price must not use the merchant purchase cost.
+- [ ] Change Settings > Flip minimum from 30% to 50%, and try `/fcm flipmargin 35`. Confirm the same tooltip changes verdict without affecting the AH quote or buying anything.
+- [ ] Check buyback, unavailable stock, items requiring alternate currency, and bind-on-pickup stock: no positive flip recommendation. Check an unbound bag stack, a soulbound bag stack, and an item whose binding state is unknown.
+- [ ] Check a bundled AHledger price snapshot and a numeric scan timestamp older than 3 hours. Tooltips must say unverified/stale, not encourage spending gold.
 
 ## Local developer tests
 
@@ -36,6 +41,7 @@ From the repository root with a Lua interpreter exposing `loadfile`:
 ```
 texlua tests/parse.lua
 texlua tests/qa_gold_finder_v091.lua
+texlua tests/qa_merchant_flip_v091.lua
 texlua tests/qa_r61_cleanup.lua
 ```
 

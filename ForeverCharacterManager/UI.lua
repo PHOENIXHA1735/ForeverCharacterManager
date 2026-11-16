@@ -1251,6 +1251,11 @@ function UI:Create()
     end)
     self.goldRecheckButton:SetPoint("LEFT",self.goldViewButton,"RIGHT",10,0)
     self.goldRecheckButton:Hide()
+    self.flipMarginButton=button(panel,"Flip minimum: 30%",185,25,function()
+        self:ShowFlipMarginMenu()
+    end)
+    self.flipMarginButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
+    self.flipMarginButton:Hide()
     if self.searchPending then self.search:SetText(self.searchPending); self.searchPending=nil end
 
     -- This toolbar filters learned recipes only. Global item search is hidden
@@ -1917,6 +1922,18 @@ function UI:ShowGoldViewMenu()
         end}
     end
     self:MakeMenu(self.goldViewButton,options,220,true)
+end
+
+function UI:ShowFlipMarginMenu()
+    local options={}
+    for _,pct in ipairs({15,25,30,50,75,100}) do
+        local value=pct
+        options[#options+1]={label=tostring(value).."% minimum projected return",run=function()
+            FCM.db.settings.flipMinProfitPct=value
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.flipMarginButton,options,235,true)
 end
 
 function UI:ShowCraftProgressQuantity(req)
@@ -3674,6 +3691,14 @@ local function buildRows(ui)
           end
         end
     elseif tab=="Settings" then
+        add("flip-margin","Merchant flipping threshold",
+            "Minimum projected return: "..tostring(FCM.db.settings.flipMinProfitPct or 30).."% after AH cut",
+            "MERCHANT FLIP TOOLTIP\n\n"..
+            "Move your cursor over an item for sale at a merchant. If FCM can identify the merchant's actual gold price and a recent AHledger lowest buyout, it subtracts a 5% auction cut, then calculates the projected return on your purchase.\n\n"..
+            "Use the Flip minimum selector above for presets, or type /fcm flipmargin 35 to choose any percentage from 0 to 500.\n\n"..
+            "BAG TOOLTIP\n\n"..
+            "Hover an item in your bags to compare its likely AH proceeds after the auction cut against its vendor sell value. Bound or uncertain items never receive a confident auction recommendation.\n\n"..
+            "Only recent, non-snapshot prices qualify. Listings can expire or fail to sell. Deposits and travel time are excluded; FCM never purchases or posts automatically.")
         add("legacy-advisor-settings","Legacy tree and goal", "Choose Adventure, Professions or Resourcefulness; then choose your goal.",
             "CHOOSE A TREE\n"..
             "Use the two selectors at the bottom of the Legacy tab.\n"..
@@ -3965,6 +3990,12 @@ function UI:Refresh()
         local gold=(tab=="Gold Finder")
         self.goldViewButton:SetShown(gold)
         self.goldRecheckButton:SetShown(gold)
+        local settingsPage=(tab=="Settings")
+        self.flipMarginButton:SetShown(settingsPage)
+        if settingsPage then
+            self.flipMarginButton:SetText("Flip minimum: "..
+                tostring(FCM.db.settings.flipMinProfitPct or 30).."%")
+        end
         if gold then
             local choices={all="All",bags="Bags",farm="Farm",fish="Fish",cook="Cook"}
             self.goldViewButton:SetText("Opportunities: "..(choices[FCM.db.settings.goldView or "all"] or "All"))
@@ -4023,11 +4054,11 @@ function UI:Refresh()
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
         -- Move content down only while the AH-style filter toolbar is visible.
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests or gold) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests or gold or settingsPage) and -143 or -107)
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests or gold) and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests or gold or settingsPage) and -143 or -107)
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
             tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")

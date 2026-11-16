@@ -62,6 +62,10 @@ function FCM:InitDB()
     -- Survival selection as the starting secondary preference for old saves.
     db.settings.gearActivity = db.settings.gearActivity or "leveling"
     db.settings.minimumUpgrade = db.settings.minimumUpgrade or 1
+    -- Minimum *net return on merchant purchase cost*, after the 5% AH cut;
+    -- an account-wide preference that never triggers buying or posting.
+    db.settings.flipMinProfitPct=math.max(0,math.min(500,
+        tonumber(db.settings.flipMinProfitPct) or 30))
     -- BoE safety alerts use their own toggle; hiding normal addon tooltips
     -- should not silently disable bag-loot protection.
     db.settings.boeAlerts = db.settings.boeAlerts ~= false
@@ -743,6 +747,14 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         if n and n>=0 and n<=9999 then FCM.db.settings.minimumUpgrade=n; FCM:Say("Minimum score gain: "..n)
         else FCM:Say("Usage: /fcm threshold <0-9999>") end
         if FCM.Refresh then FCM:Refresh() end
+    elseif cmd == "flipmargin" then
+        local n=tonumber(rest)
+        if n and n>=0 and n<=500 then
+            FCM.db.settings.flipMinProfitPct=n
+            FCM:Say("Merchant flip minimum: "..string.format("%g",n)..
+                "% projected gain after 5% auction cut. No buying/posting is automated.")
+            if FCM.Refresh then FCM:Refresh() end
+        else FCM:Say("Usage: /fcm flipmargin <0-500>; example /fcm flipmargin 30") end
     elseif cmd == "ui" then
         if string.lower(rest or "")=="reset" then
             FCM.db.settings.window={width=1010,height=635}
