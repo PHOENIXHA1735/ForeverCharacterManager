@@ -8,11 +8,15 @@
 ## IconTexture: Interface\AddOns\ForeverCharacterManager\Media\FCM_Emblem
 
 Core.lua
+QATracker.lua
 Gathering.lua
 CommunityGathering.generated.lua
 Scan.lua
 Crafting.lua
 Gear.lua
+PriorityGuides.lua
+StatWeightEngine.lua
+StatWeightCapture.lua
 BoEProtection.lua
 TalentData.lua
 Talents.lua

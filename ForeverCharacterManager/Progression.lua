@@ -37,8 +37,9 @@ end
 function FCM:LevelingSummary(ch)
     if not ch then return "No character selected." end
     local parts={"Character: "..self:DisplayCharacter(ch), "Level: "..tostring(ch.level or "?"),
-        "XP: "..tostring(ch.xp or 0).." / "..tostring(ch.xpMax or "?"),
-        "Rested XP: "..tostring(ch.restedXP or 0)}
+        "XP: "..((tonumber(ch.xpMax) or 0)>0 and
+            (tostring(ch.xp or 0).." / "..tostring(ch.xpMax)) or "Not yet scanned"),
+        "Rested XP: "..tostring(ch.restedXP or "Not recorded")}
     if ch.sessionAnchor and ch.sessionGain then
         local hours=math.max(1/60,(self:Now()-ch.sessionAnchor)/3600)
         local rate=math.floor(ch.sessionGain/hours)

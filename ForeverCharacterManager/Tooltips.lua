@@ -94,7 +94,7 @@ local function extraLines(tooltip,data)
         end
         if market.observedAt then
             tooltip:AddLine("AH observed: "..
-                (FCM.ReferenceTimeLabel and FCM:ReferenceTimeLabel(market.observedAt) or "Date recorded"),
+                (FCM.TimestampLabel and FCM:TimestampLabel(market.observedAt) or "Date unavailable"),
                 0.69,0.75,0.82)
         end
         if market.snapshot then tooltip:AddLine("AHledger bundled snapshot - verify prices before acting",1,0.70,0.40,true) end

@@ -72,6 +72,7 @@ function FCM:AccountUpgradePlans(perCharacter)
                         kinds.crafted[#kinds.crafted+1]={kind="crafted",character=character,
                             itemID=itemID,itemName=itemName,slot=c.slot,delta=c.delta,
                             recipe=c.recipe,crafters=c.crafters,plan=plan,
+                            confidence=c.comparisonConfidence,explanation=c.explanation,
                             status=stockStatus(plan)}
                     end
                 end
@@ -102,6 +103,7 @@ function FCM:AccountUpgradePlans(perCharacter)
                         kinds.pattern[#kinds.pattern+1]={kind="pattern",character=character,
                             itemID=itemID,itemName=(c.info and c.info.name) or ("Item #"..itemID),
                             slot=c.slot,delta=c.delta,pattern=c.entry,
+                            confidence=c.comparisonConfidence,explanation=c.explanation,
                             status="Unlearned recipe; acquisition unverified"}
                     end
                 end
@@ -136,19 +138,22 @@ function FCM:AccountUpgradePlanLines(entry)
     local ch=entry.character
     local activity=self.GearActivity and self:GearActivity(ch) or "leveling"
     local mode=self.Mode and self:Mode(ch,activity) or "dps"
-    local lines={"|cffffd983ACCOUNT-WIDE UPGRADE PLAN (UNIFIED TEST)|r",
+    local lines={"|cffffd983ACCOUNT-WIDE UPGRADE PLAN|r",
         entry.itemName or ("Item #"..tostring(entry.itemID)),
         "Recipient: "..label(ch),
         "Profile: "..tostring((self.gearActivityLabels or {})[activity] or activity).." / "..
             tostring((self.modeLabels or {})[mode] or mode),
+        "Gear assessment: "..tostring(entry.confidence or "Review source and stat tradeoffs"),
         "Estimated weighted score improvement: +"..scoreLabel(entry.delta),
         "Source route: "..(entry.kind=="crafted" and "Known learned recipe" or
             (entry.kind=="dungeon" and "Imported dungeon reference" or "Unlearned recipe opportunity")),
         "Assessment: "..tostring(entry.status),""}
+    if entry.explanation then lines[#lines+1]="Why: "..entry.explanation end
     if entry.kind=="crafted" then
         local p=entry.plan
         lines[#lines+1]="Recipe: "..tostring(entry.recipe and entry.recipe.name or "Unknown")
-        lines[#lines+1]="Assigned planner crafter: "..(p and p.crafter and label(p.crafter) or "None recorded")
+        lines[#lines+1]="Suggested smart-plan crafter: "..(p and p.crafter and label(p.crafter) or "None recorded")
+        lines[#lines+1]="This is advice, not an assigned saved craft request; other views may pick a different eligible crafter."
         if not p then
             lines[#lines+1]="No reliable crafting plan could be generated. Check recipe data."
         else

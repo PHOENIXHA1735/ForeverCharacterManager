@@ -38,6 +38,120 @@ local function niceGold(copper)
 end
 local standingNames = {"Hated","Hostile","Unfriendly","Neutral","Friendly","Honored","Revered","Exalted"}
 
+-- One consistent, high-contrast palette covers every tab, including the
+-- dynamically added Profession:<name> tabs. Color is supplementary; labels
+-- and statuses stay readable even when class/item colors are unavailable.
+local tabPalettes={
+    overview={accent="64d6e7",summary="bbd8df",row={0.07,0.20,0.24},selected={0.10,0.34,0.38}},
+    gear={accent="73e6b4",summary="b6dfcd",row={0.06,0.19,0.15},selected={0.12,0.33,0.24}},
+    craft={accent="ffcb76",summary="e4cda6",row={0.20,0.15,0.08},selected={0.34,0.24,0.11}},
+    gather={accent="9ee47c",summary="c5dcad",row={0.12,0.20,0.09},selected={0.22,0.32,0.13}},
+    reference={accent="84c0ff",summary="b8cde6",row={0.08,0.14,0.24},selected={0.13,0.24,0.39}},
+    progression={accent="d3a3ff",summary="d7c2eb",row={0.16,0.11,0.23},selected={0.26,0.17,0.37}},
+    system={accent="aebdd4",summary="c1cad7",row={0.13,0.16,0.20},selected={0.23,0.28,0.35}},
+}
+local tabPaletteGroups={
+    Overview="overview",Characters="overview",Leveling="progression",
+    Gear="gear",Upgrades="gear",["Upgrade Plan"]="gear",
+    Crafting="craft",Planner="craft",Requests="craft",Shopping="craft",Professions="craft",
+    Gathering="gather",Inventory="gather",
+    Catalog="reference",["Item Explorer"]="reference",Dungeons="reference",Auction="reference",
+    Talents="progression",Legacy="progression",Reputation="progression",
+    Settings="system",Diagnostics="system",Help="system",["Global Search"]="reference",
+    ["QA Tests"]="progression",
+}
+function UI:TabPalette(tab)
+    local group=tostring(tab or ""):sub(1,11)=="Profession:" and "craft" or
+        (tabPaletteGroups[tab] or "system")
+    return tabPalettes[group]
+end
+function UI:DecorateDetail(content,tab)
+    local palette=self:TabPalette(tab)
+    local accent=palette.accent
+    local lines={}
+    for line in (tostring(content or "").."\n"):gmatch("(.-)\n") do
+        local raw=line:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+        local lower=raw:lower()
+        local header=#raw>2 and #raw<65 and
+            (raw:match("^[%u%d][%u%d %-/().+]*$") or
+             raw:match("^[%a][%w /()-]+:$") or
+             raw:match("^Crafting sequence") or raw:match("^Unfilled ingredients") or
+             raw:match("^Potential transfers") or raw:match("^Last recorded locations:"))
+        if header and #lines>0 and lines[#lines]~="" then lines[#lines+1]="" end
+        if not line:find("|c",1,true) and not line:find("|T",1,true) and
+            not line:find("https:",1,true) then
+            if header then
+                line=color(line,accent)
+            elseif lower:find("unknown",1,true) or lower:find("unverified",1,true) or
+                lower:find("not verified",1,true) or lower:find("missing ",1,true) or
+                lower:match("^still needed: [1-9]") or
+                lower:find("may be stale",1,true) or lower:find("not guaranteed",1,true) or
+                lower:find("review required",1,true) then
+                line=color(line,"ffcb76")
+            elseif lower:find("materials ready",1,true) or
+                lower:find("current session",1,true) or lower:match("^status: pass") then
+                line=color(line,"7be6a4")
+            else
+                local label,value=line:match("^([%a][%w /()-]*:)(.*)$")
+                if label and #label<=43 then line=color(label,accent)..value end
+            end
+        end
+        lines[#lines+1]=line
+    end
+    return table.concat(lines,"\n")
+end
+
+-- The old details pane was one long white FontString.  Split its existing
+-- paragraph breaks into reusable, tinted cards so every tab can distinguish
+-- sections without rewriting the individual advice modules or losing links.
+function UI:HideDetailCards()
+    for _,card in ipairs(self.detailCards or {}) do card:Hide() end
+end
+function UI:RenderDetailCards(content,tab,previewHeight)
+    if not self.detailChild or not self.detailText then return nil end
+    self.detailCards=self.detailCards or {}
+    self:HideDetailCards()
+    local source=self:DecorateDetail(content,tab)
+    self.detailCardSource=content
+    self.detailCardTab=tab
+    self.detailCardOffset=previewHeight or 0
+    local width=math.max(184,(self.detailChild:GetWidth() or 247)-8)
+    local blocks={}
+    for block in (source.."\n\n"):gmatch("(.-)\n\n") do
+        if block:match("%S") then blocks[#blocks+1]=block end
+    end
+    if #blocks==0 then blocks={"No details available."} end
+    local palette=self:TabPalette(tab)
+    local y=(previewHeight or 0)>0 and (previewHeight+6) or 3
+    for i,block in ipairs(blocks) do
+        local card=self.detailCards[i]
+        if not card then
+            card=CreateFrame("Frame",nil,self.detailChild)
+            card.bg=background(card,0.12,0.15,0.18,0.93)
+            -- Standard readable text rather than the very small tooltip font.
+            -- Cards grow from their measured rendered height and remain scrollable.
+            card.label=text(card,"","GameFontHighlight",10,-9)
+            card.label:SetWordWrap(true)
+            if card.label.SetSpacing then card.label:SetSpacing(2) end
+            self.detailCards[i]=card
+        end
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",3,-y)
+        card:SetWidth(width)
+        card.label:SetWidth(width-20)
+        card.label:SetText(block)
+        local height=math.max(34,math.ceil(tonumber(card.label:GetStringHeight()) or 0)+20)
+        card:SetHeight(height)
+        local shade=i%2==1 and palette.row or palette.selected
+        card.bg:SetColorTexture(shade[1],shade[2],shade[3],0.84)
+        card:Show()
+        y=y+height+9
+    end
+    self.detailText:Hide()
+    self.detailChild:SetHeight(math.max(345,y+16))
+    return y+16
+end
+
 -- The minimap icon is separate from the main window, so it appears at login.
 -- Position is saved as x/y offsets from Minimap's center in account-wide settings.
 function UI:PlaceMinimap(x, y)
@@ -168,16 +282,42 @@ function UI:ConfirmDeleteSelected()
     StaticPopup_Show("FCM_CONFIRM_REMOVE_SAVED", FCM:DisplayCharacter(ch), nil, {key=ch.key})
 end
 
+-- A learned-recipe tab can also show an existing saved request. Never allow
+-- its contextual Cancel button to remove that request in a single click.
+function UI:ConfirmCancelCraftRequest(recipe,recipient)
+    if not recipe or not recipient then return end
+    local queued=FCM:FindQueuedCraft(recipe.id,recipient.key)
+    if not queued then FCM:Say("No saved craft request to cancel."); return end
+    if not StaticPopupDialogs or not StaticPopup_Show then
+        FCM:Say("Confirmation dialog unavailable. The request was not changed.")
+        return
+    end
+    StaticPopupDialogs.FCM_CONFIRM_CANCEL_CRAFT={
+        text="Cancel the saved craft request for %s?\n\nThis removes the addon request, not the recipe or any crafted items.",
+        button1="Cancel Request",button2=CANCEL or "Keep Request",
+        OnAccept=function(_,data)
+            if not data then return end
+            local active=FCM:FindQueuedCraft(data.recipeID,data.recipientKey)
+            if not active then FCM:Say("The request was already removed."); return end
+            FCM:RemoveQueuedCraft(data.recipeID,data.recipientKey)
+            FCM:Say("Cancelled saved craft request for "..tostring(data.recipientName)..".")
+            UI:Refresh()
+        end,
+        timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
+    }
+    local name=tostring(recipe.name or "recipe")
+    local label=tostring(FCM:CraftRequestQuantity(queued)).."x "..name..
+        " for "..FCM:DisplayCharacter(recipient)
+    StaticPopup_Show("FCM_CONFIRM_CANCEL_CRAFT",label,nil,
+        {recipeID=recipe.id,recipientKey=recipient.key,recipientName=FCM:DisplayCharacter(recipient)})
+end
+
 -- Dedicated Dungeon Explorer widgets: keep the list and item details separate.
 -- These live inside the normal scrolling detail child, but are reusable so
 -- changing a loot filter or selected item does not leak frames.
 local qualityColors={
     [0]="9d9d9d",[1]="ffffff",[2]="1eff00",[3]="0070dd",[4]="a335ee",[5]="ff8000",[6]="e6cc80",
 }
-local friendlyItemCategories={weapon="Weapon",armor="Armor",jewelry="Jewelry",
-    container="Bag",consumable="Consumable",material="Crafting material",
-    recipe="Recipe",quest="Quest item",profession="Profession tool",
-    enchant="Enchanting",special="Miscellaneous"}
 local itemSlotLabels={
     INVTYPE_HEAD="Head",INVTYPE_NECK="Neck",INVTYPE_SHOULDER="Shoulder",INVTYPE_CLOAK="Back",
     INVTYPE_CHEST="Chest",INVTYPE_ROBE="Chest",INVTYPE_WRIST="Wrist",INVTYPE_HAND="Hands",
@@ -185,7 +325,7 @@ local itemSlotLabels={
     INVTYPE_TRINKET="Trinket",INVTYPE_WEAPON="Weapon",INVTYPE_WEAPONMAINHAND="Main-hand",
     INVTYPE_WEAPONOFFHAND="Off-hand",INVTYPE_2HWEAPON="Two-hand",INVTYPE_RANGED="Ranged",
     INVTYPE_RANGEDRIGHT="Ranged",INVTYPE_SHIELD="Shield",INVTYPE_HOLDABLE="Off-hand",
-    INVTYPE_RELIC="Relic",INVTYPE_BODY="Shirt",INVTYPE_TABARD="Tabard",
+    INVTYPE_RELIC="Relic",INVTYPE_BODY="Shirt",INVTYPE_TABARD="Tabard",INVTYPE_BAG="Bag",
 }
 local statNames={
     ITEM_MOD_STRENGTH_SHORT="Strength",ITEM_MOD_AGILITY_SHORT="Agility",
@@ -214,10 +354,8 @@ local function itemMetadata(id,drop)
     end
     if not icon and type(GetItemIcon)=="function" then icon=FCM:Try(GetItemIcon,id) end
     return {id=id,name=itemName,store=stored,game=game,icon=icon,
-        -- Internal inventory enums (including INVTYPE_NON_EQUIP_IGNORE) are
-        -- never useful to players and must not appear in the preview.
-        slot=itemSlotLabels[equip] or (type(equip)=="string" and
-            not equip:match("^INVTYPE_") and equip or nil),
+        -- Ignore non-equipment API sentinels such as INVTYPE_NON_EQUIP_IGNORE.
+        slot=itemSlotLabels[equip],
         typeName=(game and game.subType) or stored.subclass or stored.category,quality=quality,
         color=qualityColors[quality] or "f0d27b"}
 end
@@ -348,13 +486,15 @@ function UI:RenderItemPreview(row)
     local qualityNames={[0]="Poor",[1]="Common",[2]="Uncommon",[3]="Rare",[4]="Epic",[5]="Legendary",[6]="Artifact"}
     local descriptors={}
     if meta.slot then descriptors[#descriptors+1]=tostring(meta.slot)
-    elseif meta.typeName then descriptors[#descriptors+1]=tostring(meta.typeName) end
+    elseif meta.typeName and not tostring(meta.typeName):find("^INVTYPE_") then
+        descriptors[#descriptors+1]=tostring(meta.typeName)
+    end
     local capacity,isContainer=FCM:ContainerCapacity(id,store)
     if capacity then descriptors[#descriptors+1]=capacity.." slots" end
     if meta.quality then descriptors[#descriptors+1]=qualityNames[meta.quality] or "Item" end
     local ilvl=tonumber((meta.game and meta.game.ilvl) or store.itemLevel or store.ilvl)
     if ilvl and ilvl>0 then descriptors[#descriptors+1]="iLvl "..ilvl end
-    preview.kind:SetText(short(table.concat(descriptors,"  |  "),64))
+    preview.kind:SetText(short(table.concat(descriptors,"  |  "),43))
     local stats=itemStats(id,store,meta.game)
     if isContainer then
         preview.stats:SetText(capacity and ("Bag capacity: "..capacity.." slots") or
@@ -363,13 +503,13 @@ function UI:RenderItemPreview(row)
         local subtitle=stats[1]
         if #stats>1 and #subtitle+#stats[2]<51 then subtitle=subtitle.."  |  "..stats[2] end
         preview.stats:SetText(short(subtitle,58))
+    elseif not meta.slot and tonumber(store.classID)~=2 and tonumber(store.classID)~=4 and
+        tostring(store.category or ""):lower()~="armor" and
+        tostring(store.category or ""):lower()~="weapons" then
+        -- Ordinary reagents and recipe items should not show equipment advice.
+        preview.stats:SetText("")
     else
-        local category=FCM.ItemCategory and FCM:ItemCategory(store) or nil
-        local withoutStats={material="Crafting material",recipe="Recipe or pattern",
-            quest="Quest item",profession="Profession item",special="Miscellaneous item"}
-        preview.stats:SetText(withoutStats[category] and
-            (withoutStats[category].." - no combat stats") or
-            "No combat stats recorded; see item details")
+        preview.stats:SetText("Equipment stats not yet recorded")
     end
     preview:Show()
     self.detailText:ClearAllPoints()
@@ -561,7 +701,14 @@ function UI:RenderDungeonDetail(r,ch)
         elseif upgrade and upgrade.state=="upgrade" then
             line(string.format("Estimated upgrade: +%.1f weighted points",upgrade.delta or 0),23,"a8efb5",8)
         elseif upgrade and upgrade.state=="not-upgrade" then
-            line("No estimated gain over recorded equipment",24,"f0d27b",8)
+            local delta=tonumber(upgrade.delta) or 0
+            local threshold=FCM.db and FCM.db.settings and tonumber(FCM.db.settings.minimumUpgrade) or 1
+            if delta>0 then
+                line(string.format("Below upgrade threshold: +%.1f pts (minimum %.1f)",delta,threshold),
+                    37,"f0d27b",8)
+            else
+                line("No positive estimated gain over recorded equipment",27,"f0d27b",8)
+            end
         else
             line("Upgrade not confirmed: "..short((upgrade and upgrade.reason) or why or "missing data",58),38,"f0d27b",8)
         end
@@ -719,7 +866,8 @@ function UI:RenderDungeonDetail(r,ch)
     end
     if filtered>0 then
         gap(6)
-        line(tostring(filtered).." items hidden by current loot filter.",19,"abb9c9")
+        line(tostring(filtered)..(filtered==1 and " item" or " items")..
+            " hidden by current loot filter.",19,"abb9c9")
     end
     gap(11)
     line("Reference: "..tostring(r.sourceProvider or "ForeverDB").."  |  Imported "..tostring(r.referenceCheckedAt or "date unknown"),34,"96a3b3")
@@ -756,8 +904,15 @@ function UI:CharacterRecipeProfessions(ch)
 end
 function UI:Navigate(tab)
     self.tab=tab
+    if (tab=="Item Explorer" or tab=="Global Search") and FCM.db then
+        local settings=FCM.db.settings
+        settings.itemCategory="all";settings.itemType="all";settings.itemSlot="all"
+        settings.itemScope="all";settings.itemQuality="all";settings.itemSort="name"
+    end
     self.selectedRow=nil
     self.dungeonItemSelection=nil
+    -- Each list remembers its own local query. Changing tabs starts with a
+    -- blank view; typing never unexpectedly leaves the tab.
     self.appliedSearch=""
     self.searchReturnTab=nil
     self.searchSelectedItem=false
@@ -899,10 +1054,14 @@ end
 function UI:ExecuteSearch()
     local q=self.search and self.search:GetText() or ""
     q=tostring(q):gsub("^%s+",""):gsub("%s+$","")
-    if q=="" and self.tab~="Global Search" then return end
     if self.tab~="Global Search" then
         self.searchReturnTab=self.tab or "Overview"
         self.tab="Global Search"
+        local settings=FCM.db and FCM.db.settings
+        if settings then
+            settings.itemCategory="all";settings.itemType="all";settings.itemSlot="all"
+            settings.itemScope="all";settings.itemQuality="all";settings.itemSort="name"
+        end
     end
     self.appliedSearch=q
     self.selectedRow="search-summary"
@@ -918,13 +1077,26 @@ function UI:QueueLiveSearch()
     if C_Timer and type(C_Timer.After)=="function" then
         C_Timer.After(0.25,function()
             if revision==self.searchRevision and self.frame and self.frame:IsShown() then
-                self:ExecuteSearch()
+                self:ApplyLocalSearch()
             end
         end)
     else
         -- Some Forever client builds do not expose C_Timer.After.
-        self:ExecuteSearch()
+        self:ApplyLocalSearch()
     end
+end
+
+function UI:ApplyLocalSearch()
+    local q=self.search and self.search:GetText() or ""
+    q=tostring(q):gsub("^%s+",""):gsub("%s+$","")
+    if self.tab=="Global Search" then
+        self:ExecuteSearch()
+        return
+    end
+    self.appliedSearch=q
+    self.selectedRow=nil
+    if self.scroll and self.scroll.SetVerticalScroll then self.scroll:SetVerticalScroll(0) end
+    self:Refresh()
 end
 
 function UI:Create()
@@ -971,7 +1143,7 @@ function UI:Create()
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
     background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "Settings", "Diagnostics", "Help"}
+    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
     -- Sidebar can exceed the window height when a character has multiple
     -- profession tabs. Keep every destination reachable with wheel or arrows.
     local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
@@ -1031,28 +1203,35 @@ function UI:Create()
     self.search:SetAutoFocus(false)
     self.search:SetPoint("TOPRIGHT",panel,"TOPRIGHT",-102,-66)
     self.search:SetText("")
-    -- Live global search replaces per-tab submitted search. A small debounce
-    -- avoids rebuilding thousands of reference entries for every keystroke.
+    -- Live search filters the CURRENT window; the dedicated All Items button
+    -- deliberately switches to global item/recipe lookup when requested.
     self.search:SetScript("OnTextChanged",function() self:QueueLiveSearch() end)
-    self.search:SetScript("OnEnterPressed",function(edit) edit:ClearFocus(); self:ExecuteSearch() end)
+    self.search:SetScript("OnEnterPressed",function(edit) edit:ClearFocus(); self:ApplyLocalSearch() end)
     self.search:SetScript("OnEscapePressed",function(edit)
         edit:ClearFocus()
-        if self.tab=="Global Search" then self:BackFromSearch() else f:Hide() end
+        if self.tab=="Global Search" then self:BackFromSearch() end
     end)
     self.clearSearchButton=button(panel,"X",25,25,function()
         self.search:SetText("")
-        if self.tab=="Global Search" then self:ExecuteSearch() end
+        self:ApplyLocalSearch()
     end)
     self.clearSearchButton:SetPoint("LEFT",self.search,"RIGHT",4,0)
-    self.backSearchButton=button(panel,"Back",54,25,function()
-        self.search:ClearFocus(); self:BackFromSearch()
+    self.backSearchButton=button(panel,"All",54,25,function()
+        self.search:ClearFocus()
+        if self.tab=="Global Search" then self:BackFromSearch()
+        else self:ExecuteSearch() end
     end)
     self.backSearchButton:SetPoint("LEFT",self.clearSearchButton,"RIGHT",3,0)
     self.backSearchButton:Hide()
-    local searchLabel=text(panel,"Search all items or recipes", "GameFontHighlightSmall",0,0,170)
+    local searchLabel=text(panel,"Search this list", "GameFontHighlightSmall",0,0,170)
     searchLabel:ClearAllPoints()
     searchLabel:SetPoint("BOTTOMLEFT",self.search,"TOPLEFT",0,5)
     self.searchLabel=searchLabel
+    self.requestViewButton=button(panel,"Requests: All",164,25,function()
+        self:ShowRequestViewMenu()
+    end)
+    self.requestViewButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
+    self.requestViewButton:Hide()
     if self.searchPending then self.search:SetText(self.searchPending); self.searchPending=nil end
 
     -- This toolbar filters learned recipes only. Global item search is hidden
@@ -1163,9 +1342,9 @@ function UI:Create()
     local detailPanel = CreateFrame("Frame",nil,panel)
     detailPanel:SetPoint("TOPRIGHT",panel,"TOPRIGHT",-15,-107)
     detailPanel:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-15,68)
-    detailPanel:SetWidth(285)
+    detailPanel:SetWidth(340)
     listPanel:SetPoint("RIGHT",detailPanel,"LEFT",-12,0)
-    background(detailPanel,0.055,0.075,0.095,0.82)
+    self.detailPanelBg=background(detailPanel,0.055,0.075,0.095,0.82)
     self.detailPanel=detailPanel
     self.detailScroll=CreateFrame("ScrollFrame",nil,detailPanel,"UIPanelScrollFrameTemplate")
     self.detailScroll:SetPoint("TOPLEFT",detailPanel,"TOPLEFT",9,-9)
@@ -1228,7 +1407,7 @@ function UI:Create()
             local req = self.activeRequest
             local recipe = FCM:RecipeByID(req.recipeID)
             if not recipe then FCM:Say("Recipe no longer exists in scanned records."); return end
-            self:ShowCrafterMenu(recipe, req.recipientKey, req)
+            self:ShowCraftProgressQuantity(req)
             return
         end
         if not self.activeRecipe then return end
@@ -1253,9 +1432,7 @@ function UI:Create()
             return
         end
         if current then
-            FCM:RemoveQueuedCraft(self.activeRecipe.id, recipient.key)
-            FCM:Say("Cancelled craft request for " .. recipient.name .. ".")
-            self:Refresh()
+            self:ConfirmCancelCraftRequest(self.activeRecipe,recipient)
             return
         end
         self:PromptCraftQuantity(self.activeRecipe, recipient.key, nil, self.activeCrafters)
@@ -1328,17 +1505,28 @@ function UI:Create()
     self.dungeonBossButton:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-471,10)
     self.dungeonBossButton:Hide()
 
-    -- Talent settings are per-character. These only appear on the Talents tab,
-    -- outside the scrolling detail area so they never cover recommendations.
-    self.talentSpecButton = button(panel,"Specialization",92,29,function() self:ShowTalentSpecsMenu() end)
-    self.talentSpecButton:SetPoint("TOPLEFT",detailPanel,"BOTTOMLEFT",1,-8)
+    -- Talent controls use two rows in the detail footer. The full build title
+    -- needs almost twice as much room as the spec/source selectors, and a
+    -- single row of three 92px buttons clipped even common leveling names.
+    self.talentSpecButton = button(panel,"Specialization",136,29,function() self:ShowTalentSpecsMenu() end)
+    self.talentSpecButton:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-157,9)
     self.talentSpecButton:Hide()
-    self.talentBuildButton = button(panel,"Leveling",92,29,function() self:ShowTalentBuildMenu() end)
-    self.talentBuildButton:SetPoint("LEFT",self.talentSpecButton,"RIGHT",1,0)
+    self.talentBuildButton = button(panel,"Leveling",278,29,function() self:ShowTalentBuildMenu() end)
+    self.talentBuildButton:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-15,43)
     self.talentBuildButton:Hide()
-    self.talentSourceButton = button(panel,"Icy Veins",93,29,function() self:ShowTalentSourceMenu() end)
-    self.talentSourceButton:SetPoint("LEFT",self.talentBuildButton,"RIGHT",1,0)
+    self.talentSourceButton = button(panel,"Icy Veins",136,29,function() self:ShowTalentSourceMenu() end)
+    self.talentSourceButton:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-15,9)
     self.talentSourceButton:Hide()
+    self.talentBuildButton:SetScript("OnEnter",function(btn)
+        if GameTooltip and self.talentBuildFullTitle then
+            GameTooltip:SetOwner(btn,"ANCHOR_TOP")
+            GameTooltip:SetText(self.talentBuildFullTitle,1,0.86,0.52)
+            GameTooltip:Show()
+        end
+    end)
+    self.talentBuildButton:SetScript("OnLeave",function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
 
     self.legacyTreeButton = button(panel,"Tree: All",175,29,function() self:ShowLegacyTreeMenu() end)
     self.legacyTreeButton:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",10,12)
@@ -1406,6 +1594,9 @@ function UI:Reflow()
     self.scrollChild:SetWidth(listWidth)
     self.detailChild:SetWidth(math.max(190,self.detailPanel:GetWidth()-42))
     self.detailText:SetWidth(math.max(180,self.detailChild:GetWidth()-8))
+    if self.detailCardSource then
+        self:RenderDetailCards(self.detailCardSource,self.detailCardTab,self.detailCardOffset)
+    end
     for _,w in ipairs(self.rows or {}) do
         w:SetWidth(listWidth-3)
         if w.label then w.label:SetWidth(listWidth-18) end
@@ -1435,7 +1626,7 @@ function UI:ShowCraftProfessionMenu()
     local choices={{label="All Professions",run=function()
         FCM.db.settings.craftProfession="all";self.selectedRow=nil
     end}}
-    for _,profession in ipairs(FCM:CraftRecipeProfessions()) do
+    for _,profession in ipairs(FCM:CraftRecipeProfessions(self:GetCharacter())) do
         local entry=profession
         choices[#choices+1]={label=entry.name,run=function()
             FCM.db.settings.craftProfession=entry.id;self.selectedRow=nil
@@ -1640,6 +1831,19 @@ function UI:ShowDungeonBossMenu()
     end
     self:MakeMenu(self.dungeonBossButton,options,255,true)
 end
+-- Compatible with classic and modern StaticPopup edit-box layouts.
+local function quantityPopupEditBox(dialog)
+    if not dialog then return nil end
+    if dialog.editBox then return dialog.editBox end
+    if dialog.EditBox then return dialog.EditBox end
+    if type(dialog.GetEditBox)=="function" then
+        local ok,box=pcall(dialog.GetEditBox,dialog)
+        if ok and box then return box end
+    end
+    local name=type(dialog.GetName)=="function" and dialog:GetName()
+    return name and _G and _G[name.."EditBox"] or nil
+end
+
 function UI:ShowRequestStatusMenu()
     local req=self.activeRequest
     if not req then return end
@@ -1657,7 +1861,7 @@ function UI:ShowRequestStatusMenu()
         end}
     end
     for _,row in ipairs({{"Requested","requested"},{"Gathering Materials","gathering"},{"Ready to Craft","ready"},
-        {"Crafted - Awaiting Delivery","crafted"},{"Delivered / Archive","delivered"},{"Cancel / Archive","cancelled"}}) do
+        {"Delivered / Archive","delivered"},{"Cancel / Archive","cancelled"}}) do
         local label,code=row[1],row[2]
         options[#options+1]={label=label,run=function()
             local ok,why=FCM:ChangeRequestStatus(req,code)
@@ -1666,6 +1870,68 @@ function UI:ShowRequestStatusMenu()
         end}
     end
     self:MakeMenu(self.cancelRequestButton,options,224,true)
+end
+
+function UI:ShowRequestViewMenu()
+    local views={{"All Requests","all"},{"For Me (recipient)","mine"},
+        {"Can Craft (logged-in toon)","craftable"},{"Needs Materials","missing"}}
+    local options={}
+    for _,choice in ipairs(views) do
+        local title,key=choice[1],choice[2]
+        options[#options+1]={label=title,run=function()
+            FCM.db.settings.requestView=key
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.requestViewButton,options,240,true)
+end
+
+function UI:ShowCraftProgressQuantity(req)
+    local recipe=req and FCM:RecipeByID(req.recipeID)
+    if not recipe or not FCM:CanCraftRequest(req,FCM:Current(),recipe) then
+        FCM:Say("Only a logged-in eligible crafter can record completed items.")
+        return
+    end
+    local ui=self
+    local captured={lastText="1"}
+    if not StaticPopupDialogs or not StaticPopup_Show then
+        FCM:Say("Quantity dialog unavailable. Use Record 1 Crafted instead.")
+        return
+    end
+    StaticPopupDialogs.FCM_RECORD_CRAFT_PROGRESS={
+        text="How many finished items have you actually crafted? (1-999; never creates items)",
+        button1="Record",button2="Cancel",hasEditBox=true,maxLetters=3,
+        OnShow=function(dialog)
+            local box=quantityPopupEditBox(dialog)
+            if box then box:SetText("1");box:HighlightText();box:SetFocus() end
+        end,
+        OnAccept=function(dialog)
+            local box=quantityPopupEditBox(dialog)
+            local count=captured.enteredText or (box and box:GetText()) or captured.lastText
+            if count=="" then count=captured.lastText end
+            local ok,message=FCM:RecordCraftProgress(req,FCM.currentKey,count)
+            FCM:Say(message or (ok and "Craft progress saved." or "Could not record progress."))
+            if ok then ui.selectedRow=nil;ui:Refresh() end
+        end,
+        OnHide=function(dialog)
+            local box=quantityPopupEditBox(dialog)
+            if box and box.GetText then
+                local value=box:GetText()
+                if value and value~="" then captured.lastText=value end
+            end
+        end,
+        EditBoxOnTextChanged=function(box)
+            if box and box.GetText then captured.lastText=box:GetText() end
+        end,
+        EditBoxOnEnterPressed=function(box)
+            captured.enteredText=box:GetText()
+            local dialog=box:GetParent()
+            if dialog and dialog.button1 then dialog.button1:Click() end
+        end,
+        EditBoxOnEscapePressed=function(box) box:GetParent():Hide() end,
+        timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
+    }
+    StaticPopup_Show("FCM_RECORD_CRAFT_PROGRESS")
 end
 
 function UI:GetCharacter()
@@ -1799,7 +2065,7 @@ function UI:ShowGearActivityMenu()
 end
 function UI:ShowModesMenu()
     local options={}
-    for _,mode in ipairs({"dps","balanced","survival"}) do
+    for _,mode in ipairs({"dps","balanced","survival","healing","tank"}) do
         local selected=mode
         options[#options+1]={label=FCM.modeLabels[selected],run=function()
             FCM:SetGearStyle(self:GetCharacter(),selected)
@@ -1885,17 +2151,6 @@ end
 -- Forever clients may expose the StaticPopup edit field as `editBox`,
 -- `EditBox`, GetEditBox() or a named StaticPopup*EditBox child. Also capture
 -- Enter before the dialog closes (some clients clear the box on dismissal).
-local function quantityPopupEditBox(dialog)
-    if not dialog then return nil end
-    if dialog.editBox then return dialog.editBox end
-    if dialog.EditBox then return dialog.EditBox end
-    if type(dialog.GetEditBox)=="function" then
-        local ok,box=pcall(dialog.GetEditBox,dialog)
-        if ok and box then return box end
-    end
-    local name=type(dialog.GetName)=="function" and dialog:GetName()
-    return name and _G and _G[name.."EditBox"] or nil
-end
 function UI:PromptCraftQuantity(recipe, recipientKey, existing, eligibleCrafters)
     if not recipe or not FCM.db or not FCM.db.characters[recipientKey] then return end
     if not StaticPopupDialogs or not StaticPopup_Show then
@@ -1969,51 +2224,19 @@ function UI:PromptCraftQuantity(recipe, recipientKey, existing, eligibleCrafters
     StaticPopup_Show("FCM_CRAFT_REQUEST_QUANTITY",recipe.name or "this item",nil,request)
 end
 
--- When there are several learned crafters, let the requester choose who sees
--- the request. An unassigned migrated request can also be claimed here.
+-- Compatibility entry point for old quantity prompts. R6 queues to the
+-- request board and never assigns or prompts for a specific crafter.
 function UI:ShowCrafterMenu(recipe, recipientKey, existing, eligibleCrafters, quantity, quantityMode)
     if not recipe then return end
-    local candidates = eligibleCrafters or recipe.crafters or {}
-    local options = {}
-    local recipient = FCM.db.characters[recipientKey]
-    for _, c in ipairs(candidates) do
-        local crafter = c
-        if recipient and FCM:CanCollaborate(crafter,recipient) then
-        options[#options+1] = {
-            label = short(FCM:DisplayCharacter(crafter), 31),
-            run = function()
-                local success, why
-                if existing then
-                    success, why = FCM:AssignQueuedCraft(existing, crafter.key)
-                else
-                    success, why = FCM:QueueCraft(recipe.id, recipientKey, crafter.key, quantity,quantityMode)
-                end
-                if success then
-                    local snapshot={quantity=quantity or (existing and FCM:CraftRequestQuantity(existing)) or 1,
-                        quantityMode=quantityMode or (existing and FCM:CraftRequestMode(existing)) or FCM:DefaultCraftRequestMode()}
-                    local needed,owned=FCM:CraftRequestNeeded(recipe,snapshot,recipient)
-                    FCM:Say("Craft request assigned to " .. FCM:DisplayCharacter(crafter) ..
-                        " for " .. (recipient and FCM:DisplayCharacter(recipient) or "the recipient") ..
-                        " ("..tostring(snapshot.quantity).." "..
-                        (snapshot.quantityMode=="total" and "total target" or "additional items")..
-                        ", "..tostring(owned).." recorded owned, "..tostring(needed).." more needed).")
-                else
-                    FCM:Say(why or "Could not save craft request.")
-                end
-                self:Refresh()
-            end
-        }
-        end
-    end
-    if #options == 0 then
-        FCM:Say("No eligible same-faction, same-ruleset crafter with the learned recipe is recorded.")
-        return
-    end
-    if #options == 1 then
-        options[1].run()
+    local ok,why
+    if existing then
+        ok,why=FCM:UpdateQueuedCraftQuantity(existing,quantity or FCM:CraftRequestQuantity(existing),quantityMode)
     else
-        self:MakeMenu(self.action, options, 235, true)
+        ok,why=FCM:QueueCraft(recipe.id,recipientKey,nil,quantity or 1,quantityMode)
     end
+    FCM:Say(ok and "Request saved to the unassigned board. Eligible crafters can review it on login."
+        or (why or "Unable to save the craft request."))
+    if ok then self.selectedRow=nil;self:Refresh() end
 end
 
 local function buildRows(ui)
@@ -2027,8 +2250,11 @@ local function buildRows(ui)
             (c.class or "Class unknown").."  /  "..(c.race or "Race unknown").."  /  "..(c.faction or "Faction unknown"),
             "Ruleset: "..(FCM:NormalizeRuleset(c.ruleset) or "Not yet verified - log into this character"),
             "Region: "..(c.region or "Not yet verified"),
-            "Level: "..tostring(c.level or "?"),"Gold: "..niceGold(c.gold),
-            "XP: "..tostring(c.xp or 0).." / "..tostring(c.xpMax or 0),
+            "Level: "..tostring(c.level or "?"),
+            "Gold: "..(type(c.gold)=="number" and niceGold(c.gold) or "Not yet scanned"),
+            "XP: "..(tonumber(c.xpMax) and c.xpMax>0 and
+                (tostring(c.xp or 0).." / "..tostring(c.xpMax)) or "Not yet scanned"),
+            "Gold scan: "..FCM:Age(c.goldStamp),"XP scan: "..FCM:Age(c.xpStamp),
             "Last login: "..FCM:Age(c.lastSeen),"",
             "Professions:"}
         local has=false
@@ -2100,18 +2326,19 @@ local function buildRows(ui)
                 local lines={"|cffffd983"..c.info.name.."|r", "For: "..FCM:DisplayCharacter(e.ch),
                     "Activity: "..FCM.gearActivityLabels[FCM:GearActivity(e.ch)],
                     "Style: "..(FCM.modeLabels[c.mode] or "DPS"),"Weighted gain: +"..FCM.Gear:ScoreLabel(c.delta),
-                    "Crafter: "..(crafter and FCM:DisplayCharacter(crafter) or "Unknown"),
+                    "Suggested quick-check crafter: "..(crafter and FCM:DisplayCharacter(crafter) or "Unknown"),
                     "Materials: "..(ready and "Stock appears sufficient" or "Shortage / verification needed"),""}
                 for _,m in ipairs(mats) do
                     lines[#lines+1]=m.name..": "..m.unreserved.."/"..m.required..
                         " (missing "..m.missing..", reserved "..m.reserved..")"
                 end
                 lines[#lines+1]=""
-                lines[#lines+1]="Material transfers to assigned crafter:"
+                lines[#lines+1]="Possible transfers to suggested crafter:"
                 for _,transfer in ipairs(plan.transfers or {}) do
                     lines[#lines+1]="  "..transfer.from.." / "..transfer.where..": "..transfer.count.." x "..transfer.name
                 end
                 if #(plan.transfers or {})==0 then lines[#lines+1]="  None identified in usable scanned storage." end
+                lines[#lines+1]="This is a quick-check suggestion, not a saved craft assignment; the Smart Planner may select another eligible crafter."
                 lines[#lines+1]=""
                 local estimate=FCM:CraftPriceEstimate(c.recipe,e.ch)
                 if estimate then
@@ -2163,33 +2390,37 @@ local function buildRows(ui)
         local total=count.herbalism+count.mining+count.fishing+count.treasure
         add("gather-guide","Gathering database (account-wide)",
             total.." locations | "..count.personal.." personally confirmed",
-            "GatherMate2 import: click Import GatherMate2 below, or type /fcm gather import.\n\n"..
-            "Independent recording: FCM saves named herbalism/mining gathering casts when the client reports a successful gather. "..
-            "Fishing pools: hover the named school first, cast into it, then loot the bobber. "..
-            "FCM matches the school tooltip with your fishing cast and real loot; "..
-            "type /fcm gather fishstatus to see what the client reported. "..
-            "Unnamed targets are skipped to avoid false locations.\n\n"..
-            "Community data: the Windows companion checks GitHub and merges published locations into your local FCM database. "..
-            "No character data is uploaded; community contributions are manual for now.\n\n"..
-            "Saved locally: "..count.herbalism.." herb, "..count.mining.." mine, "..
-                count.fishing.." fishing and "..count.treasure.." treasure locations.\n"..
-            "Saved nodes appear on the full world map at their recorded zone positions, even far from your character; World Map: On/Off controls that overlay separately. "..
-            "Saved nodes also appear as small resource icons on the minimap when nearby. Hover to see FCM's personal gather count for that location. "..
-            "The Gathering tab has a Hide within distance dropdown (15 yards recommended), "..
-                "a Pins On/Off toggle, a Rim beyond dropdown (45 yards by default), "..
-                "and a Size dropdown (16 pixels by default; 8-32 by command). "..
-                "Distant resource markers move outside the minimap; nearby markers use their "..
-                "actual positions, then hide at the close-range cutoff to expose live tracking dots. "..
-                "Rim sectors group nodes in the same direction and show a count. "..
-                "0 disables either distance behavior independently. "..
-            "Alternatively use /fcm gatherpins near <0-50>, rim <0-100>, "..
-                "size <8-32>, on|off, or world on|off. "..
-                "They are not live spawn indicators.\n"..
-            "Source breakdown: personal "..count.personal..", GatherMate2 "..count.gathermate..
-                ", community "..count.community..".")
+            "SAVED LOCATIONS\n"..
+            count.herbalism.." herbalism | "..count.mining.." mining\n"..
+            count.fishing.." fishing | "..count.treasure.." treasure\n"..
+            "Sources: personal "..count.personal..", GatherMate2 "..count.gathermate..
+                ", community "..count.community..".\n\n"..
+            "AUTOMATIC RECORDING\n"..
+            "FCM records named herbs or ore when the client confirms a successful gathering cast. "..
+            "Fishing requires a named school/pool. Unnamed targets are skipped to avoid false locations.\n\n"..
+            "COMMUNITY AND IMPORTS\n"..
+            "Click Import GatherMate2 below, or use /fcm gather import. "..
+            "The Windows companion can merge published GitHub locations locally. "..
+            "Character data is not uploaded; contributions are manual.\n\n"..
+            "WORLD MAP AND MINIMAP\n"..
+            "World Map: On/Off controls the full-map overlay, including distant saved nodes. "..
+            "Pins: On/Off controls the nearby minimap markers. Hover a pin to see FCM's recorded gather count.\n\n"..
+            "DISTANCE AND SIZE\n"..
+            "Hide within: 15 yd avoids covering live tracking dots. Rim beyond: 45 yd groups distant "..
+            "markers by direction with counts. Size: 16 px, adjustable 8-32. "..
+            "Set either distance to 0 to disable that behavior.\n\n"..
+            "COMMANDS\n"..
+            "/fcm gatherpins near <0-50>\n"..
+            "/fcm gatherpins rim <0-100>\n"..
+            "/fcm gatherpins size <8-32>\n"..
+            "/fcm gatherpins on|off\n"..
+            "/fcm gatherpins world on|off\n\n"..
+            "IMPORTANT: Saved pins show reported locations, not live spawn indicators.")
         local categories={"herbalism","mining","fishing","treasure"}
         for _,kind in ipairs(categories) do
-            local nodes=FCM:GatherNodes(kind,nil,70)
+            -- Show all nodes up to the global list limit instead of hiding
+            -- five herbs at the old 70-per-category cap.
+            local nodes=FCM:GatherNodes(kind,nil,200)
             for _,point in ipairs(nodes) do
                 local place=string.format("Map %d at %.2f, %.2f",point.mapID or 0,point.x/100,point.y/100)
                 add("gather:"..kind..":"..point.mapID..":"..point.x..":"..point.y..":"..point.name,
@@ -2208,21 +2439,30 @@ local function buildRows(ui)
             add("shop:"..a.id,a.name,"Needed "..a.required.." | allocated "..a.available.." | missing "..a.missing,function()
                 local d={"|cffffd983"..a.name.."|r","", "Total across pending requests: "..a.required,
                     "Allocated usable stock: "..a.available,"Still needed: "..a.missing,
-                    "Requests using this material: "..a.requests,"", "Last recorded locations:"}
+                    "Requests using this material: "..a.requests}
                 local _,_,places=FCM:MaterialLocations(a.id,ch)
-                for _,loc in ipairs(places) do
-                    d[#d+1]="  "..loc.name.." "..loc.where..": "..loc.count..(loc.usable and "" or " (restricted)")
+                if #places>0 then
+                    d[#d+1]=""
+                    d[#d+1]="Last recorded locations:"
+                    for _,loc in ipairs(places) do
+                        d[#d+1]="  "..loc.name.." "..loc.where..": "..loc.count..(loc.usable and "" or " (restricted)")
+                    end
                 end
                 d[#d+1]=""
                 local quote=FCM:PriceQuote(a.id,ch)
                 if quote and tonumber(quote.median) then
                     d[#d+1]="Estimated AH cost of missing quantity: "..FCM:MoneyLabel(quote.median*a.missing)
                     d[#d+1]="AHledger snapshot / market: "..tostring(quote.market or "unknown")
-                    d[#d+1]="Last scan: "..
-                        (FCM.ReferenceTimeLabel and FCM:ReferenceTimeLabel(quote.observedAt) or "Date recorded")
+                    d[#d+1]="Last scan: "..FCM:TimestampLabel(quote.observedAt)
                     d[#d+1]="Prices from AHledger (ahledger.com). Not guaranteed current."
                 else
                     d[#d+1]="No verified imported price for this material on the selected market."
+                end
+                if a.missing>0 and FCM.FarmQuickLine then
+                    d[#d+1]=""
+                    d[#d+1]="Possible source for missing materials (reference only):"
+                    d[#d+1]=FCM:FarmQuickLine(a.id,ch,a.missing)
+                    d[#d+1]="A vendor reference is not a guarantee of current stock or price."
                 end
                 d[#d+1]=""
                 d[#d+1]="Transfers must be completed manually. Values from offline characters may be stale."
@@ -2362,11 +2602,10 @@ local function buildRows(ui)
             "The companion may need another reference-data sync to fill missing item details.")
         for _,entry in ipairs(filtered) do
             local e=entry
-            add("searchitem:"..e.id,e.name,"#"..e.id.." | "..
-                (friendlyItemCategories[e.group] or e.group).." | "..FCM:ItemQualityName(e.item)..
-                (e.itemType~="all" and e.itemType~="unknown" and " / "..e.itemType or "")..
+            add("searchitem:"..e.id,e.name,"#"..e.id.." | "..e.group..
+                (e.itemType~="all" and " / "..e.itemType or "")..
                 (e.owned and " | Owned" or ""),
-                function() return FCM:ReadableItemDetails(e.id,ch) end)
+                function() return FCM:CatalogItemDetails(e.id,ch) end)
         end
         -- Learned recipe matches are account-wide. The Item Details pane also
         -- performs reverse-reagent lookups through ExpandedItemDetails.
@@ -2409,13 +2648,12 @@ local function buildRows(ui)
             local selected=entry
             local info=entry.item or {}
             local quality=FCM:ItemQualityName(info)
-            local summary="#"..entry.id.."  |  "..
-                (friendlyItemCategories[selected.group] or selected.group).."  |  "..quality..
+            local summary="#"..entry.id.."  |  "..selected.group.."  |  "..quality..
                 (selected.owned and "  |  Owned" or "")..
                 (selected.uncertain and "  |  Review availability" or "")..
                 (not selected.externallySourced and "  |  Reference missing" or "")
             add("item:"..tostring(entry.id),entry.name,summary,
-                function() return FCM:ReadableItemDetails(selected.id,ch) end)
+                function() return FCM:CatalogItemDetails(selected.id,ch) end)
         end
         if total==0 then
             add("item-explorer-help", "No items match these filters", "Clear filters or run the companion's Reference Data sync.",
@@ -2493,7 +2731,9 @@ local function buildRows(ui)
     elseif tab=="Leveling" then
         for _,person in ipairs(FCM:VisibleCharacters()) do
             local c=person
-            add("level:"..c.key,FCM:DisplayCharacter(c),"Level "..(c.level or "?").." | XP "..(c.xp or 0).."/"..(c.xpMax or 0),function()
+            local maxXP=tonumber(c.xpMax) or 0
+            local xpText=maxXP>0 and ("XP "..tostring(c.xp or 0).."/"..tostring(maxXP)) or "XP not recorded"
+            add("level:"..c.key,FCM:DisplayCharacter(c),"Level "..(c.level or "?").." | "..xpText,function()
                 local d={"|cffffd983Leveling Progress|r","",FCM:LevelingSummary(c),"", "Upcoming crafted equipment (next 10 levels):"}
                 local futures=FCM.Gear:FutureCandidates(c,10)
                 for i=1,math.min(12,#futures) do
@@ -2505,6 +2745,34 @@ local function buildRows(ui)
                 d[#d+1]="Future gear availability depends on learned recipes and loaded item data."
                 return table.concat(d,"\n")
             end)
+        end
+    elseif tab=="QA Tests" then
+        local qaLines=FCM:QATestSummaryLines()
+        local qaSections={qaLines[1] or "QA status unavailable"}
+        local group={}
+        for i=2,#qaLines do
+            group[#group+1]=qaLines[i]
+            if #group>=5 then
+                qaSections[#qaSections+1]=table.concat(group,"\n")
+                group={}
+            end
+        end
+        if #group>0 then qaSections[#qaSections+1]=table.concat(group,"\n") end
+        add("qa-header","QA9-13 tracked test sessions","Progress is saved across characters and logouts",
+            table.concat(qaSections,"\n\n").."\n\n"..
+            "Nothing passes automatically. After verifying a test:\n"..
+            "/fcm qa pass Q01\n/fcm qa fail Q01 <reason>\n"..
+            "/fcm qa next (show next open/failed test)")
+        for _,test in ipairs(FCM.qaTestCases or {}) do
+            local case=test
+            local _,record=FCM:QATestRecord(case.id)
+            local status=record and string.upper(record.status) or "OPEN"
+            add("qa:"..case.id,case.id.." "..case.title,"["..status.."] "..case.phase,
+                "TEST "..case.id.." — "..case.title.."\n\n"..
+                "Steps: "..case.steps.."\n\nExpected: "..case.expected.."\n\n"..
+                "Current status: "..status.."\n"..
+                (record and record.note~="" and ("Note: "..record.note.."\n") or "")..
+                "To record: /fcm qa pass "..case.id.." OR /fcm qa fail "..case.id.." <note>.")
         end
     elseif tab=="Diagnostics" then
         add("report","FCM System Health","Build: "..tostring(FCM.build or "unlabeled")..
@@ -2584,10 +2852,16 @@ local function buildRows(ui)
                 "Style: "..FCM.modeLabels[FCM:Mode(ch)].." | Spec: "..tostring(ch.talentSpec or "Not selected").." | Edit dropdowns above",
                 "Activity profiles: Leveling (sustain), PvP (stamina and pressure), Endgame PvE (damage priorities)."..
                 "\nChoose Activity and Style in the header; saved independently for each character."..
-                "\nEach activity can remember its own DPS/Balanced/Survivability style."..
+                "\nEach activity remembers its own style, including Healing and Tank."..
                 "\nCurrent weight source: "..FCM.Gear:WeightSource(ch)..
-                "\nFrost Mage Leveling/PvE DPS uses user-recorded Zygor numerical values. Other defaults are provisional heuristics. These are item stat scores, NOT DPS simulations, hit caps or set-bonus calculations."..
+                "\nReviewed WoW Forever guides provide stat PRIORITIES, not numerical weights. Unambiguous DPS upgrades can pass a source-aware safety check; mixed stat trades require review. Healing and Tank styles show their guide without unsupported numeric upgrade rankings."..
                 "\nChange spec on Talents tab to refresh spec-based weighting.")
+            add("gear-stat-priority","Current stat-priority guide",
+                FCM.PriorityGuides and FCM.PriorityGuides:Reference(ch) and
+                    "Icy Veins WoW Forever (reviewed; role/build limits shown in details)" or
+                    "No reviewed Forever guide for this context yet",
+                function() return FCM.PriorityGuides and FCM.PriorityGuides:Description(ch) or
+                    "Stat-priority module unavailable." end)
             local results=FCM.Gear:Candidates(ch)
             for i,r in ipairs(results) do
                 local candidate=r
@@ -2642,28 +2916,30 @@ local function buildRows(ui)
         local lureLines={}
         local anyFishing=false
         for _,owner in ipairs(FCM:VisibleCharacters()) do
-            for key,p in pairs(owner.professions or {}) do
-                local n=string.lower(tostring((type(p)=="table" and p.name) or key))
-                if n=="fishing" then anyFishing=true end
-            end
-            for _,where in ipairs({"bags","bank"}) do
-                for _,record in pairs(owner[where] or {}) do
-                    local itemID=tonumber(record.itemID)
-                    local ref=itemID and FCM.externalData and FCM.externalData.items and FCM.externalData.items[itemID]
-                    local name=tostring((ref and ref.name) or record.name or "")
-                    local lower=string.lower(name)
-                    if lower:find("lure",1,true) or lower:find("bait",1,true) or
-                        lower:find("bauble",1,true) or lower:find("spinner",1,true) or
-                        lower:find("nightcrawler",1,true) then
-                        lureLines[#lureLines+1]=tostring(record.count or 1).."x "..name..
-                            " — "..FCM:DisplayCharacter(owner).." ("..where..")"
+            if ch and FCM:CanCollaborate(owner,ch) then
+                for key,p in pairs(owner.professions or {}) do
+                    local n=string.lower(tostring((type(p)=="table" and p.name) or key))
+                    if n=="fishing" then anyFishing=true end
+                end
+                for _,where in ipairs({"bags","bank"}) do
+                    for _,record in pairs(owner[where] or {}) do
+                        local itemID=tonumber(record.itemID)
+                        local ref=itemID and FCM.externalData and FCM.externalData.items and FCM.externalData.items[itemID]
+                        local name=tostring((ref and ref.name) or record.name or "")
+                        local lower=string.lower(name)
+                        if lower:find("lure",1,true) or lower:find("bait",1,true) or
+                            lower:find("bauble",1,true) or lower:find("spinner",1,true) or
+                            lower:find("nightcrawler",1,true) then
+                            lureLines[#lureLines+1]=tostring(record.count or 1).."x "..name..
+                                " — "..FCM:DisplayCharacter(owner).." ("..where..")"
+                        end
                     end
                 end
             end
         end
         if profession=="all" and query:match("^%s*$") and (anyFishing or #lureLines>0) then
             add("fishing-lure-box","Fishing — Lure Box",
-                #lureLines.." recorded lure/bait stacks (all visible characters)",function()
+                #lureLines.." recorded lure/bait stacks (compatible characters)",function()
                 local d={"|cffffd983Fishing — Lure Box|r","",
                     "Recorded lures and bait from character bags and banks:",""}
                 if #lureLines==0 then d[#d+1]="No identifiable lure/bait items scanned yet." end
@@ -2674,28 +2950,23 @@ local function buildRows(ui)
                 return table.concat(d,"\n")
             end)
         end
-        local craftMatches=FCM:BrowseCraftRecipes(profession,query)
+        local craftMatches=FCM:BrowseCraftRecipes(profession,query,ch)
         ui.craftRecipeCount=#craftMatches
         for _,recipe in ipairs(craftMatches) do
             local r=recipe
-            local eligible={}
-            for _,crafter in ipairs(r.crafters or {}) do
-                if ch and FCM:CanCollaborate(crafter,ch) then eligible[#eligible+1]=crafter end
-            end
-            do
-            local listedCrafter=eligible[1] or (r.crafters and r.crafters[1])
+            local eligible=FCM:EligibleCraftCrafters(r,ch)
+            if #eligible>0 then
+            local listedCrafter=eligible[1]
             local listedPlan=FCM:CraftAvailability(r,listedCrafter)
-            add("recipe:"..r.id,r.name,(r.profession or "Craft").." | "..#(r.crafters or {}).." known crafter(s) | "..
-                ((#eligible==0) and "Not available to selected character" or
-                (listedPlan.ready and "Materials ready" or ("Missing "..listedPlan.missing.." / verify"))),function()
+            add("recipe:"..r.id,r.name,(r.profession or "Craft").." | "..#eligible.." compatible crafter(s) | "..
+                (listedPlan.ready and "Materials ready" or ("Missing "..listedPlan.missing.." / verify")),function()
                 local d={"|cffffd983"..r.name.."|r","","Recipe ID: "..r.id,
                     "Profession: "..(r.profession or "Unknown"),
                     "Output per craft: "..tostring(math.max(1,math.floor(tonumber(r.quantity) or 1))),
                     "Edit Qty above to preview before requesting. Nothing is sent automatically.",
                     "Material estimates scale to the required recipe casts.","","Known by:"}
-                for _,c in ipairs(r.crafters or {}) do
-                    d[#d+1]="  "..FCM:DisplayCharacter(c)..
-                        ((ch and not FCM:CanCollaborate(c,ch)) and " (different faction/ruleset)" or "")
+                for _,c in ipairs(eligible) do
+                    d[#d+1]="  "..FCM:DisplayCharacter(c)
                 end
                 local crafter=eligible[1]
                 local mode=FCM:DefaultCraftRequestMode()
@@ -2710,7 +2981,13 @@ local function buildRows(ui)
                 end
                 d[#d+1]="Goal: "..(mode=="total" and "Reach Total" or "Craft Additional")
                 d[#d+1]=(mode=="total" and "Target finished items: " or "New finished items: ")..preview.quantity
-                d[#d+1]="Recipient already owns: "..(preview.ownedKnown and tostring(preview.owned) or "unknown (not subtracted)")
+                d[#d+1]="Recipient recorded finished items: "..tostring(preview.owned)
+                local stock=preview.stock or {}
+                d[#d+1]="  Bags: "..tostring(stock.bags or 0).." | Bank: "..tostring(stock.bank or 0)
+                if not preview.ownedKnown or stock.stale then
+                    d[#d+1]=color(stock.status or "Inventory scan incomplete", "ffb66e")
+                    d[#d+1]="Reach Total subtracts recorded stock only; confirm the live bank/bags before crafting."
+                end
                 d[#d+1]="Additional output needed: "..preview.needed
                 d[#d+1]="Recipe casts needed: "..preview.casts..
                     " | Produces: "..preview.produced
@@ -2763,20 +3040,25 @@ local function buildRows(ui)
                 d[#d+1]=""
                 d[#d+1]="*Offline counts are last-seen snapshots. Transfers may not be possible across rulesets or factions."
                 return table.concat(d,"\n")
-            end,(#eligible>0 and r or nil),nil,eligible,ch and ch.key,(#eligible>0 and listedPlan.ready or nil))
+            end,r,nil,eligible,ch and ch.key,listedPlan.ready)
             end
         end
-        if #rows==0 then
+        if #craftMatches==0 then
             if #FCM:AllRecipes()==0 then
                 add("no-recipes","No learned recipes scanned","Open the crafting window on each profession toon.",
                     "Use /fcm scan with a profession window open. The addon stores learned recipe information when it is visible to the game API.")
+            elseif ch and #FCM:BrowseCraftRecipes("all","",ch)==0 then
+                add("no-compatible-recipes","No compatible crafter recipes for "..FCM:DisplayCharacter(ch),
+                    "Only crafters in the same confirmed faction, ruleset and region are shown.",
+                    "Log in to a compatible crafter and open their profession window, then scan. "..
+                    "Recipes learned only by the opposite faction or an unverified ruleset are not available to this recipient.")
             else
                 add("no-craft-match","No matching learned recipes","Change Profession or clear Recipe search.",
                     "Recipe search matches learned recipe names, output item names and recipe IDs, not unrelated items or materials.")
             end
         end
     elseif tab=="Planner" then
-        add("planner-summary","Smart Crafting Planner | unified v0.9.0",
+        add("planner-summary","Smart Crafting Planner | recorded data",
             "Select a known recipe or pending request to calculate an account-wide crafting chain.",
             "This planner uses cached materials and learned recipes. It selects eligible crafters, reserves existing requests, recursively expands simple recipes, and shows missing ingredients and potential transfers. Reach Total requests subtract finished items already recorded on the recipient; Craft Additional requests do not. Remaining output requirements are rounded up by recipe yield.\n\nAlternative reagent slots and unknown bind restrictions require manual verification. Nothing is moved, bought, crafted, or mailed automatically.")
         for _,pending in ipairs(FCM:VisibleRequests()) do
@@ -2788,9 +3070,9 @@ local function buildRows(ui)
                 local wanted=FCM:CraftRequestQuantity(request)
                 local runs,_,_,needed,owned,known,mode=FCM:CraftRequestRuns(r,request,row.recipient)
                 add("plan-request:"..tostring(request.key),
-                    (mode=="total" and "TARGET: " or "CRAFT: ")..wanted.."x "..(r.name or "Recipe"),
+                    (mode=="total" and "SAVED TARGET: " or "SAVED CRAFT: ")..wanted.."x "..(r.name or "Recipe"),
                     "For "..FCM:DisplayCharacter(row.recipient).." | "..needed.." more needed, "..runs.." craft(s) | "..
-                        (who and FCM:DisplayCharacter(who) or "Unassigned crafter"),
+                    (who and ("Best stock preview: "..FCM:DisplayCharacter(who)) or "No eligible learned crafter"),
                     function()
                         if runs==0 then
                             return "Target already met by recorded recipient inventory ("..owned.." owned). "..
@@ -2817,11 +3099,12 @@ local function buildRows(ui)
             local available=#eligible>0
             recipeCount=recipeCount+1
             add("plan-recipe:"..tostring(recipe.id),recipe.name or ("Recipe #"..tostring(recipe.id)),
-                (recipe.profession or "Craft").." | "..#(recipe.crafters or {})..
+                "One-cast preview (not saved target) | "..(recipe.profession or "Craft").." | "..#(recipe.crafters or {})..
                     " scanned crafter(s) | "..(available and "Plan available" or "Not transferable to selected character"),
                 function()
                     local plan=FCM:SmartCraftingPlan(recipe,ch,nil,1)
-                    return table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
+                    return "RECIPE PREVIEW - ONE CAST\nNot the saved request target. Select a SAVED TARGET row to plan its full quantity.\n\n"..
+                        table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
                 end,available and recipe or nil,nil,available and eligible or nil,
                 ch and ch.key,available and true or false)
             rows[#rows].itemID=tonumber(recipe.outputID)
@@ -2830,18 +3113,34 @@ local function buildRows(ui)
             "Log in on profession characters and scan their recipes when the servers return.",
             "FCM does not assume an imported recipe is learned or craftable by your characters.") end
     elseif tab=="Requests" then
+        local requestView=FCM.db.settings.requestView or "all"
+        local loggedIn=FCM.db.characters[FCM.currentKey or ""]
         for _, entry in ipairs(FCM:VisibleRequests()) do
             local req, recipe, crafter, recipient = entry.request, entry.recipe, entry.crafter, entry.recipient
+            local canCraft=FCM:CanCraftRequest(req,loggedIn,recipe)
+            local needsMaterials=false
+            if recipe and crafter and req.status~="crafted" then
+                local needed=FCM:CraftRequestNeeded(recipe,req,recipient)
+                if needed>0 then
+                    local plan=FCM:CraftAvailability(recipe,crafter,req.key,needed)
+                    needsMaterials=not (plan and plan.ready)
+                end
+            end
+            local visible=requestView=="all" or
+                (requestView=="mine" and recipient and loggedIn and recipient.key==loggedIn.key) or
+                (requestView=="craftable" and canCraft) or
+                (requestView=="missing" and (needsMaterials or not crafter))
+            if visible then
             local recipeName = recipe and recipe.name or ("Recipe #"..tostring(req.recipeID))
             local recipientName = recipient and FCM:DisplayCharacter(recipient) or "Recipient record missing"
-            local crafterName = crafter and FCM:DisplayCharacter(crafter) or "Unassigned - choose crafter"
-            local mine = crafter and crafter.key == FCM.currentKey
+            local crafterName = crafter and FCM:DisplayCharacter(crafter) or "None recorded"
+            local mine = canCraft
             local wanted=FCM:CraftRequestQuantity(req)
-            local runs,produced,yieldPerCraft,needed,owned,known,mode=FCM:CraftRequestRuns(recipe,req,recipient)
-            local title = (mine and "[FOR YOU] " or "") ..
+            local runs,produced,yieldPerCraft,needed,owned,known,mode,stock=FCM:CraftRequestRuns(recipe,req,recipient)
+            local title = (mine and "[CAN CRAFT] " or "") ..
                 (mode=="total" and ("TARGET "..wanted.."x ") or ("MAKE "..wanted.."x ")) .. recipeName
             local summary = "For: " .. short(recipientName,18) .. " | "..needed.." more needed / "..
-                runs.." craft(s) | Crafter: " .. short(crafterName,20)
+                runs.." craft(s) | " .. tostring(#entry.eligible).." eligible maker(s)"
             local captured = entry
             add("request:" .. tostring(req.key), title, summary, function()
                 local d={"|cffffd983Craft Request|r", "", "Item: " .. recipeName,
@@ -2851,27 +3150,46 @@ local function buildRows(ui)
                     "Additional items needed: "..needed,
                     "Yield per craft: "..yieldPerCraft.." | Recipe casts: "..runs..
                         " | Expected output: "..produced,
-                    "Requested for: " .. recipientName, "Assigned to: " .. crafterName,
+                    "Requested for: " .. recipientName,
+                    "Request board: UNASSIGNED (any eligible crafter can fulfill)",
+                    "Recorded crafted: "..tostring(req.fulfilled or 0)..
+                        " | Marked delivered: "..tostring(req.deliveredCount or 0),
+                    "Recipient inventory: "..(stock and stock.status or "Not yet scanned"),
+                    "Recipient bags scanned: "..FCM:Age(recipient and recipient.bagsStamp),
+                    "Recipient bank scanned: "..FCM:Age(recipient and recipient.bankStamp),
+                    "Known eligible crafters: "..tostring(#entry.eligible),
+                    "Best materials preview: "..crafterName,
                     "Requested: " .. FCM:Age(req.created), "Status: " .. (req.status or "requested"), ""}
-                if crafter and crafter.key == FCM.currentKey then
-                    d[#d+1]="|cff67e89bThis craft is assigned to your current character.|r"
-                elseif not crafter then
-                    d[#d+1]="No known crafter is assigned. Use Assign Crafter below."
+                if canCraft then
+                    d[#d+1]="|cff67e89bYour logged-in character knows this recipe and is compatible.|r"
+                elseif #entry.eligible==0 then
+                    d[#d+1]="No eligible learned crafter recorded. Open the profession pane on a compatible toon."
+                else
+                    d[#d+1]="Log into a compatible learned crafter to record completed items."
                 end
                 if needed==0 and mode=="total" then
                     d[#d+1]=""
                     d[#d+1]="Target already met by recorded bags/bank. No materials reserved or needed."
                     d[#d+1]="This is based on a last-seen inventory snapshot; rescan before relying on it."
-                elseif recipe and crafter then
-                    local plan = FCM:CraftAvailability(recipe, crafter, req.key, needed)
+                elseif recipe and (canCraft or crafter) then
+                    local reviewer=canCraft and loggedIn or crafter
+                    local plan = FCM:CraftAvailability(recipe, reviewer, req.key, needed)
                     local mats, ready = plan.lines, plan.ready
                     d[#d+1]=""
-                    d[#d+1]="Materials (last scanned):"
+                    d[#d+1]="Materials for "..FCM:DisplayCharacter(reviewer).." (last scanned):"
                     for _, m in ipairs(mats) do
                         local usable=m.unreserved
                         local missing=m.missing
                         d[#d+1]=m.name..": "..usable.." / "..m.required.." unreserved" ..
                             (missing>0 and (" (missing "..missing..")") or "")
+                        local _,_,locations=FCM:MaterialLocations(m.id or m.itemID,reviewer)
+                        for _,loc in ipairs(locations or {}) do
+                            local bind=loc.bound==true and "SOULBOUND to owner" or
+                                (loc.bound==false and "unbound" or "BINDING UNKNOWN")
+                            local access=loc.usable and "accessible" or "NOT transferable"
+                            d[#d+1]="    "..loc.count.."x "..short(loc.name,20).." "..loc.where..
+                                " | "..bind.." | "..access.." | scanned "..FCM:Age(loc.lastScan)
+                        end
                     end
                     if recipe.complex then d[#d+1]="Some reagents require manual verification." end
                     if ready and #mats>0 then d[#d+1]="Stock may be ready; check reserved amounts above." end
@@ -2886,7 +3204,7 @@ local function buildRows(ui)
                 elseif not recipe then
                     d[#d+1]="Recipe missing from the current known-recipe database; scan the crafter again."
                 else
-                    d[#d+1]="Assign a crafter before checking transferable material quantities."
+                    d[#d+1]="No learned compatible crafter yet. Unverified materials are not counted as transferable."
                 end
                 if recipe and recipient and runs>0 then
                     d[#d+1]=""
@@ -2896,24 +3214,29 @@ local function buildRows(ui)
                     end
                 end
                 d[#d+1]=""
-                d[#d+1]="Use Assign/Reassign and Status / Qty to change the quantity or track requested > gathering > ready > crafted > delivered."
+                d[#d+1]="Only the logged-in eligible crafter can record manual craft progress."
+                d[#d+1]="Use Status / Qty to change quantity or archive after delivery. Recorded crafts remain pending until delivered."
                 d[#d+1]="Materials are not automatically moved, crafted, or mailed."
                 return table.concat(d,"\n")
             end, nil, req)
             rows[#rows].itemID=recipe and tonumber(recipe.outputID)
+            end
         end
         if #rows==0 then
-            add("no-requests", "No pending crafting requests", "Queue an item from Gear or Crafting.",
-                "When you request a craft, it appears in the appropriate faction view. The assigned crafter receives a reminder on login. Horde and Alliance requests must remain separate.\n\nTo test: log onto your Mage, request an item from a known crafter, log out and onto that crafter, then open FCM > Requests.")
+            add("no-requests", "No matching crafting requests", "Choose All Requests or queue an item from Gear/Crafting.",
+                "Requests have no assigned crafter. Use Can Craft on a character that learned the recipe. Opposing faction, ruleset and region requests are never treated as transferable.")
         end
     elseif tab=="Professions" then
         if ch then
             for key,profession in pairs(ch.professions or {}) do
                 local p=profession
-                local count=0
-                for _,r in pairs(ch.recipes or {}) do if r.learned and r.profession==p.name then count=count+1 end end
-                add("prof:"..key,p.name,(p.skill or 0).."/"..(p.maxSkill or "?").." | "..count.." stored recipes",
-                    "Last scanned: "..FCM:Age(p.scan).."\n\nOpen this profession's recipe window to update known patterns and required reagents.")
+                -- Incomplete profession snapshots must not show a nameless 0/0 row.
+                if type(p)=="table" and type(p.name)=="string" and p.name:match("%S") then
+                    local count=0
+                    for _,r in pairs(ch.recipes or {}) do if r.learned and r.profession==p.name then count=count+1 end end
+                    add("prof:"..key,p.name,(p.skill or 0).."/"..(p.maxSkill or "?").." | "..count.." stored recipes",
+                        "Last scanned: "..FCM:Age(p.scan).."\n\nOpen this profession's recipe window to update known patterns and required reagents.")
+                end
             end
         end
         if ch then
@@ -3095,18 +3418,23 @@ local function buildRows(ui)
                     local row=aggregate[item.itemID]
                     if not row then row={id=item.itemID,total=0,name=item.name or FCM.ItemName(item.itemID),bound=0};aggregate[item.itemID]=row end
                     row.total=row.total+(item.count or 0)
-                    if item.bound then row.bound=row.bound+(item.count or 0) end
+                    if item.bound==true then row.bound=row.bound+(item.count or 0) end
+                    if item.bound==nil then row.unknown=(row.unknown or 0)+(item.count or 0) end
                 end
             end
         end
         for id,r in pairs(aggregate) do
             local v=r
-            add("item:"..id,v.name,"Total: "..v.total.." | bound: "..v.bound,function()
+            add("item:"..id,v.name,"Total: "..v.total.." | bound: "..v.bound..
+                " | binding unknown: "..(v.unknown or 0),function()
                 local _,_,locations=FCM:MaterialLocations(v.id,ch)
                 local d={"|cffffd983"..v.name.."|r","","Item ID: "..v.id,
-                    "Total recorded: "..v.total,"Bound quantity: "..v.bound,"","Saved locations:"}
+                    "Total recorded: "..v.total,"Bound quantity: "..v.bound,
+                    "Binding unknown: "..(v.unknown or 0),"","Saved locations:"}
                 for _,place in ipairs(locations) do
-                    d[#d+1]=short(place.name,24).." "..place.where..": "..place.count..(place.bound and " (bound)" or "")
+                    local bind=place.bound==true and "SOULBOUND" or
+                        (place.bound==false and "unbound" or "BINDING UNKNOWN")
+                    d[#d+1]=short(place.name,24).." "..place.where..": "..place.count.." ("..bind..")"
                     d[#d+1]="  Last scan: "..FCM:Age(place.lastScan)
                 end
                 -- Evaluate every recorded holder, not merely the currently
@@ -3136,6 +3464,24 @@ local function buildRows(ui)
                 return table.concat(d,"\n")
             end)
         end
+        local changes={}
+        for _,person in ipairs(FCM:VisibleCharacters()) do
+            local audit=person.lastBagChanges
+            if type(audit)=="table" then
+                for id,n in pairs(audit.removed or {}) do
+                    changes[#changes+1]=FCM:DisplayCharacter(person)..": "..tostring(n)..
+                        "x "..FCM.ItemName(id).." no longer in last bag snapshot ("..FCM:Age(audit.at)..")"
+                end
+            end
+        end
+        if #changes>0 then
+            table.sort(changes)
+            add("inventory-snapshot-review","Recent recorded bag changes",
+                tostring(#changes).." decreases since earlier successful scans (not proof of use/loss)",
+                "BAG SCAN DIFFERENCES\n\n"..table.concat(changes,"\n")..
+                "\n\nA missing item may have been used, moved, mailed, or absent from a later snapshot. "..
+                "This diagnostic does not recover items or prove they disappeared from the game.")
+        end
         table.sort(rows,sortByName)
         if #rows==0 then add("no-inventory","Inventory is empty or unscanned","Log in to each toon. Open bank to capture storage.","The item search tracks last-scanned counts, not live offline inventories.") end
     elseif tab=="Legacy" then
@@ -3153,13 +3499,16 @@ local function buildRows(ui)
                 "\nUpdate with /fcm legacyavailable <number> after using the actual Legacy panel.")
         add("legacy-advisor","Next Legacy Point Advisor",
             "Tree: "..FCM.legacyTreeLabels[tree].." | Goal: "..FCM:LegacyPriorityLabel(tree,priority),
-            "The Goal menu changes with the selected tree and remembers a separate choice for each tree and character. Gear activity/style remains independent."..
-            "\nOnly perks with a reviewed relationship to this goal are ranked. Some tree/goal combinations have no direct fit."..
-            "\nRecommendations are contextual preferences, NOT a DPS simulation or a verified in-game unlock path."..
-            "\nCurrent available-point snapshot: "..available..
-            "\nOnly your manually recorded ranks and manually confirmed unlock/lock states can be considered."..
-            "\nA missing rank is treated as zero for planning, NOT as confirmed unlearned."..
-            "\nCheck each node in the actual Legacy panel before spending. FCM never purchases perks.")
+            "GOAL AND TREE\n"..
+            "The Goal menu changes with the selected tree. Each character remembers a separate goal for every tree. Gear activity/style remains independent.\n\n"..
+            "HOW RANKING WORKS\n"..
+            "FCM ranks perks with a reviewed relationship to your goal. Some combinations have no direct fit. "..
+            "Recommendations are preferences, not a DPS simulation or verified unlock path.\n\n"..
+            "RECORDED STATUS\n"..
+            "Available points (manual snapshot): "..available.."\n"..
+            "Only manually recorded ranks and confirmed unlock/lock states are considered. "..
+            "Missing ranks are treated as zero for planning, not as confirmed unlearned.\n\n"..
+            "IMPORTANT\nCheck nodes in the actual Legacy panel before spending. FCM never purchases perks.")
         if ch then
             local picks=FCM:LegacyRecommendations(ch,tree,priority,3)
             if #picks==0 then
@@ -3230,27 +3579,36 @@ local function buildRows(ui)
         end
     elseif tab=="Settings" then
         add("legacy-advisor-settings","Legacy tree and goal", "Choose Adventure, Professions or Resourcefulness; then choose your goal.",
-            "Legacy uses two separate selectors at the bottom of the Legacy tab:\n"..
-            "Tree: All Trees, Adventure, Professions, Resourcefulness.\n"..
-            "Adventure goals: Leveling, Exploration & Travel, Survivability, Balanced.\n"..
-            "Professions goals: Skill-Ups, Gathering & Fishing, Crafting, Gold, Balanced.\n"..
-            "Resourcefulness goals: Endgame PvE, PvP & Honor, Reputation, Cost Savings, Balanced.\n"..
+            "CHOOSE A TREE\n"..
+            "Use the two selectors at the bottom of the Legacy tab.\n"..
+            "Tree: All Trees, Adventure, Professions, Resourcefulness.\n\n"..
+            "GOALS BY TREE\n"..
+            "Adventure: Leveling; Exploration & Travel; Survivability; Balanced.\n"..
+            "Professions: Skill-Ups; Gathering & Fishing; Crafting; Gold; Balanced.\n"..
+            "Resourcefulness: Endgame PvE; PvP & Honor; Reputation; Cost Savings; Balanced.\n"..
             "All Trees offers the complete goal list.\n\n"..
-            "Each character remembers a goal for EACH tree, separate from Gear activity/style. FCM ranks next-rank possibilities but does not spend points or confirm that an unverified node is unlocked.\n"..
-            "Commands: /fcm legacytree <tree>; /fcm legacypriority <goal>; /fcm legacyaccess <perk name> available|locked|unknown.\n"..
-            "Confirm purchases with /fcm legacyrank <perk name> <rank> and unspent points with /fcm legacyavailable <0-16>.")
+            "PER-CHARACTER SETTINGS\n"..
+            "Each character remembers a separate goal for each tree. "..
+            "This does not change Gear activity or style. No perk is purchased automatically.\n\n"..
+            "COMMANDS\n"..
+            "/fcm legacytree <tree>\n"..
+            "/fcm legacypriority <goal>\n"..
+            "/fcm legacyaccess <perk name> available|locked|unknown\n"..
+            "/fcm legacyrank <perk name> <rank>\n"..
+            "/fcm legacyavailable <0-16>\n\n"..
+            "IMPORTANT: Confirm a rank or unlocked node in the actual Legacy panel first.")
         add("minimap", "Round movable minimap icon", "Left-drag to reposition; right-click to reset.",
             "The round FCM emblem appears as soon as you log in. Drag it around the minimap to a preferred spot. Its location is saved for the whole account across sessions.\n\nRight-click the icon, click Reset Minimap Icon below, or type /fcm minimap reset to return it to its default location.")
         add("settings","Gear activity and priority","Choose both dropdowns above (saved per character)",
-            "Activity: Leveling, PvP, or Endgame PvE.\nSecondary style: DPS, Balanced, or Survivability.\n\n"..
+            "Activity: Leveling, PvP, or Endgame PvE.\nSecondary style: DPS, Balanced, Survivability, Healing, or Tank.\n\n"..
             "Each character remembers its activity and its style for EACH activity. Changing spec on Talents changes weightings.\n"..
-            "Slash commands: /fcm gearprofile leveling|pvp|pve and /fcm gearstyle dps|balanced|survival.\n"..
+            "Slash commands: /fcm gearprofile leveling|pvp|pve and /fcm gearstyle dps|balanced|survival|healing|tank.\n"..
             "Numerical profile: /fcm pawnimport (paste a Pawn v1 scale in the dialog), /fcm weightprofile to inspect, /fcm weightprofile reset to remove it.\n"..
             "A user-imported scale is tied to this toon, specialization, activity, style and level bracket (1-39, 40-59, or 60). FCM does not rescale it with speculative factors.\n"..
             "Optional cap-aware comparisons: /fcm hitrating <current HIT RATING> <cap HIT RATING>. Both numbers must be rating points, never percentages; /fcm hitrating reset clears the manual snapshot. Refresh after gear/talent changes.\n"..
             "Custom stat override: /fcm gearweight spell 5 (per toon/activity); /fcm gearweight reset. Manual overrides are preserved on import.\n\n"..
             "Selected source: "..(ch and FCM.Gear and FCM.Gear:WeightSource(ch) or "No character selected").."\n\n"..
-            "Scores are estimated ITEM stat scores, not percent DPS, PvP success, measured healing or complete simulator models. Frost Mage Leveling/PvE DPS uses weights transcribed from your Zygor Item Score recording, including separately scanned spell-hit/crit percentages; unsupported bonuses cannot be scored. Existing imports and manual overrides take precedence. Hit-cap handling applies only when valid rating units are entered. Other fallback defaults remain provisional heuristics, not verified IV numerical weights.")
+            "Scores are estimated ITEM stat scores, not percent DPS, PvP success, measured healing or complete simulator models. Reviewed Icy Veins WoW Forever guides provide stat PRIORITIES only, not numerical coefficients. For supported contexts, mixed stat tradeoffs are flagged for manual review while obvious no-loss stat improvements can pass. Existing imports and manual overrides take precedence. Hit-cap handling applies only when valid rating units are entered. Other fallback defaults remain provisional heuristics.")
         add("guide","Talent plan customization","Use slash commands to add or clear planned talent steps.",
             "/fcm talentbuild <profile ID> (see Talents tab for this spec's available profiles)\n/fcm talentsource icy|custom\n/fcm talentspec <spec>\n/fcm talentadd <level> <talent name>\n/fcm talentrank <level> <rank> <talent name>\n/fcm talentclear <level>\n/fcm talentaudit\n\nGuide modules include verified notes and selected exact steps. All 27 specializations have at least three profile slots; distinct IV alternate builds are added where verified. Full exact point order remains incomplete and is labeled clearly.")
         add("window","Resizable interface","Drag the lower-right corner; /fcm ui reset to restore defaults.",
@@ -3263,15 +3621,23 @@ local function buildRows(ui)
             "/fcm repgate <recipeID> <factionID> <standing 1-8>\n/fcm clearrepgate <recipeID>\n\nStanding IDs: 1 Hated through 8 Exalted. Unregistered vendors are not automatically inferred.")
     elseif tab=="Help" then
         add("legacy-advisor-help","Next Legacy Point Advisor","Pick the actual Legacy tree and a separate activity goal.",
-            "Open Legacy; choose Tree: Adventure / Professions / Resourcefulness (or All Trees). Goal options change to match that tree's perks. Each character remembers its choice for each tree.\n\n"..
-            "FCM shows three ranked suggestions with reasons. Your character's saved professions, class and level can influence the ranking; the game panel remains authoritative for prerequisites and purchases.\n\n"..
-            "For an available perk, type /fcm legacyaccess <name> available; for locked use locked. Once purchased, record the new rank with /fcm legacyrank <name> <rank>. No Legacy point is spent automatically.")
-        add("advanced","What's new in unified v0.9.0","Reference provenance, safer import merges, offline data-health audit",
+            "CHOOSE A TREE AND GOAL\n"..
+            "Open Legacy; choose Adventure, Professions, Resourcefulness or All Trees. "..
+            "Goals change to match the tree and are remembered per character.\n\n"..
+            "REVIEW THE ADVICE\n"..
+            "FCM shows up to three suggestions with reasons. Class, level and saved professions can influence them. "..
+            "The in-game Legacy panel is authoritative for prerequisites.\n\n"..
+            "RECORD VERIFIED CHANGES\n"..
+            "/fcm legacyaccess <name> available\n"..
+            "/fcm legacyaccess <name> locked\n"..
+            "/fcm legacyrank <name> <rank>\n\n"..
+            "IMPORTANT: FCM never automatically spends Legacy points.")
+        add("advanced","Reference and import improvements","Reference provenance, safer import merges, offline data-health audit",
             "The Windows companion now records reference provider, fetch date and evidence caveats, retains multiple dungeon sources, and reports incomplete data using its Audit Reference Data button. Partial API replies no longer discard known recipe output/reagents or cached boss loot.\n\nThese are public reference records, not verified game drops or vendor stock. No live Icy Veins sync, automatic Legacy totals, DPS simulation, mailing or crafting automation is claimed.")
         add("weighting","Gear weight sources and imports","Use /fcm pawnimport to paste your Pawn v1 numerical scale.",
-            "On the Talents tab, select the class specialization. Set activity and style at the top, then use /fcm pawnimport to paste a complete Pawn export.\n\nFCM validates all nonzero fields. If a stat cannot be scanned, it rejects the entire import rather than pretending that stat has zero importance. The new scale applies only to this character/spec/activity/style/level bracket; other toons keep their own settings.\n\nFrost Mage Leveling/PvE DPS includes a user-recorded Zygor numerical reference preset. Spell Hit % and Spell Crit % are scanned as tooltip percentages, never confused with rating. Other builds remain provisional.\n\nUse /fcm weightprofile to confirm the active source, or /fcm weightprofile reset to remove a user import. Your earlier /fcm gearweight custom values are not deleted.\n\nIcy Veins guides are useful stat-priority references but do not provide universal numeric Pawn values for every Forever level and spec. This is not a DPS simulation or official Zygor integration.")
-        add("requests", "Cross-character crafting requests", "Open Requests to see work assigned to the crafter.",
-            "On Crafting, filter by profession and search learned recipes. Choose a recipient, select a recipe, set Goal: Reach Total (default) or Goal: Craft More, then enter Qty in the permanent field. The right side updates live with owned finished items, needed output, casts, materials, and possible cross-character transfers. Nothing is saved until you click Request Craft (or Update Craft Request for an existing request). Reach Total subtracts finished items in the recipient's last-scanned bags and bank. Craft More always requests additional items. Other toons' finished items are not assumed delivered.\n\nTransfer suggestions come only from last-scanned bags/banks; cross-faction/ruleset and bound materials are excluded. Bank stock must be withdrawn before mailing, and eligibility still needs in-game verification. Log into the assigned crafter to see requests. Requests lists the mode, owned count, remaining quantity and materials. Status / Qty can also edit or cancel an existing request. Older requests retain Craft Additional semantics until explicitly changed. Nothing is crafted, moved or mailed automatically.")
+                "On the Talents tab, select the class specialization. Set activity and style at the top, then use /fcm pawnimport to paste a complete Pawn export.\n\nFCM validates all nonzero fields. If a stat cannot be scanned, it rejects the entire import rather than pretending that stat has zero importance. The new scale applies only to this character/spec/activity/style/level bracket; other toons keep their own settings.\n\nUse /fcm statguide to inspect manually reviewed Icy Veins WoW Forever priorities, source URL and guide date. All 27 specializations have separate leveling and PvE reference priorities. These are ORDERS, not numerical weights. Without an applicable reviewed priority or verified/custom numeric model, automatic recommendations are suppressed for safety.\n\nUse /fcm weightprofile to confirm the active numeric source, or /fcm weightprofile reset to remove a user import. Your earlier /fcm gearweight custom values are not deleted.\n\nIcy Veins guides are useful stat-priority references but do not provide universal numeric Pawn values for every Forever level and spec. This is not a DPS simulation or official Icy Veins integration.")
+        add("requests", "Cross-character crafting requests", "Unassigned board: For Me, Can Craft, Needs Materials, All.",
+            "On Crafting, filter by profession and search learned recipes. Choose a recipient, select a recipe, set Goal: Reach Total (default) or Goal: Craft More, then enter Qty. The right side previews owned output, casts, materials, and potential transfers. Click Request Craft to post WITHOUT selecting a crafter.\n\nAny compatible, same-faction/ruleset/region toon that has actually learned the recipe can see it under Requests > Can Craft. The material preview can choose a best-stock crafter but does NOT assign anyone. Choose Record Crafted Items only after actually crafting. Partial counts remain open until completed; Status / Qty can record delivery/archive. Old assignments are preserved as historical previousCrafterKey but are no longer binding.\n\nCross-character materials count only when a specific scanned stack is unbound; unknown binding stays unverified and inaccessible. Soulbound stock is for its own holder only. Offline snapshots may be stale. FCM does not auto-buy, mail, craft, or send requests over the network.")
         add("delete", "Removing a saved character", "Characters tab > select a toon > Remove Saved Character",
             "You must be logged into a different toon than the record being removed. Select its row in Characters, then press Remove Saved Character and confirm the prompt.\n\nOnly FCM's saved data and that character's queued crafts are removed. The actual WoW character is untouched. Log into the removed character again if you want to re-add it.\n\nOther characters' records remain intact.")
         add("factions","Horde and Alliance support","Use Faction: All / Alliance / Horde above the list.",
@@ -3287,12 +3653,9 @@ end
 function UI:Refresh()
     if not self.frame or not self.frame:IsShown() or not FCM.db then return end
     local tab=self.tab or "Overview"
-    if self.detailPanel then
-        -- The searchable item encyclopedia carries longer source and recipe
-        -- notes than the character tabs. Give it room to wrap naturally.
-        self.detailPanel:SetWidth(tab=="Dungeons" and 366 or
-            ((tab=="Item Explorer" or tab=="Global Search") and 390 or 285))
-    end
+    self:HideDetailCards()
+    self.detailCardSource=nil
+    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or 340) end
     self.heading:SetText(tab)
     self.factionButton:SetText(FCM:FactionView()=="all" and "All" or FCM:FactionView())
     local ch=self:GetCharacter()
@@ -3305,11 +3668,40 @@ function UI:Refresh()
         self.activityButton:SetText(FCM.gearActivityLabels[FCM:GearActivity(nil)])
         self.modeButton:SetText(FCM.modeLabels[FCM:Mode(nil)])
     end
-    self.subtitle:SetText(ch and (FCM:DisplayCharacter(ch).." | "..(FCM:NormalizeFaction(ch.faction) or "Unknown faction").." | last seen "..FCM:Age(ch.lastSeen)) or "No character in selected faction; log into one to scan")
+    self.subtitle:SetText(ch and
+        ((ch.key==FCM.currentKey and "[LOGGED IN] " or "[OFFLINE SNAPSHOT] ")..
+        FCM:DisplayCharacter(ch).." | "..(FCM:NormalizeFaction(ch.faction) or "Unknown faction")..
+        " | last seen "..FCM:Age(ch.lastSeen)) or
+        "No character in selected faction; log into one to scan")
     self:RefreshProfessionTabs(ch)
     tab=self.tab or "Overview"
+    if tab=="Crafting" and ch and FCM.db.settings.craftProfession and
+        FCM.db.settings.craftProfession~="all" then
+        local saved=FCM.db.settings.craftProfession
+        local found=false
+        for _,entry in ipairs(FCM:CraftRecipeProfessions(ch)) do
+            if entry.id==saved then found=true;break end
+        end
+        -- A profession saved while viewing Alliance must not strand Horde
+        -- on an empty selection when no compatible crafter knows it.
+        if not found then FCM.db.settings.craftProfession="all" end
+    end
+    local palette=self:TabPalette(tab)
+    -- Tint the details surface to match the selected category; previously
+    -- every right pane was identical near-black despite color-coded lists.
+    if self.detailPanelBg then
+        self.detailPanelBg:SetColorTexture(
+            palette.row[1]*0.68+0.012,
+            palette.row[2]*0.68+0.012,
+            palette.row[3]*0.68+0.012,0.95)
+    end
     self.heading:SetText(tab:sub(1,11)=="Profession:" and
         (tab:sub(12):gsub("^%l",string.upper).." — "..(ch and ch.name or "Character")) or tab)
+    if self.heading.SetTextColor then
+        self.heading:SetTextColor(tonumber(palette.accent:sub(1,2),16)/255,
+            tonumber(palette.accent:sub(3,4),16)/255,
+            tonumber(palette.accent:sub(5,6),16)/255)
+    end
     for t,b in pairs(self.tabButtons) do b:SetEnabled(t~=tab) end
     local myRequests=FCM:CountAssignedRequests(FCM.currentKey)
     self.tabButtons.Requests:SetText(myRequests>0 and ("Requests ("..myRequests..")") or "Requests")
@@ -3334,18 +3726,23 @@ function UI:Refresh()
     -- The box is also useful for looking up ordinary inventory items while on
     -- a profession or craft tab. If that tab has no match, offer catalogue
     -- records without falsely presenting reagents as craftable recipes.
-    if #entries==0 and q~="" and tab~="Crafting" and tab~="Item Explorer" and tab~="Global Search" and FCM.BrowseItems then
-        local matches=FCM:BrowseItems(q,"all","all","all",30)
-        for _,item in ipairs(matches) do
-            local entry=item
-            entries[#entries+1]={id="searchitem:"..entry.id,title=entry.name,
-                summary="Item database result #"..entry.id.." (not necessarily craftable)",
-                detail=function() return FCM:CatalogItemDetails(entry.id,ch) end}
+    -- Keep local searches local: "no matches" in Inventory must never imply
+    -- an unrelated catalogue item is inside a scanned bag.
+    if #entries==0 then
+        if tab=="Inventory" then
+            entries={{id="no-match",title="No matching inventory stock",
+                summary="Not found in saved bag/bank snapshots; clear Search or rescan the item owner.",
+                detail="The Inventory tab checks only saved character bag/bank snapshots. "..
+                    "A missing result does not mean the item is missing from the game or the reference catalogue. "..
+                    "Log into the item owner, open their bags and bank, then use Scan. "..
+                    "Offline bank snapshots can be stale; use Item Explorer to search the reference database."}}
+        else
+            entries={{id="no-match",title="No matching results",
+                summary="Try a shorter name or clear Search; check the selected tab's filters",
+                detail="Nothing in this tab's recorded data matches the search. "..
+                    "This does not establish whether an item exists in the reference catalogue."}}
         end
     end
-    if #entries==0 then entries={{id="no-match",title="No matching results",
-        summary="Try a shorter name or clear Search; check reference-data sync",
-        detail="No recorded items or recipes match this search. The companion may not have imported the item yet."}} end
     local matchedCount=#entries
     while #entries>200 do table.remove(entries) end
     local hasSelected=false
@@ -3380,9 +3777,21 @@ function UI:Refresh()
         widget:SetPoint("TOPLEFT",self.scrollChild,"TOPLEFT",2,-((i-1)*47))
         widget.label:SetText(short(row.title,63))
         widget.desc:SetText(short(row.summary,80))
-        widget.bg:SetColorTexture(row.id==self.selectedRow and 0.12 or 0.07,
-            row.id==self.selectedRow and 0.29 or 0.12,
-            row.id==self.selectedRow and 0.38 or 0.17,0.9)
+        local shade=row.id==self.selectedRow and palette.selected or palette.row
+        widget.bg:SetColorTexture(shade[1],shade[2],shade[3],0.9)
+        if widget.label.SetTextColor then
+            widget.label:SetTextColor(tonumber(palette.accent:sub(1,2),16)/255,
+                tonumber(palette.accent:sub(3,4),16)/255,
+                tonumber(palette.accent:sub(5,6),16)/255)
+        end
+        if widget.desc.SetTextColor then
+            local statusColor=(tab=="QA Tests" and row.summary:match("^%[PASS%]")) and "7be6a4" or
+                ((tab=="QA Tests" and row.summary:match("^%[FAIL%]")) and "ff8080" or
+                ((tab=="QA Tests" and row.summary:match("^%[OPEN%]")) and "ffcb76" or palette.summary))
+            widget.desc:SetTextColor(tonumber(statusColor:sub(1,2),16)/255,
+                tonumber(statusColor:sub(3,4),16)/255,
+                tonumber(statusColor:sub(5,6),16)/255)
+        end
         widget:SetScript("OnClick",function()
             if self.tab=="Dungeons" and self.selectedRow~=row.id then self.dungeonItemSelection=nil end
             self.selectedRow=row.id
@@ -3479,7 +3888,7 @@ function UI:Refresh()
             local selectedProfession=FCM.db.settings.craftProfession or "all"
             local name=selectedProfession=="all" and "All" or "Unknown"
             local found=selectedProfession=="all"
-            for _,profession in ipairs(FCM:CraftRecipeProfessions()) do
+            for _,profession in ipairs(FCM:CraftRecipeProfessions(ch)) do
                 if profession.id==selectedProfession then
                     name=profession.name;found=true;break
                 end
@@ -3501,15 +3910,23 @@ function UI:Refresh()
         self.itemScopeButton:SetShown(browsing)
         self.itemQualityButton:SetShown(browsing)
         self.itemResetButton:SetShown(browsing)
-        self.backSearchButton:SetShown(tab=="Global Search")
+        self.backSearchButton:SetShown(not crafting)
+        self.backSearchButton:SetText(tab=="Global Search" and "Back" or "All")
+        self.searchLabel:SetText(tab=="Global Search" and "Search all items or recipes" or "Search this list")
+        local requests=tab=="Requests"
+        self.requestViewButton:SetShown(requests)
+        local requestView=FCM.db.settings.requestView or "all"
+        local requestViewNames={all="All",mine="For Me",craftable="Can Craft",missing="Needs Mats"}
+        self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
         -- Move content down only while the AH-style filter toolbar is visible.
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests) and -143 or -107)
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering) and -143 or -107)
-        self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,68)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
+            tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
         self.dungeonViewButton:SetShown(dungeonBrowsing)
         self.dungeonLevelButton:SetShown(dungeonBrowsing)
@@ -3579,7 +3996,19 @@ function UI:Refresh()
         local spec=FCM:TalentSpec(ch)
         self.talentSpecButton:SetText(short(spec or "Spec",12))
         local selectedProfile=FCM:TalentProfile(ch)
-        self.talentBuildButton:SetText(short(selectedProfile and (selectedProfile.shortTitle or selectedProfile.title) or "Leveling",14))
+        local fullTitle=tostring(selectedProfile and (selectedProfile.title or selectedProfile.shortTitle) or "Leveling")
+        local fallback=tostring(selectedProfile and (selectedProfile.shortTitle or selectedProfile.title) or "Leveling")
+        self.talentBuildFullTitle=fullTitle
+        self.talentBuildButton:SetText(fullTitle)
+        local label=self.talentBuildButton.GetFontString and self.talentBuildButton:GetFontString()
+        if (label and label.GetStringWidth and label:GetStringWidth()>self.talentBuildButton:GetWidth()-20) or
+            (not label and #fullTitle>40) then
+            self.talentBuildButton:SetText(fallback)
+            if (label and label.GetStringWidth and label:GetStringWidth()>self.talentBuildButton:GetWidth()-20) or
+                (not label and #fallback>40) then
+                self.talentBuildButton:SetText(short(fallback,36))
+            end
+        end
         self.talentSourceButton:SetText(ch.talentSource=="custom" and "Custom" or "Icy Veins")
         self.talentSpecButton:Show()
         self.talentBuildButton:Show()
@@ -3596,16 +4025,6 @@ function UI:Refresh()
         -- The same quick red/green comparison appears wherever a real item is
         -- selected. Non-equipment rows simply retain their existing details.
         local itemID=previewItemID(selected)
-        if itemID and (tab=="Item Explorer" or tab=="Global Search") then
-            local meta=itemMetadata(itemID)
-            local category=FCM:ItemCategory(meta.store or {})
-            if category=="weapon" or category=="armor" or category=="jewelry" then
-                local stats=itemStats(itemID,meta.store,meta.game)
-                if #stats>0 and stats[1]~="Stats unavailable in current records" then
-                    content="|cffffd983COMBAT STATS|r\n"..table.concat(stats,"\n").."\n\n"..tostring(content)
-                end
-            end
-        end
         if itemID and ch and FCM.Gear and FCM.Gear.CompareItem then
             local comparison=FCM.Gear:CompareItem(itemID,ch,selected.compareSlot)
             local comparisonLines=FCM.Gear:ComparisonLines(comparison)
@@ -3613,13 +4032,16 @@ function UI:Refresh()
                 content=table.concat(comparisonLines,"\n").."\n\n"..tostring(content)
             end
         end
-        self.detailText:SetText(content)
-        self.detailChild:SetHeight(math.max(345,self.detailText:GetStringHeight()+previewHeight+30))
+        self.detailText:SetText(self:DecorateDetail(content,tab))
+        self:RenderDetailCards(content,tab,previewHeight)
         if selected.request then
             self.activeRequest=selected.request
-            self.action:SetWidth(125)
-            self.action:SetText("Assign / Reassign")
-            self.action:Show()
+            self.action:SetWidth(170)
+            self.action:SetText("Record Crafted Items")
+            if FCM:CanCraftRequest(selected.request,FCM.db.characters[FCM.currentKey or ""],
+                    FCM:RecipeByID(selected.request.recipeID)) then
+                self.action:Show()
+            end
             self.cancelRequestButton:SetText("Status / Qty")
             self.cancelRequestButton:Show()
         elseif tab=="Gathering" then
@@ -3637,7 +4059,9 @@ function UI:Refresh()
                 self.action:SetText(queued and "Update Craft Request" or "Request Craft for "..short(rch.name,15))
                 self.action:SetEnabled(FCM:ValidCraftQuantity(self:CraftDraftText(selected.recipe,rch))~=nil)
             else
-                self.action:SetText(queued and "Cancel Craft Request" or "Request Craft for "..short(rch.name,15))
+                self.action:SetText(queued and
+                    ("Cancel request: "..tostring(FCM:CraftRequestQuantity(queued)).."x "..short(rch.name,11)) or
+                    ("Request Craft for "..short(rch.name,15)))
             end
             self.action:Show()
         end

@@ -4,11 +4,12 @@ local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
 FCM.version = "0.9.1"
-FCM.build = "QA6-20261114-Fishing-Pool-Detection"
+FCM.build = "R6.1-20261116-Inventory-Vendor-Binding-Cleanup-Test"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}
-FCM.modeLabels = { dps = "DPS", balanced = "Balanced", survival = "Survivability" }
+FCM.modeLabels = { dps = "DPS", balanced = "Balanced", survival = "Survivability",
+    healing = "Healing", tank = "Tank" }
 FCM.gearActivityLabels = { leveling = "Leveling", pvp = "PvP", pve = "Endgame PvE" }
 FCM.gearActivityOrder = {"leveling", "pvp", "pve"}
 
@@ -43,7 +44,7 @@ end
 function FCM:InitDB()
     if type(FCM_DB) ~= "table" then FCM_DB = {} end
     local db = FCM_DB
-    db.schema = math.max(tonumber(db.schema) or 0, 5)
+    db.schema = math.max(tonumber(db.schema) or 0, 6)
     db.characters = db.characters or {}
     -- Non-destructive migration: v0.9.1 stored the Forever surname in realm.
     -- Keep the old field for recovery but never interpret it as transfer access.
@@ -90,6 +91,20 @@ function FCM:InitDB()
     db.settings.gatherPinSize=math.max(8,math.min(32,
         math.floor(tonumber(db.settings.gatherPinSize) or 16)))
     db.craftingQueue = db.craftingQueue or {}
+    -- R6 request board: restore the old requested crafter as historical
+    -- information, but make every active request available to ANY compatible
+    -- character who has actually learned the recipe. Never erase a request.
+    for _,request in ipairs(db.craftingQueue) do
+        if type(request)=="table" and request.boardVersion~=2 then
+            if request.crafterKey then
+                request.previousCrafterKey=request.previousCrafterKey or request.crafterKey
+            end
+            request.crafterKey=nil
+            request.boardVersion=2
+            request.fulfilled=math.max(0,math.floor(tonumber(request.fulfilled) or 0))
+            request.deliveredCount=math.max(0,math.floor(tonumber(request.deliveredCount) or 0))
+        end
+    end
     db.gates = db.gates or {} -- User-entered recipe ID -> { factionID, standing, note }
     db.notes = db.notes or {}
     db.requestHistory = db.requestHistory or {}
@@ -376,6 +391,23 @@ function FCM:Age(timestamp)
     return math.floor(delta / 86400) .. "d ago"
 end
 
+-- Public market/reference timestamps may arrive as Unix seconds.  Render
+-- readable local time without pretending a stale snapshot is a live price.
+-- Non-numeric or unsupported timestamps stay explicitly unformatted.
+function FCM:TimestampLabel(value)
+    if value==nil or value=="" then return "Not supplied" end
+    local number=tonumber(value)
+    if not number then return tostring(value) end
+    if number>=946684800 and number<4102444800 then
+        local formatter=type(date)=="function" and date or (os and os.date)
+        if type(formatter)=="function" then
+            local ok,label=pcall(formatter,"%Y-%m-%d %H:%M local",math.floor(number))
+            if ok and type(label)=="string" and label~="" then return label end
+        end
+    end
+    return "Timestamp "..tostring(value).." (not formatted)"
+end
+
 -- Scan timestamps are saved on each character. A cached record can be useful
 -- while its owner is offline, but "recent" is not proof of current inventory.
 -- Thresholds are conservative review prompts, never proof data has changed.
@@ -559,7 +591,28 @@ end
 SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
     local cmd, rest = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")
     cmd = string.lower(cmd or "")
-    if cmd == "scan" then
+    if cmd == "qa" or cmd == "qatest" or cmd == "qatests" then
+        local action,args=tostring(rest or ""):match("^(%S+)%s*(.*)$")
+        action=string.lower(action or "list")
+        if action=="pass" or action=="fail" or action=="reset" then
+            local id,note=tostring(args or ""):match("^(%S+)%s*(.*)$")
+            local ok,why=FCM:SetQATestStatus(id,action,note)
+            FCM:Say(why)
+        elseif action=="next" then
+            local nextCase=nil
+            for _,entry in ipairs(FCM.qaTestCases or {}) do
+                local _,record=FCM:QATestRecord(entry.id)
+                if not record or record.status~="pass" then nextCase=entry;break end
+            end
+            if nextCase then
+                FCM:Say(nextCase.id.." "..nextCase.title.." | "..nextCase.steps)
+                FCM:Say("Expected: "..nextCase.expected)
+            else FCM:Say("All tracked QA tests are marked PASS.") end
+        elseif action=="list" then
+            for _,line in ipairs(FCM:QATestSummaryLines()) do FCM:Say(line) end
+            FCM:Say("Use /fcm qa next | pass Q01 | fail Q01 <note> | reset Q01")
+        else FCM:Say("Use /fcm qa list | next | pass Q01 | fail Q01 <note> | reset Q01") end
+    elseif cmd == "scan" then
         local ok, count, total=FCM:ScanAll()
         FCM:Say("Manual scan "..(ok and "completed" or "partially completed").." ("..tostring(count).."/"..tostring(total).."). Open profession and bank windows for those snapshots.")
     elseif cmd == "gather" or cmd == "gathering" then
@@ -573,14 +626,12 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
             FCM:Say("Saved nodes: herbs "..totals.herbalism..", mining "..totals.mining..
                 ", fishing "..totals.fishing..", treasure "..totals.treasure..
                 ". Personal "..totals.personal..", imported "..totals.gathermate..", community "..totals.community..".")
-        elseif sub=="fishstatus" then
-            FCM:Say(FCM.FishingStatus and FCM:FishingStatus() or "Fishing diagnostics unavailable.")
         elseif sub=="" then
             if FCM.UI then FCM.UI.tab="Gathering" end
             if FCM.Toggle then
                 if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
             end
-        else FCM:Say("Use /fcm gather, /fcm gather status, /fcm gather fishstatus, or /fcm gather import.") end
+        else FCM:Say("Use /fcm gather, /fcm gather status, or /fcm gather import.") end
     elseif cmd == "ahdiag" then
         local itemID=tonumber(rest) or 4537
         if type(FCM.AHPriceDiagnostic)=="function" then
@@ -770,7 +821,49 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         if FCM:SetGearStyle(ch,requested) then
             FCM:Say("Gear style ("..FCM.gearActivityLabels[FCM:GearActivity(ch)].."): "..FCM.modeLabels[requested])
             if FCM.Refresh then FCM:Refresh() end
-        else FCM:Say("Usage: /fcm gearstyle dps|balanced|survival") end
+        else FCM:Say("Usage: /fcm gearstyle dps|balanced|survival|healing|tank") end
+    elseif cmd == "weightcapture" or cmd == "weightsnapshot" then
+        if FCM.WeightCapture and FCM.WeightCapture.CaptureAndShow then
+            local snapshot,why=FCM.WeightCapture:CaptureAndShow()
+            if snapshot then
+                FCM:Say("Raw stat snapshot captured for "..tostring(snapshot.class).." "..
+                    tostring(snapshot.spec).." (build "..snapshot.gameBuild.."). "..
+                    "The copy window is selected. This is NOT a verified weight profile.")
+                if snapshot.specSource=="no_talents_yet" then
+                    FCM:Say("This level-"..tostring(snapshot.level).." character has no talent specialization yet. "..
+                        "You can set an intended spec with /fcm talentspec Affliction, but weights remain unverified.")
+                elseif snapshot.specSource=="selection_missing" then
+                    FCM:Say("No specialization is selected in FCM. Use /fcm talentspec <spec> "..
+                        "and open the talent tree before a simulation review.")
+                end
+            else FCM:Say(why or "Could not capture weight snapshot.") end
+        else FCM:Say("Stat-weight capture module unavailable.") end
+    elseif cmd == "gearprobe" then
+        -- Read-only QA of the same item interpretation used by gear swaps.
+        -- It never equips an item, changes character data or computes DPS.
+        local slot=tonumber((rest or ""):match("^%s*(%d+)%s*$"))
+        if not slot or slot<1 or slot>19 then
+            FCM:Say("Usage: /fcm gearprobe <equipped slot 1-19>; cloak is slot 15")
+        elseif type(GetInventoryItemLink)~="function" or not FCM.Gear or
+            type(FCM.Gear.StatValues)~="function" then
+            FCM:Say("Client equipment APIs or gear parser unavailable.")
+        else
+            local link=FCM:Try(GetInventoryItemLink,"player",slot)
+            local stats=link and FCM.Gear:StatValues(link)
+            if type(stats)~="table" then
+                FCM:Say("Slot "..slot..": item or stat units unavailable; no score inferred.")
+            else
+                local parts={}
+                for stat,value in pairs(stats) do
+                    if type(value)=="number" then
+                        parts[#parts+1]=stat.."="..tostring(value)
+                    end
+                end
+                table.sort(parts)
+                FCM:Say("Slot "..slot.." interpreted item stats (NOT weights): "..
+                    table.concat(parts,", "))
+            end
+        end
     elseif cmd == "pawnimport" then
         if rest and rest~="" then
             importPawnWeights(rest)
@@ -791,6 +884,15 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         else
             FCM:Say("Gear weights: "..FCM.Gear:WeightSource(ch))
             FCM:Say("Use /fcm pawnimport to paste an exported numerical scale; /fcm weightprofile reset removes the active import.")
+        end
+    elseif cmd == "statguide" then
+        local ch=FCM:Current()
+        if ch and FCM.PriorityGuides and FCM.PriorityGuides.Description then
+            for line in FCM.PriorityGuides:Description(ch):gmatch("[^\n]+") do
+                FCM:Say(line)
+            end
+        else
+            FCM:Say("WoW Forever priority guide unavailable.")
         end
     elseif cmd == "hitrating" then
         local ch=FCM:Current()
@@ -912,6 +1014,7 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         local recipe = tonumber(rest)
         if recipe then FCM.db.gates[recipe] = nil; FCM:Say("Removed gate for recipe " .. recipe) end
     elseif cmd == "help" then
+        FCM:Say("/fcm qa list | next | pass Q01 | fail Q01 <note> | reset Q01: persistent test tracking")
         FCM:Say("/fcm | scan | upgrades | shopping | item <name or ID> | farm <itemID> [quantity] | ahdiag [itemID] | diag | minimap reset | ui reset")
         FCM:Say("/fcm threshold <score> | notifications on|off | legacygoal <goal>")
         FCM:Say("/fcm legacyavailable <0-16> | legacyrank <perk name> <0-max rank> (manual confirmations)")
@@ -925,6 +1028,9 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         FCM:Say("/fcm talentbuild <profile ID> | /fcm talentsource icy|custom | /fcm talentspec <name>")
         FCM:Say("Available profile IDs for this spec: "..table.concat(FCM:TalentProfileOrder(FCM:Current())," | "))
         FCM:Say("/fcm talentadd <level> <talent> | /fcm talentrank <level> <rank> <talent> | /fcm talentclear <level> | /fcm talentaudit")
+        FCM:Say("/fcm weightcapture opens a local, copyable raw stat/talent snapshot (not an active weight model)")
+        FCM:Say("/fcm gearprobe <slot 1-19> displays interpreted equipped-item stats; cloak is 15")
+        FCM:Say("/fcm statguide shows the reviewed Icy Veins WoW Forever priority source for your current spec/activity")
         FCM:Say("/fcm repgate <recipeID> <factionID> <standing 1-8> | /fcm clearrepgate <recipeID>")
     else
         if FCM.Toggle then FCM:Toggle() else FCM:Say("UI not loaded; use /reload") end

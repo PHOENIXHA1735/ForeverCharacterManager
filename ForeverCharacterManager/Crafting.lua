@@ -212,13 +212,28 @@ local function recipeProfession(recipe)
     return name
 end
 
-function FCM:CraftRecipeProfessions()
+-- The account-wide recipe index includes both factions. Crafting is a
+-- *request* screen, so limit its choices to crafters who can actually serve
+-- the selected recipient. A nil recipient preserves legacy global browsing
+-- for diagnostics and other non-request callers.
+function FCM:EligibleCraftCrafters(recipe,recipient)
+    local eligible={}
+    if not recipient then return eligible end
+    for _,crafter in ipairs(recipe and recipe.crafters or {}) do
+        if self:CanCollaborate(crafter,recipient) then
+            eligible[#eligible+1]=crafter
+        end
+    end
+    return eligible
+end
+
+function FCM:CraftRecipeProfessions(recipient)
     local names={}
     local seen={}
     for _,recipe in ipairs(self:AllRecipes()) do
         local name=recipeProfession(recipe)
         local key=string.lower(name)
-        if not seen[key] then
+        if not seen[key] and (not recipient or #self:EligibleCraftCrafters(recipe,recipient)>0) then
             seen[key]=true
             names[#names+1]={id=key,name=name}
         end
@@ -227,12 +242,13 @@ function FCM:CraftRecipeProfessions()
     return names
 end
 
-function FCM:BrowseCraftRecipes(profession,query)
+function FCM:BrowseCraftRecipes(profession,query,recipient)
     local selected=string.lower(tostring(profession or "all"))
     local needle=string.lower(tostring(query or ""):match("^%s*(.-)%s*$"))
     local matches={}
     for _,recipe in ipairs(self:AllRecipes()) do
-        if selected=="all" or string.lower(recipeProfession(recipe))==selected then
+        if (not recipient or #self:EligibleCraftCrafters(recipe,recipient)>0) and
+            (selected=="all" or string.lower(recipeProfession(recipe))==selected) then
             local id=tostring(recipe.id or "")
             local name=string.lower(tostring(recipe.name or ""))
             local outputName=""
@@ -297,35 +313,57 @@ end
 
 -- Only count finished goods on the RECIPIENT, not potentially transferable
 -- goods on a different toon. Bank and bag records are last-seen snapshots.
-function FCM:OwnedFinishedItems(recipient,outputID)
+function FCM:FinishedItemStock(recipient,outputID)
     local wanted=tonumber(outputID)
-    if not recipient or not wanted then return 0,false end
-    local owned=0
+    if not recipient or not wanted then
+        return {owned=0,bags=0,bank=0,known=false,status="No recipient/item selected"}
+    end
+    local stock={owned=0,bags=0,bank=0}
     for _,where in ipairs({"bags","bank"}) do
         for _,stack in pairs(recipient[where] or {}) do
             if tonumber(stack.itemID)==wanted then
-                owned=owned+math.max(0,math.floor(tonumber(stack.count) or 0))
+                stock[where]=stock[where]+math.max(0,math.floor(tonumber(stack.count) or 0))
             end
         end
     end
-    return owned,true
+    stock.owned=stock.bags+stock.bank
+    local bagStamp,bankStamp=tonumber(recipient.bagsStamp),tonumber(recipient.bankStamp)
+    stock.bagsScanned=bagStamp and bagStamp>0 or false
+    stock.bankScanned=bankStamp and bankStamp>0 or false
+    stock.known=stock.bagsScanned and stock.bankScanned
+    local now=type(self.Now)=="function" and tonumber(self:Now()) or nil
+    stock.stale=stock.known and now and now>0 and
+        ((now-bagStamp)>172800 or (now-bankStamp)>604800) or false
+    stock.status=not stock.known and "PARTIAL SCAN: open bags and bank on recipient" or
+        (stock.stale and "STALE: re-open bags and bank on recipient" or "Last-scanned bags and bank")
+    return stock
+end
+function FCM:OwnedFinishedItems(recipient,outputID)
+    local stock=self:FinishedItemStock(recipient,outputID)
+    return stock.owned,stock.known,stock
 end
 
 function FCM:CraftRequestNeeded(recipe,request,recipient)
     local desired=self:CraftRequestQuantity(request)
     local mode=self:CraftRequestMode(request)
-    local owned,known=self:OwnedFinishedItems(recipient,recipe and recipe.outputID)
-    local needed=mode=="total" and math.max(0,desired-owned) or desired
-    return needed,owned,known,mode
+    local owned,known,stock=self:OwnedFinishedItems(recipient,recipe and recipe.outputID)
+    local crafted=math.max(0,math.floor(tonumber(request and request.fulfilled) or 0))
+    local delivered=math.max(0,math.floor(tonumber(request and request.deliveredCount) or 0))
+    -- Additional crafts are counted exactly once. For Reach Total, only
+    -- crafted-but-not-yet-delivered output reduces a recipient's stock gap;
+    -- delivered goods must be counted by a fresh recipient inventory scan.
+    local needed=mode=="total" and math.max(0,desired-owned-math.max(0,crafted-delivered))
+        or math.max(0,desired-crafted)
+    return needed,owned,known,mode,stock
 end
 
 function FCM:CraftRequestRuns(recipe,request,recipient)
-    local needed,owned,known,mode=self:CraftRequestNeeded(recipe,request,recipient)
+    local needed,owned,known,mode,stock=self:CraftRequestNeeded(recipe,request,recipient)
     if needed==0 then
-        return 0,0,math.max(1,math.floor(tonumber(recipe and recipe.quantity) or 1)),needed,owned,known,mode
+        return 0,0,math.max(1,math.floor(tonumber(recipe and recipe.quantity) or 1)),needed,owned,known,mode,stock
     end
     local runs,produced,yield=self:CraftRuns(recipe,needed)
-    return runs,produced,yield,needed,owned,known,mode
+    return runs,produced,yield,needed,owned,known,mode,stock
 end
 
 -- Read-only calculation for the Crafting tab's inline quantity field. This
@@ -338,9 +376,9 @@ function FCM:CraftQuantityPreview(recipe,recipient,rawQuantity,mode)
         return nil,"Choose Reach Total or Craft Additional."
     end
     local draft={quantity=quantity,quantityMode=mode}
-    local casts,produced,yield,needed,owned,known=self:CraftRequestRuns(recipe,draft,recipient)
+    local casts,produced,yield,needed,owned,known,_,stock=self:CraftRequestRuns(recipe,draft,recipient)
     return {quantity=quantity,mode=mode,casts=casts,produced=produced,
-        yield=yield,needed=needed,owned=owned,ownedKnown=known}
+        yield=yield,needed=needed,owned=owned,ownedKnown=known,stock=stock}
 end
 function FCM:CraftRuns(recipe, requestedQuantity)
     local quantity=self:ValidCraftQuantity(requestedQuantity) or 1
@@ -406,28 +444,54 @@ function FCM:FindQueuedCraft(recipeID, recipientKey)
     return nil
 end
 
-function FCM:ResolveRequestCrafter(request, recipe)
-    if not request then return nil end
-    local recipient=self.db.characters[request.recipientKey]
-    if request.crafterKey and self.db.characters[request.crafterKey] then
-        local c = self.db.characters[request.crafterKey]
-        if c.recipes and c.recipes[request.recipeID] and c.recipes[request.recipeID].learned
-                and self:CanCollaborate(c,recipient) then
-            return c
+function FCM:RequestEligibleCrafters(request,recipe)
+    local eligible={}
+    if not request or not self.db then return eligible end
+    local recipient=self.db.characters[request.recipientKey or ""]
+    recipe=recipe or self:RecipeByID(request.recipeID)
+    local info=recipe and recipe.outputID and self.Gear and
+        self.Gear:Info(recipe.outputLink or recipe.outputID)
+    for _,candidate in ipairs(recipe and recipe.crafters or {}) do
+        if candidate.recipes and candidate.recipes[request.recipeID] and
+                candidate.recipes[request.recipeID].learned and
+                self:CanCollaborate(candidate,recipient) and
+                (not info or info.bindType~=1 or candidate.key==recipient.key) then
+            eligible[#eligible+1]=candidate
         end
     end
-    request.crafterKey = nil
-    recipe = recipe or self:RecipeByID(request.recipeID)
-    -- Migrate unassigned requests only if exactly one eligible, same-side crafter.
-    local eligible={}
-    for _,c in ipairs(recipe and recipe.crafters or {}) do
-        if self:CanCollaborate(c,recipient) then eligible[#eligible+1]=c end
+    return eligible
+end
+
+function FCM:CanCraftRequest(request,crafter,recipe)
+    if not crafter or not request or not self:IsPendingRequest(request) or
+            request.status=="crafted" then return false end
+    for _,candidate in ipairs(self:RequestEligibleCrafters(request,recipe)) do
+        if candidate.key==crafter.key then return true end
     end
-    if #eligible==1 then
-        request.crafterKey=eligible[1].key
-        return eligible[1]
+    return false
+end
+
+-- This is an ADVISORY best choice for material planning, never an assignment.
+function FCM:SuggestedRequestCrafter(request,recipe)
+    local choices=self:RequestEligibleCrafters(request,recipe)
+    if #choices==0 then return nil end
+    local recipient=self.db.characters[request.recipientKey or ""]
+    local needed=self:CraftRequestNeeded(recipe,request,recipient)
+    local best,bestMissing
+    for _,candidate in ipairs(choices) do
+        -- Legacy standalone harnesses and older installs may load Crafting
+        -- before the advisory module. A valid known crafter is still usable.
+        local plan=type(self.CraftAvailability)=="function" and
+            self:CraftAvailability(recipe,candidate,request.key,needed) or nil
+        local missing=tonumber(plan and plan.missing) or math.huge
+        if not best or missing<bestMissing then best=candidate;bestMissing=missing end
     end
-    return nil -- unassigned: visible to everyone until a crafter is selected
+    return best
+end
+
+-- Kept for read-only callers; no queued request ever becomes assigned.
+function FCM:ResolveRequestCrafter(request,recipe)
+    return self:SuggestedRequestCrafter(request,recipe)
 end
 
 function FCM:RecipeByID(recipeID)
@@ -453,30 +517,13 @@ function FCM:QueueCraft(recipeID, recipientKey, crafterKey, requestedQuantity, q
     if self:FindQueuedCraft(recipeID, recipientKey) then
         return false, "This character already has a request for that recipe."
     end
-    local eligible={}
-    for _,c in ipairs(recipe.crafters or {}) do
-        if self:CanCollaborate(c,recipient) then eligible[#eligible+1]=c end
-    end
-    if crafterKey then
-        local valid = false
-        for _,c in ipairs(eligible) do
-            if c.key==crafterKey then valid=true;break end
-        end
-        if not valid then return false,"Crafter is unlearned, opposing-faction, or on another ruleset." end
-    elseif #eligible==1 then
-        crafterKey=eligible[1].key
-    elseif #eligible==0 then
-        return false,"No same-faction, same-ruleset crafter is recorded for this recipe."
-    end
-    local info = recipe.outputID and self.Gear and self.Gear:Info(recipe.outputLink or recipe.outputID)
-    if info and info.bindType == 1 and crafterKey ~= recipientKey then
-        return false, "This item appears bind-on-pickup and cannot be requested from another crafter."
-    end
+    -- Deprecated crafterKey argument is deliberately ignored. Requests are
+    -- posted without a designated maker, even if only one crafter is known.
     local key = tostring(recipeID) .. ":" .. recipientKey
     self.db.craftingQueue[#self.db.craftingQueue + 1] = {
         key=key, recipeID=recipeID, recipientKey=recipientKey,
-        crafterKey=crafterKey, quantity=quantity,quantityMode=quantityMode,
-        created=self:Now(), status="requested",
+        quantity=quantity,quantityMode=quantityMode,boardVersion=2,
+        fulfilled=0,deliveredCount=0,created=self:Now(),status="requested",
     }
     return true
 end
@@ -496,6 +543,14 @@ function FCM:UpdateQueuedCraftQuantity(request,requestedQuantity,quantityMode)
     if quantityMode and quantityMode~="total" and quantityMode~="additional" then
         return false,"Choose Reach Total or Craft Additional."
     end
+    if (quantityMode or self:CraftRequestMode(request))=="additional" and
+            quantity<(tonumber(request.fulfilled) or 0) then
+        return false,"Requested quantity cannot be less than already recorded crafts. No history was erased."
+    end
+    if quantityMode and quantityMode~=self:CraftRequestMode(request) and
+            (tonumber(request.fulfilled) or 0)>0 then
+        return false,"Cannot change Reach Total / Craft Additional after progress is recorded."
+    end
     request.quantity=quantity
     if quantityMode then request.quantityMode=quantityMode end
     request.updated=self:Now()
@@ -506,21 +561,32 @@ function FCM:UpdateQueuedCraftQuantity(request,requestedQuantity,quantityMode)
 end
 
 function FCM:AssignQueuedCraft(request, crafterKey)
-    local recipe = request and self:RecipeByID(request.recipeID)
-    local crafter = self.db and self.db.characters[crafterKey]
-    if not request or not recipe or not crafter then return false, "Request or crafter not found." end
-    local valid = false
-    for _, c in ipairs(recipe.crafters) do if c.key == crafterKey then valid = true; break end end
-    if not valid then return false, "Crafter has not learned that recipe." end
-    local recipient=self.db.characters[request.recipientKey]
-    local can,reason=self:CanCollaborate(crafter,recipient)
-    if not can then return false,"Cannot assign a cross-faction/ruleset craft: "..reason end
-    local info = recipe.outputID and self.Gear and self.Gear:Info(recipe.outputLink or recipe.outputID)
-    if info and info.bindType == 1 and crafterKey ~= request.recipientKey then
-        return false, "A bind-on-pickup result cannot be assigned to another character."
+    return false,"R6 uses an unassigned request board. Log into any eligible crafter and open Requests > Can Craft."
+end
+
+function FCM:RecordCraftProgress(request,crafterKey,quantity)
+    if not self.currentKey or crafterKey~=self.currentKey then
+        return false,"Log into the crafter that performed the work to record completed items."
     end
-    request.crafterKey = crafterKey
-    return true
+    local maker=self.db and self.db.characters[crafterKey or ""]
+    local recipe=request and self:RecipeByID(request.recipeID)
+    if not self:CanCraftRequest(request,maker,recipe) then
+        return false,"Log into a compatible character who learned this recipe to record crafts."
+    end
+    local count=self:ValidCraftQuantity(quantity)
+    if not count then return false,"Enter a whole number of finished items from 1 to 999." end
+    local recipient=self.db.characters[request.recipientKey or ""]
+    local needed=self:CraftRequestNeeded(recipe,request,recipient)
+    if needed<=0 then return false,"The recorded request is already fulfilled." end
+    local credited=math.min(needed,count)
+    request.fulfilled=(tonumber(request.fulfilled) or 0)+credited
+    request.work=request.work or {}
+    request.work[#request.work+1]={crafterKey=maker.key,quantity=credited,
+        at=self:Now(),source="manual confirmation"}
+    request.updated=self:Now()
+    request.status=credited>=needed and "crafted" or "gathering"
+    return true,tostring(credited).." item(s) recorded; "..
+        tostring(math.max(0,needed-credited)).." still needed. Confirm delivery separately."
 end
 
 function FCM:RemoveQueuedCraft(recipeID, recipientKey)
@@ -540,15 +606,16 @@ function FCM:QueuedRequests()
     for _, request in ipairs(self.db.craftingQueue or {}) do
         if self.IsPendingRequest and self:IsPendingRequest(request) then
         local recipe = self:RecipeByID(request.recipeID)
-        local crafter = self:ResolveRequestCrafter(request, recipe)
+        local crafter = self:SuggestedRequestCrafter(request, recipe)
         list[#list + 1] = { request = request, recipe = recipe,
-            crafter = crafter, recipient = self.db.characters[request.recipientKey] }
+            crafter = crafter, recipient = self.db.characters[request.recipientKey],
+            eligible=self:RequestEligibleCrafters(request,recipe) }
         end
     end
     table.sort(list, function(a, b)
         local me = self.currentKey
-        local ar = a.crafter and a.crafter.key == me and 0 or (a.crafter and 2 or 1)
-        local br = b.crafter and b.crafter.key == me and 0 or (b.crafter and 2 or 1)
+        local ar = self:CanCraftRequest(a.request,self.db.characters[me],a.recipe) and 0 or 1
+        local br = self:CanCraftRequest(b.request,self.db.characters[me],b.recipe) and 0 or 1
         if ar ~= br then return ar < br end
         return (a.request.created or 0) < (b.request.created or 0)
     end)
@@ -558,7 +625,9 @@ end
 function FCM:CountAssignedRequests(key)
     local count = 0
     for _, row in ipairs(self:QueuedRequests()) do
-        if row.crafter and row.crafter.key == key then count = count + 1 end
+        if self:CanCraftRequest(row.request,self.db.characters[key or ""],row.recipe) then
+            count = count + 1
+        end
     end
     return count
 end

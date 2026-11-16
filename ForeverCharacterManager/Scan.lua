@@ -18,10 +18,19 @@ function FCM:ScanBasic()
     ch.race = safe(UnitRace, "player") or ch.race
     ch.faction = safe(UnitFactionGroup, "player") or ch.faction
     ch.level = safe(UnitLevel, "player") or ch.level or 1
-    ch.gold = safe(GetMoney) or ch.gold or 0
-    ch.xp = safe(UnitXP, "player") or ch.xp or 0
-    ch.xpMax = safe(UnitXPMax, "player") or ch.xpMax or 0
-    ch.restedXP = safe(GetXPExhaustion) or 0
+    -- Unavailable client APIs are NOT evidence of zero gold or zero XP.
+    -- Preserve the last known offline record and mark fresh fields explicitly.
+    local gold=safe(GetMoney)
+    if type(gold)=="number" and gold>=0 then
+        ch.gold=gold;ch.goldStamp=self:Now()
+    end
+    local xpMax=safe(UnitXPMax,"player")
+    local xp=safe(UnitXP,"player")
+    if type(xpMax)=="number" and xpMax>0 and type(xp)=="number" and xp>=0 then
+        ch.xp=xp;ch.xpMax=xpMax;ch.xpStamp=self:Now()
+    end
+    local rested=safe(GetXPExhaustion)
+    if type(rested)=="number" and rested>=0 then ch.restedXP=rested end
     ch.lastSeen = self:Now()
     if self.TrackSession then self:TrackSession() end
 end
@@ -59,7 +68,7 @@ local function itemBoundAt(bag, slot, onError)
 end
 
 local function containerSnapshot(bagIndices)
-    local result, available = {},false
+    local result, available, incomplete = {},false,false
     local bindingErrorRecorded=false
     local function bindingError(problem,detail)
         -- Report the first binding error from each bag/bank pass, instead of
@@ -77,6 +86,10 @@ local function containerSnapshot(bagIndices)
         if type(exposed)=="number" and (bag==0 or slots>0) then available=true end
         for slot = 1, math.min(slots, 120) do
             local info = safe(C_Container.GetContainerItemInfo, bag, slot)
+            if not info and type(C_Container.GetContainerItemID)=="function" then
+                local id=safe(C_Container.GetContainerItemID,bag,slot)
+                if id then incomplete=true end
+            end
             if info and info.itemID then
                 local id = tonumber(info.itemID)
                 local quantity = tonumber(info.stackCount) or 1
@@ -99,7 +112,32 @@ local function containerSnapshot(bagIndices)
             end
         end
     end
-    return result,available
+    return result,available,incomplete
+end
+
+local function snapshotCounts(entries)
+    local counts={}
+    for _,stack in pairs(entries or {}) do
+        local id=tonumber(stack and stack.itemID)
+        if id then counts[id]=(counts[id] or 0)+math.max(0,tonumber(stack.count) or 0) end
+    end
+    return counts
+end
+
+local function recordBagDiff(ch,previous,snapshot,stamp)
+    if type(previous)~="table" then return end
+    local before,after=snapshotCounts(previous),snapshotCounts(snapshot)
+    local lost,gained={},{}
+    for id,old in pairs(before) do
+        if old>(after[id] or 0) then lost[id]=old-(after[id] or 0) end
+    end
+    for id,new in pairs(after) do
+        if new>(before[id] or 0) then gained[id]=new-(before[id] or 0) end
+    end
+    if next(lost) or next(gained) then
+        ch.lastBagChanges={removed=lost,added=gained,at=stamp,
+            note="Difference between two successful scans; not proof of why items moved."}
+    end
 end
 
 function FCM:ScanBags()
@@ -110,13 +148,19 @@ function FCM:ScanBags()
         bags[#bags+1]=Enum.BagIndex.ReagentBag
     end
     local previous=ch.bags
-    local snapshot,accessible=containerSnapshot(bags)
-    if not accessible then
-        if self.RecordError then self:RecordError("Bags", "Bag slots unavailable; preserving previous scan.") end
+    local snapshot,accessible,incomplete=containerSnapshot(bags)
+    if not accessible or incomplete then
+        if self.RecordError then self:RecordError("Bags", incomplete and
+            "At least one item ID was visible but its stack info was unavailable; previous bag scan preserved." or
+            "Bag slots unavailable; preserving previous scan.") end
         return
     end
+    local now=self:Now()
+    if tonumber(ch.bagsStamp) and tonumber(ch.bagsStamp)>0 then
+        recordBagDiff(ch,previous,snapshot,now)
+    end
     ch.bags = snapshot
-    ch.bagsStamp = self:Now()
+    ch.bagsStamp = now
     -- No "new item" notifications on login; only compare actual subsequent
     -- bag changes in this session. Notifications never perform item actions.
     if self._boeBagBaselineReady and type(self.AnnounceNewBoE) == "function" then
@@ -139,8 +183,8 @@ function FCM:ScanBank()
                     and not seen[id] then indices[#indices+1]=id;seen[id]=true end
         end
     end
-    local snapshot,accessible=containerSnapshot(indices)
-    if accessible then
+    local snapshot,accessible,incomplete=containerSnapshot(indices)
+    if accessible and not incomplete then
         ch.bank=snapshot;ch.bankStamp=self:Now()
     elseif self.RecordError then
         self:RecordError("Bank", "Bank is open, but its container slots were not exposed. Previous snapshot preserved.")

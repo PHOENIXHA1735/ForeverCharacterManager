@@ -103,8 +103,8 @@ function FCM:ExplorerDetails(itemID)
         field("Auction price source", "AHledger (ahledger.com); market "..tostring(price.market or "unselected"))
         field("Median price (recorded)",money(price.median))
         field("Lowest buyout (recorded)",money(price.minBuyout))
-        field("Last market scan",self.ReferenceTimeLabel and
-            self:ReferenceTimeLabel(price.observedAt or price.updated) or "Date recorded")
+        field("Last market scan",self.TimestampLabel and self:TimestampLabel(price.observedAt or price.updated) or
+            (price.observedAt or price.updated))
         result[#result+1]="Prices are historical snapshots, not current live auctions."
     end
     field("Uses / crafted outputs",item.uses)

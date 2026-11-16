@@ -1,0 +1,79 @@
+FOREVER CHARACTER MANAGER - R6.1 CLEANUP / AUTO-DETECT INSTALLER
+WoW Forever | FCM v0.9.1 | Build: R6.1-20261116-Inventory-Vendor-Binding-Cleanup-Test
+
+WHAT CHANGED SINCE THE R6 YOU TESTED
+1. Inventory tab's no-match result now explains exactly what is missing:
+   no item was found in saved bag/bank snapshots. It no longer wrongly
+   suggests that the companion failed to import an item from reference data.
+   Item Explorer remains the correct place to search all reference items.
+2. Shopping and Requests > material plan now provide a possible acquisition
+   source for missing materials. Fine Thread (#2321) has a sourced vendor
+   hint, with Alliance/Horde examples and a current-stock caveat.
+3. Item Explorer's farming reference pane also shows available vendor hints.
+   Imported vendor text is labeled unverified; unknown items stay unknown.
+4. The R6 soulbound/unknown-binding and cross-faction transfer restrictions
+   are unchanged. Automated offline binding tests have been re-run.
+
+ONE-WORD INSTALLATION
+1. Completely exit World of Warcraft (do not install while logged in).
+2. Extract this ENTIRE ZIP to a normal Windows folder.
+3. Double-click INSTALL-FCM-R61-Cleanup.cmd.
+4. The installer detects your existing FCM installation automatically. Your
+   confirmed default location is:
+   C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns
+5. Confirm the destination shown, then type INSTALL. No path entry is needed
+   when the default or last-used installation is valid.
+6. Reopen WoW, type /fcm, check Diagnostics for the R6.1 build ID.
+
+If you move WoW or install FCM in a different location, the installer checks
+other common drive paths. If it finds more than one valid installation with
+no remembered choice, it asks which one you want. If none are found, paste
+the path one time; it is remembered after a successful install in:
+%LOCALAPPDATA%\FCM-Installer\AddOnsPath.txt
+Only the installer changed in this ZIP. The addon is the same R6.1 build.
+
+SAFETY
+- A timestamped copy of each replaced addon file goes to
+  %LOCALAPPDATA%\FCM-Backups\R61-Cleanup-...
+- The installer merges only addon code/assets. It does not remove any other
+  addon, character, SavedVariables, account data, or FCM companion scripts.
+- Existing *.generated.lua sources remain untouched.
+- Crafting, mailing, buying, item movement, and item delivery remain manual.
+- R6.1 is a TEST ZIP, not a public GitHub release. Keep R6 as rollback.
+
+FOCUSED IN-GAME CHECKS
+A. Inventory > search "clam meat": confirm the heading says
+   "No matching inventory stock" and explains snapshot versus catalogue.
+   Go to Item Explorer > search "clam meat": reference items still show.
+B. Open Shopping > Fine Thread: its detail should list a possible vendor
+   source (if this material remains missing). The current Alliance example
+   is Edna Mullby, Stormwind or Elynna, Darnassus, reference only.
+C. Requests > All Requests > 2x Barbaric Linen Vest: the request and
+   recipient Frosty must still be present, unassigned, quantities intact.
+   Its Smart Crafting Plan should show a Fine Thread vendor hint, plus the
+   same correct 8 bolts / 2 leather / 2 thread material counts.
+D. On Horde Fawendyn, Can Craft still excludes the Alliance request.
+   All Requests may show it for visibility, but Horde cannot record it.
+E. Optional binding check: if a safe, ordinary soulbound reagent is already
+   available on one character, confirm the addon labels it NOT transferable
+   to another. Do NOT intentionally bind valuable gear to test this.
+
+OFFLINE QA
+- 27 Lua regression scripts (including the new R6.1 test) passed.
+- Confirmed known soulbound stacks and unknown-binding stacks cannot become
+  cross-character transfers. Same-faction/ruleset/region also enforced.
+- This is offline simulation; actual binding API behavior in the current
+  WoW Forever client still requires live in-game confirmation.
+
+REFERENCE CAVEATS
+- Fine Thread information: ForeverDB client build 1.60.1.70938 extracted
+  November 13, 2026 (foreverdb.net/item/2321); Bind on Forever client and
+  observed vendor records, November 10, 2026 (bindonforever.com/item/2321).
+- Vendor location, availability and price can change after the reference
+  snapshot. AHledger market snapshots are not live guaranteed purchases.
+- Source hints are not automatic vendor routes and do not create data.
+
+RECOVERY
+If R6.1 causes a problem, close WoW, restore the timestamped R61-Cleanup
+backup from %LOCALAPPDATA%\FCM-Backups, and reopen WoW.
+Never delete FCM SavedVariables to roll back a code-only test.

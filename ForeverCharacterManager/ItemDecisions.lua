@@ -80,7 +80,7 @@ function FCM:MarketItemAdviceLines(advice)
     end
     if advice.observedAt then
         lines[#lines+1]="  Market observation: "..
-            (self.ReferenceTimeLabel and self:ReferenceTimeLabel(advice.observedAt) or "Date recorded")
+            (self.TimestampLabel and self:TimestampLabel(advice.observedAt) or "Date not formatted")
     end
     if advice.promising then lines[#lines+1]="  "..advice.verdict.." (asking prices are not guaranteed sales)" end
     if advice.snapshot then lines[#lines+1]="  AHledger bundled snapshot: verify price before acting" end

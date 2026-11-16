@@ -423,7 +423,8 @@ function FCM:CatalogItemDetails(id,ch)
     field(lines,"Item quality",self:ItemQualityName(item))
     field(lines,"Item level",item.itemLevel or item.ilvl)
     field(lines,"Required level",item.requiredLevel or item.minLevel)
-    field(lines,"Equipment slot",item.equipLoc or item.inventoryType)
+    local slot=item.equipLoc or item.inventoryType
+    if slot~="INVTYPE_NON_EQUIP_IGNORE" then field(lines,"Equipment slot",slot) end
     local capacity,isContainer=self:ContainerCapacity(id,item)
     if isContainer then
         lines[#lines+1]=capacity and ("Bag capacity: "..capacity.." slots") or
@@ -440,7 +441,7 @@ function FCM:CatalogItemDetails(id,ch)
     if item.betaEvent then lines[#lines+1]="Historical beta-event copy: not assumed obtainable at launch." end
     if item.speculation then lines[#lines+1]="Availability speculative: do not treat this as an obtainable upgrade." end
     if mode~="" then field(lines,"Availability confidence",mode) end
-    if ch and (item.equipLoc or item.inventoryType) then
+    if ch and slot and slot~="INVTYPE_NON_EQUIP_IGNORE" then
         lines[#lines+1]=""
         lines[#lines+1]="For "..self:DisplayCharacter(ch)..":"
         if tonumber(item.requiredLevel or item.minLevel) and tonumber(ch.level) and tonumber(ch.level)<tonumber(item.requiredLevel or item.minLevel) then
@@ -472,171 +473,8 @@ function FCM:CatalogItemDetails(id,ch)
         for _,line in ipairs(self:FarmAdviceLines(id,1,ch,7)) do lines[#lines+1]=line end
     end
     lines[#lines+1]=""
-    lines[#lines+1]=self:ExpandedItemDetails(id)
-    return table.concat(lines,"\n")
-end
-
--- Friendly, focused item record for the searchable right-hand pane. The
--- legacy full record above is kept for callers that need raw diagnostic data.
--- Never imply that a cached provider item is an observed drop or sale.
-function FCM:ReferenceTimeLabel(value)
-    local stamp=tonumber(value)
-    if stamp and stamp>=946684800 and stamp<=4102444800 then
-        if type(date)=="function" then
-            local ok,result=pcall(date,"%b %d, %Y %I:%M %p",stamp)
-            if ok and result and result~="" then return result end
-        end
-        return "Date recorded; local clock format unavailable"
-    end
-    local raw=clean(value)
-    if raw:match("^%d%d%d%d%-%d%d%-%d%d") then return raw:sub(1,10) end
-    if raw~="" and not raw:match("^%d+$") then return raw:sub(1,36) end
-    return "Not recorded"
-end
-
-local friendlySlots={INVTYPE_HEAD="Head",INVTYPE_NECK="Neck",INVTYPE_SHOULDER="Shoulders",
-    INVTYPE_CLOAK="Back",INVTYPE_CHEST="Chest",INVTYPE_ROBE="Chest",INVTYPE_WRIST="Wrists",
-    INVTYPE_HAND="Hands",INVTYPE_WAIST="Waist",INVTYPE_LEGS="Legs",INVTYPE_FEET="Feet",
-    INVTYPE_FINGER="Finger",INVTYPE_TRINKET="Trinket",INVTYPE_WEAPON="Weapon",
-    INVTYPE_WEAPONMAINHAND="Main hand",INVTYPE_WEAPONOFFHAND="Off hand",
-    INVTYPE_2HWEAPON="Two-handed",INVTYPE_RANGED="Ranged",INVTYPE_RANGEDRIGHT="Ranged",
-    INVTYPE_SHIELD="Shield",INVTYPE_HOLDABLE="Off hand",INVTYPE_BAG="Bag"}
-local farmKinds={mob="Creature",container="Container",vendor="Vendor",dungeon="Dungeon",
-    mining="Mining",herbalism="Herbalism",skinning="Skinning",fishing="Fishing",
-    quest="Quest",reference="Reference"}
-local function section(lines,title)
-    if #lines>0 then lines[#lines+1]="" end
-    lines[#lines+1]="|cffffd983"..title.."|r"
-end
-local function moneyLabel(owner,value)
-    local copper=tonumber(value)
-    if not copper then return nil end
-    if owner.MoneyLabel then return owner:MoneyLabel(copper) end
-    return string.format("%dg %ds %dc",math.floor(copper/10000),math.floor(copper%10000/100),copper%100)
-end
-function FCM:ReadableItemDetails(itemID,ch)
-    local id=tonumber(itemID)
-    if not id or id<=0 then return "No valid item selected." end
-    local item=((self.externalData or {}).items or {})[id] or {}
-    local lines={}
-    local category=self:ItemCategory(item)
-    local categoryNames={weapon="Weapon",armor="Armor",jewelry="Jewelry or trinket",
-        container="Bag or container",consumable="Consumable",material="Crafting material",
-        recipe="Recipe or pattern",quest="Quest item",profession="Profession tool",
-        enchant="Enchanting or gem",special="Miscellaneous item"}
-    local quality=self:ItemQualityName(item)
-    local level=tonumber(item.itemLevel or item.ilvl)
-    local required=tonumber(item.requiredLevel or item.minLevel)
-    local slot=clean(item.equipLoc or item.inventoryType)
-    local displaySlot=friendlySlots[slot] or (slot~="" and not slot:match("^INVTYPE_") and slot or nil)
-    local capacity,isContainer=self:ContainerCapacity(id,item)
-
-    section(lines,"HOW TO GET IT")
-    local farm=self.FarmAdvice and self:FarmAdvice(id,1,ch) or nil
-    if farm and #farm.sources>0 then
-        for index=1,math.min(5,#farm.sources) do
-            local source=farm.sources[index]
-            local kind=farmKinds[source.kind] or "Reported source"
-            lines[#lines+1]="|cff9dd9b5"..index..". "..(source.name~="" and source.name or kind).."|r"
-            lines[#lines+1]="  "..kind..(source.zone~="" and (" | "..source.zone) or " | Zone not recorded")
-            if source.dropRatePct then
-                lines[#lines+1]=string.format("  Reported chance: %.2f%%",source.dropRatePct)..
-                    (source.sampleSize and (" (sample "..source.sampleSize..")") or "")
-            end
-            if source.evidence and source.evidence~="" then lines[#lines+1]="  "..source.evidence end
-        end
-        if #farm.sources>5 then lines[#lines+1]="  +"..(#farm.sources-5).." more recorded sources" end
-        lines[#lines+1]="Locations and drop chances are references, not live guarantees."
-    else
-        lines[#lines+1]="|cffffc77dNo acquisition location in the imported data yet.|r"
-        lines[#lines+1]="The item is known, but its creature, chest, vendor or zone was not provided."
-    end
-    local provider=string.lower(clean(item.sourceProvider or item.metadataSource or item.source))
-    if provider:find("foreverdb",1,true) then
-        lines[#lines+1]="Source details: foreverdb.net/item/"..id
-    elseif clean(item.link)~="" then
-        lines[#lines+1]="Source page: "..clean(item.link)
-    end
-
-    local refs=self.ItemRelations and self:ItemRelations(id) or {}
-    section(lines,"CRAFTING & USES")
-    local used=refs.usedIn or {}
-    local made=refs.producedBy or {}
-    if #used==0 and #made==0 then
-        lines[#lines+1]="No connected recipes currently imported."
-    end
-    if #used>0 then
-        lines[#lines+1]="Used in "..#used.." recorded recipe(s):"
-        for index=1,math.min(#used,8) do
-            local r=used[index]
-            lines[#lines+1]="  - "..clean(r.name).." ("..clean(r.profession or "Unknown")..")"..
-                (tonumber(r.count) and (" x"..tostring(r.count)) or "")
-        end
-        if #used>8 then lines[#lines+1]="  +"..(#used-8).." more recipes" end
-    end
-    if #made>0 then
-        lines[#lines+1]="Made by:"
-        for index=1,math.min(#made,5) do lines[#lines+1]="  - "..clean(made[index].name) end
-    end
-
-    section(lines,"YOUR CHARACTERS")
-    local owned=refs.owned or {}
-    if #owned==0 then
-        lines[#lines+1]="None recorded in saved bags or bank scans."
-    else
-        lines[#lines+1]="Last recorded total: "..tostring(refs.total or 0)
-        for index=1,math.min(#owned,8) do
-            local row=owned[index]
-            local who=self.DisplayCharacter and self:DisplayCharacter(row.char) or "Character"
-            lines[#lines+1]="  - "..who..": "..tostring(row.count or 0).." ("..clean(row.location)..")"
-        end
-    end
-    lines[#lines+1]="Offline inventory may be out of date."
-
-    section(lines,"AUCTION HOUSE")
-    local quote=self.PriceQuote and self:PriceQuote(id,ch) or nil
-    if quote and tonumber(quote.median) and tonumber(quote.median)>0 then
-        lines[#lines+1]="Median listed price: "..moneyLabel(self,quote.median).." each"
-        if tonumber(quote.minBuyout) and tonumber(quote.minBuyout)>0 then
-            lines[#lines+1]="Lowest recorded buyout: "..moneyLabel(self,quote.minBuyout)
-        end
-        local market=clean(quote.market)
-        local faction,region=market:match("^forever%.[^.]+%.([^.]+)%.([^.]+)$")
-        if faction and region then lines[#lines+1]="Market: "..faction.." ("..region:upper()..")" end
-        lines[#lines+1]="Snapshot: "..self:ReferenceTimeLabel(quote.observedAt or quote.updated)
-        lines[#lines+1]="Historical AH data; current listings may differ."
-    else
-        lines[#lines+1]="No cached price for the selected market."
-    end
-
-    section(lines,"ITEM FACTS")
-    lines[#lines+1]="Item #"..id.." | "..(categoryNames[category] or "Item").." | "..quality
-    if level then lines[#lines+1]="Item level: "..level end
-    if required and required>0 then lines[#lines+1]="Requires character level "..required end
-    if displaySlot then lines[#lines+1]="Equipped in: "..displaySlot end
-    if isContainer then
-        lines[#lines+1]=capacity and ("Bag size: "..capacity.." slots") or
-            "Bag size: not recorded; check the in-game tooltip"
-    end
-    if item.subclass and clean(item.subclass):match("%a") then
-        lines[#lines+1]="Type: "..clean(item.subclass)
-    end
-    if item.sellPrice and tonumber(item.sellPrice) then
-        lines[#lines+1]="Sells to vendor for: "..moneyLabel(self,item.sellPrice)
-    end
-
-    section(lines,"ABOUT THIS DATA")
-    if item.speculation or item.betaEvent then
-        lines[#lines+1]="|cffffae7aAvailability uncertain; confirm in the live game.|r"
-    elseif clean(item.sourceStatus)~="" then
-        lines[#lines+1]=clean(item.sourceStatus)
-    else
-        lines[#lines+1]="Reference record; live availability not verified by FCM."
-    end
-    if clean(item.referenceCheckedAt)~="" then
-        lines[#lines+1]="Reference checked: "..self:ReferenceTimeLabel(item.referenceCheckedAt)
-    end
-    lines[#lines+1]="Data source: "..(provider:find("foreverdb",1,true) and "ForeverDB.net" or
-        (provider:find("thewowdb",1,true) and "TheWoWDB" or "Local/client reference"))
+    -- ExplorerDetails includes the same farming section as this pane.
+    -- Append just the account/crafting relationships; do not repeat it.
+    lines[#lines+1]=self:ExpandedItemDetails(id,false)
     return table.concat(lines,"\n")
 end

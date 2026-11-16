@@ -13,6 +13,12 @@ end
 
 function FCM:ChangeRequestStatus(req, status)
     if not req or not allowedStatus[status] or not self.db then return false,"Invalid request status" end
+    if status=="delivered" then
+        -- This is a deliberate manual archive/confirmation, not an automatic
+        -- bag scan inference. Keep the completed quantities in requestHistory.
+        req.deliveredCount=math.max(tonumber(req.deliveredCount) or 0,
+            tonumber(req.fulfilled) or 0)
+    end
     req.status=status
     req.updated=self:Now()
     if status=="delivered" or status=="cancelled" then
@@ -20,6 +26,9 @@ function FCM:ChangeRequestStatus(req, status)
         self.db.requestHistory[#self.db.requestHistory+1]={
             recipeID=req.recipeID,recipientKey=req.recipientKey,crafterKey=req.crafterKey,
             quantity=self:CraftRequestQuantity(req),quantityMode=self:CraftRequestMode(req),
+            fulfilled=tonumber(req.fulfilled) or 0,
+            deliveredCount=tonumber(req.deliveredCount) or 0,
+            work=req.work,previousCrafterKey=req.previousCrafterKey,
             itemName=(self:RecipeByID(req.recipeID) or {}).name,
             status=status,updated=req.updated,created=req.created,
         }

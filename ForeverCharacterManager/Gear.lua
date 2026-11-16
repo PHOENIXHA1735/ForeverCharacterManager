@@ -67,28 +67,10 @@ local weights = {
     },
 }
 
--- Exact numbers transcribed from the user's Zygor Item Score / Mage / Frost
--- recording (Nov 13, 2026).  Zygor's fields are NOT all interchangeable with
--- WoW's GetItemStats rating fields: in particular Spell Hit % and Spell Crit %
--- are percentage-point bonuses, not rating points.  Only a directly read
--- percent tooltip is scored against those two values.  This is a user-supplied
--- reference preset, not a simulation, an endorsed Zygor integration, or proof
--- that the values are optimal for the current WoW Forever build.
-local zygorFrostDps = {
-    agi=0.05, int=0.87, spi=0.06, stam=0.50, armor=0.005,
-    spell_crit_pct=0.58, def=0.05, haste=0.63,
-    health_regen=1.00, health=0.05, spell_hit_pct=1.22,
-    mana=0.032, mp5=0.80, spell=1.00, spell_pen=0.07,
-    spell_fire=0.05, spell_frost=0.95, spell_arcane=0.13,
-    resist=0.04,
-}
-G.zygorFrostDps = zygorFrostDps
-local zygorFrostSource = "Zygor Frost Mage reference (user-recorded numerical weights; scan-limited, not simulated)"
+-- Icy Veins Forever publishes stat priorities, not universal per-point
+-- coefficients. Never misrepresent its ordering as a numerical stat scale.
 function G:DefaultReferenceProfile(ch,mode,activity)
-    if type(ch)=="table" and ch.class=="MAGE" and ch.talentSpec=="Frost" and
-        mode=="dps" and (activity=="leveling" or activity=="pve") then
-        return zygorFrostDps
-    end
+    -- Reserved for a future verified, explicitly selected numerical model.
     return nil
 end
 
@@ -233,6 +215,22 @@ function G:StatValues(item)
         end
         if value~=0 then result[category]=value end
     end
+    -- Real Forever client sample (Frosty, level 25, build 70938) exposes
+    -- +4 Frost damage as ITEM_MOD_FROST_DAMAGE_DONE_SHORT on item 14167.
+    -- These explicitly school-scoped raw fields must be recognized even when
+    -- tooltip APIs are unavailable; they are not generic Spell Power.
+    local rawSchools,rawSchoolCount,onlySchoolAmount={},0,nil
+    for school in pairs(spellSchools) do
+        local name=string.upper(school)
+        local a=tonumber(raw["ITEM_MOD_"..name.."_DAMAGE_DONE_SHORT"]) or 0
+        local b=tonumber(raw["ITEM_MOD_"..name.."_DAMAGE_DONE"]) or 0
+        local amount=math.abs(a)>=math.abs(b) and a or b
+        if amount~=0 then
+            rawSchools[school]=amount
+            rawSchoolCount=rawSchoolCount+1
+            onlySchoolAmount=amount
+        end
+    end
     local effects=scanSpellEffects(item)
     if effects.spellHitPct~=0 then result.spell_hit_pct=effects.spellHitPct end
     if effects.spellCritPct~=0 then result.spell_crit_pct=effects.spellCritPct end
@@ -243,7 +241,7 @@ function G:StatValues(item)
         for school,amount in pairs(effects.specific) do
             if amount~=0 then result["spell_"..school]=amount end
         end
-    else
+    elseif rawSchoolCount==0 then
         local school=suffixSchool(item)
         if school then
             -- Without readable tooltip text, do not pretend a suffix item's
@@ -252,6 +250,17 @@ function G:StatValues(item)
             result["spell_"..school]=result.spell
             result.spell=nil
         end
+    end
+    for school,amount in pairs(rawSchools) do
+        -- Tooltip-specific values take precedence for the same school;
+        -- raw fields fill holes without double-counting aliases.
+        if result["spell_"..school]==nil then result["spell_"..school]=amount end
+    end
+    if not effects.hasExplicit and rawSchoolCount==1 and
+        result.spell==onlySchoolAmount then
+        -- The older stats API can echo a school-only damage bonus again as
+        -- generic Spell Power. Conservatively prevent duplicate scoring.
+        result.spell=nil
     end
     -- Empty or unrecognized API data does NOT establish a real zero-stat item.
     if not next(result) then return nil end
@@ -406,8 +415,21 @@ function G:WeightSource(ch,mode,activity)
     if p then return "Pawn user import: "..p.name.." ("..p.levelMin.."-"..p.levelMax..")" end
     local activityKey=activity or (type(ch)=="table" and FCM:GearActivity(ch)) or "leveling"
     local modeKey=mode or (type(ch)=="table" and FCM:Mode(ch,activityKey)) or "dps"
-    if self:DefaultReferenceProfile(ch,modeKey,activityKey) then return zygorFrostSource end
-    return "FCM provisional heuristic (Icy Veins priority reference; not simulation-derived)"
+    local guide=FCM.PriorityGuides and FCM.PriorityGuides:Guide(ch,activityKey)
+    if guide and modeKey=="dps" then
+        return "FCM provisional numeric estimates + Icy Veins WoW Forever priority safety check (guide "..
+            guide.updated.."; NOT numerical Icy Veins weights)"
+    end
+    local reference=FCM.PriorityGuides and FCM.PriorityGuides:Reference(ch,activityKey)
+    if reference then
+        if modeKey~="healing" and modeKey~="tank" then
+            return "FCM provisional "..tostring(modeKey).." heuristic; Icy Veins Forever "..
+                reference.role.." guide is REFERENCE ONLY for this selected style"
+        end
+        return "FCM provisional heuristic; Icy Veins WoW Forever "..reference.role..
+            " priority is REFERENCE ONLY (no verified role/build-specific numerical model)"
+    end
+    return "FCM provisional heuristic (not simulation-derived; no verified profile installed)"
 end
 function G:ResetImportedWeightProfile(ch,mode,activity)
     if type(ch)~="table" then return false end
@@ -454,6 +476,44 @@ function G:CappedHitImpact(ch,oldStats,newStats,mode,activity)
     local after=math.min(c.cap,math.max(0,c.current+changed))
     local weight=self:Weight("hit",ch,mode,activity)
     return (after-before)*weight,changed*weight
+end
+
+-- V1 model adapter. An externally verified catalog is optional: without one,
+-- every existing FCM comparison continues using its provisional heuristic.
+-- Do not apply a profile from another game build or invent a character's
+-- overall Hit/Expertise/Defense totals from isolated item stats.
+function G:VerifiedStatProfile(ch,mode,activity)
+    local engine=FCM.StatWeightEngine
+    if not engine or type(engine.VerifiedProfile)~="function" or
+        not FCM.statWeightCatalog or type(GetBuildInfo)~="function" then return nil end
+    -- Existing explicit player choices always outrank a downloaded default.
+    if self:ActiveWeightProfile(ch,mode,activity) then return nil end
+    local custom=type(ch)=="table" and ch.gearCustomWeights and ch.gearCustomWeights[activity]
+    if type(custom)=="table" then
+        for _,value in pairs(custom) do
+            if type(value)=="number" then return nil end
+        end
+    end
+    local _,build=safe(GetBuildInfo)
+    return engine:VerifiedProfile(FCM.statWeightCatalog,ch,mode,activity,build)
+end
+function G:ModelSwapScore(ch,oldStats,newStats,profile,mode,activity)
+    local engine=FCM.StatWeightEngine
+    if not engine or type(profile)~="table" then return nil,"No verified model." end
+    local current=ch and ch.gearStatContext
+    local context={caps=profile.caps}
+    if type(current)=="table" and current.class==ch.class and
+        current.spec==ch.talentSpec and current.level==ch.level and
+        current.activity==activity and current.style==mode and
+        type(current.values)=="table" then
+        context.current=current.values
+    end
+    local result,err=engine:ScoreChanges(oldStats,newStats,profile,context)
+    if not result then return nil,err end
+    if not result.complete then
+        return nil,"Unmodelled stats: "..table.concat(result.unknown,",")
+    end
+    return result
 end
 -- Users can set custom baseline weights per character and activity with
 -- /fcm gearweight spell 5 (or reset). Specialization/activity factors still apply.
@@ -522,6 +582,16 @@ function G:SetCustomWeight(ch,category,value,activity)
 end
 
 function G:ScoreParts(item,ch,mode,activity)
+    local activityKey=activity or (type(ch)=="table" and FCM:GearActivity(ch)) or "leveling"
+    local chosenMode=mode or (type(ch)=="table" and FCM:Mode(ch,activityKey)) or "dps"
+    if chosenMode=="healing" or chosenMode=="tank" then
+        -- Healer/tank profiles are ORDINAL reference material. The old DPS
+        -- heuristic must not masquerade as a numerical healing/threat model.
+        if not self:ActiveWeightProfile(ch,chosenMode,activityKey) and
+            not self:VerifiedStatProfile(ch,chosenMode,activityKey) then
+            return nil
+        end
+    end
     local values=self:StatValues(item)
     if not values then return nil end
     local result,total={},0
@@ -637,10 +707,38 @@ function G:CompareItem(item,ch,preferredSlot,options)
         return {status="unknown",reason="Character spell specialization is not confirmed for this school-specific item."}
     end
     local mode=FCM:Mode(ch,activity)
+    local verifiedModel=self:VerifiedStatProfile(ch,mode,activity)
+    local imported=self:ActiveWeightProfile(ch,mode,activity)
+    if (mode=="healing" or mode=="tank") and not verifiedModel and not imported then
+        return {status="unknown",reason="Icy Veins Forever "..mode..
+            " priorities are available under /fcm statguide. No verified numeric "..mode..
+            " model is installed; gear swaps require review."}
+    end
+    local custom=ch.gearCustomWeights and ch.gearCustomWeights[activity]
+    local hasCustom=false
+    if type(custom)=="table" then
+        for _,v in pairs(custom) do
+            if type(v)=="number" then hasCustom=true;break end
+        end
+    end
+    -- Guide priority ordering is NOT a numerical model. For the reviewed
+    -- profiles it can safely reject ambiguous swaps, while an explicit Pawn
+    -- scale, manual weight override or verified numerical model takes priority.
+    local useGuide=FCM.PriorityGuides and mode=="dps" and not verifiedModel and not imported and
+        not hasCustom and FCM.PriorityGuides:Guide(ch,activity)~=nil
+    -- A reference ORDER is not a numeric model. If no reviewed DPS guide or
+    -- explicit numeric scale applies, the provisional score must not turn
+    -- a potential swap into an automatic upgrade recommendation.
+    if not verifiedModel and not imported and not hasCustom and not useGuide then
+        return {status="unknown",reason="No reviewed priority guide or verified numerical "..
+            "model for this specialization, activity and style. Check /fcm statguide "..
+            "and compare manually; provisional DPS estimates are not upgrade proof."}
+    end
     local newScore=self:Score(item,ch,mode,activity)
     if type(newScore)~="number" then return {status="unknown",reason="Candidate score is unavailable."} end
     local options=slots[info.equip]
     local choice=nil
+    local modelError=nil
     for _,slot in ipairs(options) do
         if not preferredSlot or slot==preferredSlot then
             local valid=true
@@ -688,21 +786,47 @@ function G:CompareItem(item,ch,preferredSlot,options)
                     end
                 end
             end
+            if valid and useGuide then
+                local isWeapon=info.equip=="INVTYPE_WEAPON" or
+                    info.equip=="INVTYPE_2HWEAPON" or info.equip=="INVTYPE_WEAPONMAINHAND" or
+                    info.equip=="INVTYPE_WEAPONOFFHAND" or info.equip=="INVTYPE_RANGED" or
+                    info.equip=="INVTYPE_RANGEDRIGHT" or info.equip=="INVTYPE_THROWN"
+                local verdict,guideReason=FCM.PriorityGuides:Assess(ch,oldStats,candidateStats,activity,
+                    {weapon=isWeapon,slot=slot})
+                if verdict~="supported" then
+                    valid=false
+                    modelError="Icy Veins Forever priority review: "..tostring(guideReason or "Uncertain stat tradeoff.")
+                end
+            end
             if valid then
                 local delta=newScore-oldScore
-                local capped,uncapped=self:CappedHitImpact(ch,oldStats,candidateStats,mode,activity)
-                if capped then delta=delta-uncapped+capped end
-                if not choice or delta>choice.delta then
+                local modelResult=nil
+                local capped,uncapped=nil,nil
+                if verifiedModel then
+                    modelResult,modelError=self:ModelSwapScore(ch,oldStats,candidateStats,
+                        verifiedModel,mode,activity)
+                    if modelResult then delta=modelResult.score else valid=false end
+                else
+                    capped,uncapped=self:CappedHitImpact(ch,oldStats,candidateStats,mode,activity)
+                    if capped then delta=delta-uncapped+capped end
+                end
+                if valid and (not choice or delta>choice.delta) then
                     choice={status="ok",info=info,slot=slot,oldName=oldName,oldStats=oldStats,
                         newStats=candidateStats,newScore=newScore,oldScore=oldScore,delta=delta,
                         activity=activity,style=mode,empty=not oldRef,
+                        modelResult=modelResult,modelProfile=modelResult and verifiedModel or nil,
                         hitCapAdjusted=capped~=nil and uncapped~=0}
                 end
             end
         end
     end
-    if not choice then return {status="unknown",reason="Equipped item stats or a valid replacement slot are unavailable."} end
+    if not choice then return {status="unknown",reason=modelError or
+        "Equipped item stats or a valid replacement slot are unavailable."} end
     local keys,changes={},{}
+    local modelImpacts={}
+    for _,part in ipairs((choice.modelResult and choice.modelResult.changes) or {}) do
+        modelImpacts[part.key]=part
+    end
     for key in pairs(choice.newStats) do keys[key]=true end
     for key in pairs(choice.oldStats) do keys[key]=true end
     for key in pairs(keys) do
@@ -711,12 +835,15 @@ function G:CompareItem(item,ch,preferredSlot,options)
         local change=after-before
         if change~=0 then
             local percent=before~=0 and (change/math.abs(before))*100 or nil
-            local impact=change*self:Weight(key,ch,mode,activity)
-            if key=="hit" and choice.hitCapAdjusted then
+            local modelPart=choice.modelResult and modelImpacts[key]
+            local impact=modelPart and modelPart.impact or change*self:Weight(key,ch,mode,activity)
+            if not choice.modelResult and key=="hit" and choice.hitCapAdjusted then
                 impact=self:CappedHitImpact(ch,choice.oldStats,choice.newStats,mode,activity) or impact
             end
             changes[#changes+1]={key=key,label=self.statLabels[key] or key,before=before,after=after,
-                change=change,percent=percent,impact=impact,weight=self:Weight(key,ch,mode,activity)}
+                change=change,percent=percent,impact=impact,
+                weight=modelPart and (choice.modelProfile.weights[key] or {}).value or
+                    self:Weight(key,ch,mode,activity)}
         end
     end
     table.sort(changes,function(a,b)
@@ -724,8 +851,14 @@ function G:CompareItem(item,ch,preferredSlot,options)
         return math.abs(a.impact)>math.abs(b.impact)
     end)
     choice.changes=changes
-    choice.weightSource=self:WeightSource(ch,mode,activity)
-    if choice.oldScore>0 and not choice.hitCapAdjusted then
+    choice.confidence=choice.modelProfile and "VERIFIED NUMERIC MODEL" or
+        (imported and "USER-IMPORTED NUMERIC SCALE") or
+        (hasCustom and "CUSTOM NUMERIC ESTIMATE") or "GUIDE-CHECKED ESTIMATE"
+    choice.weightSource=choice.modelProfile and
+        ("FCM verified model: "..choice.modelProfile.source) or self:WeightSource(ch,mode,activity)
+    -- A tiny old score yields nonsensical five-digit percentages. Keep the
+    -- actual weighted-point delta, but omit unstable ratios near zero.
+    if choice.oldScore>=1 and not choice.hitCapAdjusted and not choice.modelResult then
         choice.scorePct=choice.delta/choice.oldScore*100
     end
     local plus,minus=nil,nil
@@ -777,6 +910,7 @@ function G:ComparisonLines(comparison)
         return lines
     end
     lines[#lines+1]="Equipped: "..comparison.oldName
+    lines[#lines+1]=tint("Confidence: "..(comparison.confidence or "REVIEW REQUIRED"),"6fe3d0")
     local delta=comparison.delta
     local outcome=delta>0.01 and "GAIN" or (delta< -0.01 and "LOSS" or "TIE")
     local shade=delta>0.01 and "76e59a" or (delta< -0.01 and "ff8888" or "c9d1de")
@@ -803,7 +937,9 @@ function G:ComparisonLines(comparison)
     lines[#lines+1]=tint("Estimated: "..(FCM.gearActivityLabels[comparison.activity] or comparison.activity)..
         " / "..(FCM.modeLabels[comparison.style] or comparison.style).."; not DPS.","aab8ca")
     lines[#lines+1]=tint("Weight source: "..(comparison.weightSource or "Unspecified"),"aab8ca")
-    if comparison.hitCapAdjusted then
+    if comparison.modelResult then
+        lines[#lines+1]=tint("Verified model: explicit units and supplied cap snapshots used.","aab8ca")
+    elseif comparison.hitCapAdjusted then
         lines[#lines+1]=tint("Hit cap: manual rating snapshot used; refresh after changing gear.","aab8ca")
     else
         lines[#lines+1]=tint("Hit cap: unknown (no validated rating snapshot).","aab8ca")
@@ -827,6 +963,11 @@ end
 function G:Candidates(ch)
     if not ch then return {} end
     local results, mode = {}, FCM:Mode(ch)
+    if (mode=="healing" or mode=="tank") and
+        not self:ActiveWeightProfile(ch,mode,FCM:GearActivity(ch)) and
+        not self:VerifiedStatProfile(ch,mode,FCM:GearActivity(ch)) then
+        return results
+    end
     for _, recipe in ipairs(FCM:AllRecipes()) do
         if recipe.outputID then
             local info = self:Info(recipe.outputLink or recipe.outputID) or self:Info(recipe.outputID)
@@ -847,6 +988,9 @@ function G:Candidates(ch)
                     end
                     local candidateScore = self:Score(info.link or recipe.outputID, ch, mode)
                     if candidateScore and baseline and candidateScore > baseline + (FCM.db.settings.minimumUpgrade or 1) then
+                        local assessment=self:CompareItem(info.link or recipe.outputID,ch,slot)
+                        local minimum=(FCM.db.settings.minimumUpgrade or 1)
+                        if assessment.status=="ok" and assessment.delta>minimum then
                         local usableCrafters = {}
                         for _, crafter in ipairs(recipe.crafters or {}) do
                             -- Binds on Pickup is only craftable for the recipient's own use.
@@ -857,10 +1001,13 @@ function G:Candidates(ch)
                         end
                         if #usableCrafters > 0 then
                             local row = { recipe=recipe, info=info, slot=slot, current=old,
-                                currentScore=baseline, score=candidateScore, delta=candidateScore-baseline,
+                                currentScore=assessment.oldScore, score=assessment.newScore,
+                                delta=assessment.delta,comparisonConfidence=assessment.confidence,
+                                explanation=assessment.reason,
                                 mode=mode, crafters=usableCrafters,
                                 tradeabilityConfirmed=(info.bindType == 2) }
                             results[#results+1] = row
+                        end
                         end
                     end
                 end
@@ -922,7 +1069,13 @@ function G:UnlearnedCandidates(ch)
                         local old=ch.gear and ch.gear[slot]
                         local oldScore=(old and old.link and self:Score(old.link,ch,mode)) or 0
                         if score>oldScore+(FCM.db.settings.minimumUpgrade or 1) then
-                            rows[#rows+1]={entry=entry,info=info,delta=score-oldScore,slot=slot}
+                            local comparison=self:CompareItem(info.link or entry.outputID,ch,slot)
+                            if comparison.status=="ok" and
+                                comparison.delta>(FCM.db.settings.minimumUpgrade or 1) then
+                                rows[#rows+1]={entry=entry,info=info,delta=comparison.delta,
+                                    slot=slot,comparisonConfidence=comparison.confidence,
+                                    explanation=comparison.reason}
+                            end
                         end
                     end
                 end

@@ -290,9 +290,9 @@ end
 
 function FCM:SmartCraftingPlanLines(plan)
     if not plan then return {"No plan available."} end
-    local out={"|cffffd983SMART CRAFTING PLAN (UNIFIED v0.9.0)|r",
+    local out={"|cffffd983SMART CRAFTING PLAN|r",
         "Recipient: "..display(plan.recipient),"Main crafter: "..display(plan.crafter),
-        "Requested crafts: "..tostring(plan.requestedCrafts),
+        "Calculated recipe casts: "..tostring(plan.requestedCrafts),
         "Status: "..tostring(plan.status or "Blocked"),""}
     if #plan.blockers>0 then
         out[#out+1]="Blocks:"

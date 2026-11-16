@@ -186,8 +186,13 @@ function FCM:ItemRelations(itemID)
     return result
 end
 
-function FCM:ExpandedItemDetails(itemID)
-    local lines={self:ExplorerDetails(itemID),"","|cffffd983FCM CHARACTER & CRAFT RELATIONSHIPS|r"}
+function FCM:ExpandedItemDetails(itemID,includeExplorer)
+    local lines={}
+    if includeExplorer~=false then
+        lines[#lines+1]=self:ExplorerDetails(itemID)
+        lines[#lines+1]=""
+    end
+    lines[#lines+1]="|cffffd983FCM CHARACTER & CRAFT RELATIONSHIPS|r"
     local refs=self:ItemRelations(itemID)
     lines[#lines+1]="Recorded stock: "..tostring(refs.total or 0).." items (offline scans may be stale)"
     for _,loc in ipairs(refs.owned) do
