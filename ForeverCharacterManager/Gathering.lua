@@ -849,7 +849,19 @@ function FCM:StartTreasureTracking()
     local ok=pcall(GameTooltip.HookScript,GameTooltip,"OnShow",function()
         FCM:CaptureTreasureTooltip()
     end)
-    if ok then self._treasureTooltipHooked=true end
+    if ok then
+        self._treasureTooltipHooked=true
+        -- Some Forever builds populate a game-object tooltip title after
+        -- OnShow. Recheck while it is displayed so a named fishing pool is
+        -- observed before the next cast; hover alone never creates a node.
+        pcall(GameTooltip.HookScript,GameTooltip,"OnUpdate",function(_,elapsed)
+            FCM._gatherTooltipElapsed=(FCM._gatherTooltipElapsed or 0)+
+                (tonumber(elapsed) or 0)
+            if FCM._gatherTooltipElapsed<0.15 then return end
+            FCM._gatherTooltipElapsed=0
+            FCM:CaptureTreasureTooltip()
+        end)
+    end
 end
 
 local function lootObjectEvidence()
