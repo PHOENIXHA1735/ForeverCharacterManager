@@ -29,3 +29,13 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+
+# All actual AH history, provider files, summaries and companion credentials stay local.
+**/AHHistory/**
+**/AHledger/**
+**/AHledger.lua
+**/AHledger_Data.lua
+**/AHHistory.generated.lua
+**/*.dpapi
+**/ah-history-status.json
+**/ah-refresh-status.json
