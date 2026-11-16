@@ -184,8 +184,13 @@ function FCM:AllRecipes()
                 if not row then
                     row = { id = id, name = recipe.name, outputID = recipe.outputID,
                         outputLink = recipe.outputLink, reagents = recipe.reagents,
-                        profession = recipe.profession, complex = recipe.complex, quantity = recipe.quantity or 1, crafters = {} }
+                        profession = recipe.profession, complex = recipe.complex, quantity = recipe.quantity or 1,
+                        requiredSkill=recipe.requiredSkill, crafters = {} }
                     result[id] = row
+                end
+                if tonumber(recipe.requiredSkill) and
+                    (not tonumber(row.requiredSkill) or tonumber(recipe.requiredSkill)>tonumber(row.requiredSkill)) then
+                    row.requiredSkill=tonumber(recipe.requiredSkill)
                 end
                 if not row.outputID and recipe.outputID then row.outputID = recipe.outputID end
                 if (not row.reagents or #row.reagents == 0) and recipe.reagents then row.reagents = recipe.reagents end
@@ -216,11 +221,47 @@ end
 -- *request* screen, so limit its choices to crafters who can actually serve
 -- the selected recipient. A nil recipient preserves legacy global browsing
 -- for diagnostics and other non-request callers.
+-- Skill prerequisites are distinct from recipe knowledge. Missing data
+-- stays unverified, and last-scanned skills never claim live availability.
+function FCM:RecipeSkillStatus(recipe,crafter)
+    if not recipe or not crafter then return "verify","Recipe/crafter not selected" end
+    local rid=tonumber(recipe.id)
+    local personal=(crafter.recipes or {})[rid or ""] or
+        (crafter.recipes or {})[tostring(rid or "")]
+    local reference=self.externalData and self.externalData.recipes and
+        (self.externalData.recipes[rid or ""] or
+         self.externalData.recipes[tostring(rid or "")])
+    local required=tonumber(personal and personal.requiredSkill) or
+        tonumber(recipe.requiredSkill) or tonumber(reference and reference.skill)
+    local profession=(personal and personal.profession) or recipe.profession
+    local record=crafter.professions and crafter.professions[profession or ""]
+    if not record then
+        for name,data in pairs(crafter.professions or {}) do
+            if tostring(name):lower()==tostring(profession or ""):lower() then
+                record=data;break
+            end
+        end
+    end
+    local current=tonumber(record and (record.skill or record.skillLevel))
+    if not required or required<0 then
+        return "verify","Recipe skill requirement not recorded; verify in-game"
+    end
+    if not current then
+        return "verify","Profession skill not scanned; open "..tostring(profession or "profession").." to verify (requires "..required..")"
+    end
+    if current<required then
+        return "blocked","Requires "..tostring(profession or "profession").." "..required..
+            "; last-scanned skill "..current.." - train before crafting"
+    end
+    return "ready",tostring(profession or "Profession").." skill "..current.."/"..required.." required (last scanned)"
+end
+
 function FCM:EligibleCraftCrafters(recipe,recipient)
     local eligible={}
     if not recipient then return eligible end
     for _,crafter in ipairs(recipe and recipe.crafters or {}) do
-        if self:CanCollaborate(crafter,recipient) then
+        if self:CanCollaborate(crafter,recipient) and
+            self:RecipeSkillStatus(recipe,crafter)~="blocked" then
             eligible[#eligible+1]=crafter
         end
     end
@@ -455,6 +496,7 @@ function FCM:RequestEligibleCrafters(request,recipe)
         if candidate.recipes and candidate.recipes[request.recipeID] and
                 candidate.recipes[request.recipeID].learned and
                 self:CanCollaborate(candidate,recipient) and
+                self:RecipeSkillStatus(recipe,candidate)~="blocked" and
                 (not info or info.bindType~=1 or candidate.key==recipient.key) then
             eligible[#eligible+1]=candidate
         end
