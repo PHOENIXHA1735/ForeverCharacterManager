@@ -63,8 +63,8 @@ try {
         ForEach-Object { Write-Host ('  ' + $_) }
     Write-Host ''
     Write-Host 'No scan data copied. No scheduled task installed. No cleanup or backup enabled.'
-    Write-Host 'Only scans collected by your characters belong in this archive.'
-    Write-Host 'Downloaded AHledger provider price tables must not be retained here.'
+    Write-Host 'Personal scan archives stay private.'
+    Write-Host 'Provider tables require explicit personal retention permission; never redistribute them.'
 } catch {
     Write-Host ('Folder setup failed: ' + $_.Exception.Message) -ForegroundColor Red
     Write-Host 'If access was denied under Program Files, run the .cmd file as Administrator.'

@@ -27,6 +27,8 @@ RecipeCatalog.lua
 ExternalData.lua
 ExternalData.generated.lua
 AHPrices.generated.lua
+AHHistory.generated.lua
+GoldAdvisor.lua
 DungeonCatalog.lua
 ItemCatalog.lua
 Advisor.lua

@@ -54,7 +54,7 @@ local tabPaletteGroups={
     Overview="overview",Characters="overview",Leveling="progression",
     Gear="gear",Upgrades="gear",["Upgrade Plan"]="gear",
     Crafting="craft",Planner="craft",Requests="craft",Shopping="craft",Professions="craft",
-    Gathering="gather",Inventory="gather",
+    Gathering="gather",Inventory="gather",Gold="craft",
     Catalog="reference",["Item Explorer"]="reference",Dungeons="reference",Auction="reference",
     Talents="progression",Legacy="progression",Reputation="progression",
     Settings="system",Diagnostics="system",Help="system",["Global Search"]="reference",
@@ -1143,7 +1143,7 @@ function UI:Create()
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
     background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
+    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Gold", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
     -- Sidebar can exceed the window height when a character has multiple
     -- profession tabs. Keep every destination reachable with wheel or arrows.
     local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
@@ -1325,6 +1325,12 @@ function UI:Create()
     self.gatherWorldButton:SetPoint("LEFT",self.gatherSizeButton,"RIGHT",8,0)
     self.gatherWorldButton:Hide()
 
+    self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
+    self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-74)
+    self.goldFeesButton:Hide()
+    self.goldFarmButton=button(panel,"Gold: measured farm rate",210,25,function() self:PromptGoldSettings(true) end)
+    self.goldFarmButton:SetPoint("LEFT",self.goldFeesButton,"RIGHT",8,0)
+    self.goldFarmButton:Hide()
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
     listPanel:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",14,64)
@@ -2151,6 +2157,21 @@ end
 -- Forever clients may expose the StaticPopup edit field as `editBox`,
 -- `EditBox`, GetEditBox() or a named StaticPopup*EditBox child. Also capture
 -- Enter before the dialog closes (some clients clear the box on dismissal).
+function UI:PromptGoldSettings(farm)
+    StaticPopupDialogs["FCM_GOLD_SETTINGS"]={
+        text=farm and "Measured farm assumptions:\nitemID|Profession|units/hour|alternative copper/hour|deposits copper/hour" or
+            "AH fee assumptions per crafting batch:\ncut percent + expected unrecovered deposit (copper)\nExample: 5 100. Verify actual fees before using advice.",
+        button1="Save",button2="Cancel",hasEditBox=true,maxLetters=160,timeout=0,whileDead=true,hideOnEscape=true,
+        OnAccept=function(dialog)
+            local box=quantityPopupEditBox(dialog)
+            local input=box and box:GetText() or ''
+            local ok=farm and FCM.GoldAdvisor:ConfigureFarm(input) or (not farm and FCM.GoldAdvisor:ConfigureFees(input))
+            FCM:Say(ok and "Gold assumptions saved. Verify recorded rates and fees periodically." or "Invalid input; assumptions were not changed.")
+            self:Refresh()
+        end,
+    }
+    StaticPopup_Show("FCM_GOLD_SETTINGS")
+end
 function UI:PromptCraftQuantity(recipe, recipientKey, existing, eligibleCrafters)
     if not recipe or not FCM.db or not FCM.db.characters[recipientKey] then return end
     if not StaticPopupDialogs or not StaticPopup_Show then
@@ -2708,6 +2729,8 @@ local function buildRows(ui)
                 "The 35-dungeon guide directory remains available under Dungeons / All levels. "..
                 "The Raids view depends on ForeverDB imports. The selected level range may have no records.")
         end
+    elseif tab=="Gold" then
+        for _,r in ipairs(FCM.GoldAdvisor:Rows(ch)) do add(r.id,r.title,r.summary,r.detail) end
     elseif tab=="Auction" then
         local prices=FCM:MarketPricesFor(ch)
         add("auction-credit","Auction data source","AHledger (ahledger.com) | historic snapshots only",
@@ -3971,6 +3994,10 @@ function UI:Refresh()
             self.itemScopeButton:SetText(short(title(FCM.itemScopeOptions,config.itemScope),14))
             self.itemQualityButton:SetText(short(title(FCM.itemQualityOptions,config.itemQuality),14))
         end
+    end
+    if self.goldFeesButton then
+        if tab=="Gold" then self.goldFeesButton:Show();self.goldFarmButton:Show()
+        else self.goldFeesButton:Hide();self.goldFarmButton:Hide() end
     end
     self.action:Hide()
     self.action:SetEnabled(true)
