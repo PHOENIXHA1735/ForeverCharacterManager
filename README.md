@@ -80,7 +80,7 @@ The **v0.9.1 QA4f preview** includes all QA3 features (local gathering, optional
 - Gear scoring, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
 - Windows companion scripts for read-only public reference import, auction reference updates and local tooling.
 - Gathering tab: account-wide personally observed herbs, ore and eligible named treasure chests, one-time read-only GatherMate2 import, minimap/zone world-map overlays, and versioned public resource snapshots.
-- Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); numerically imported Zygor/Pawn weight profiles for character-specific gear comparisons.
+- Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); Icy Veins WoW Forever stat-priority references for every supported spec, with no active bundled numerical weights. New explicit user scales are provisional; deprecated Zygor scales stay inactive.
 - Crafting requests accept finished-item quantities (including multi-output recipes), with a client-safe Enter/Continue popup handler.
 - The Crafting tab offers a saved profession dropdown and a separate search covering learned recipes, their output items and recipe IDs only.
 - New craft requests default to **Reach Total**: only the recipient's last-scanned bags and bank count toward the target. **Craft Additional** always requests new items; older saved requests retain their original additional-item meaning. Reservations and shopping lists adjust to the needed amount.

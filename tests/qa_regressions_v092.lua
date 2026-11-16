@@ -239,8 +239,13 @@ test('School-aware gear: Frost damage cape outranks generic +1 for Frost, not Ar
     local function character(spec)
         return {key='f',class='MAGE',talentSpec=spec,level=16,gearStamp=123,gear={[15]={link='item:111'}}}
     end
-    local frost=fcm.Gear:CompareItem('item:222',character('Frost'))
-    local arcane=fcm.Gear:CompareItem('item:222',character('Arcane'))
+    GetBuildInfo=function() return 'Forever synthetic','synthetic-build' end
+    local frostCh,arcaneCh=character('Frost'),character('Arcane')
+    -- Synthetic explicit provisional scales test school mapping, not bundled defaults.
+    assert(fcm.Gear:ImportPawnScale(frostCh,'( Pawn: v1: "Synthetic Frost": SpellPower=1, FrostSpellDamage=1 )'))
+    assert(fcm.Gear:ImportPawnScale(arcaneCh,'( Pawn: v1: "Synthetic Arcane": SpellPower=1 )'))
+    local frost=fcm.Gear:CompareItem('item:222',frostCh)
+    local arcane=fcm.Gear:CompareItem('item:222',arcaneCh)
     eq(frost.status,'ok');eq(arcane.status,'ok')
     assert(frost.delta<0,'Frost spec must not consider +1 general better than +4 Frost')
     assert(arcane.delta>0,'Arcane spec gets no benefit from Frost-only bonus')

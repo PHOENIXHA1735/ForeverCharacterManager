@@ -39,6 +39,8 @@ local function comparisonScore(entry)
     else return base end
 end
 local function order(a,b)
+    -- Model points from different characters/normalizations are not comparable.
+    if a.character.key~=b.character.key then return tostring(a.character.key)<tostring(b.character.key) end
     local aRank,bRank=comparisonScore(a),comparisonScore(b)
     if aRank~=bRank then return aRank>bRank end
     if a.kind~=b.kind then return a.kind<b.kind end
@@ -144,6 +146,7 @@ function FCM:AccountUpgradePlanLines(entry)
         "Profile: "..tostring((self.gearActivityLabels or {})[activity] or activity).." / "..
             tostring((self.modeLabels or {})[mode] or mode),
         "Gear assessment: "..tostring(entry.confidence or "Review source and stat tradeoffs"),
+        'Active scoring source: '..self.Gear:WeightSource(ch,mode,activity),
         "Estimated weighted score improvement: +"..scoreLabel(entry.delta),
         "Source route: "..(entry.kind=="crafted" and "Known learned recipe" or
             (entry.kind=="dungeon" and "Imported dungeon reference" or "Unlearned recipe opportunity")),

@@ -6,6 +6,7 @@ local tests={}
 local function test(label,fn) tests[#tests+1]={label,fn} end
 
 local fcm={}
+GetBuildInfo=function() return 'Forever synthetic','synthetic-build' end
 function fcm:GearActivity(ch) return ch.gearActivity or "leveling" end
 function fcm:Mode(ch,act) return (ch.gearStyles and ch.gearStyles[act]) or "dps" end
 function fcm:Now() return 1780000000 end
@@ -54,7 +55,7 @@ test("Other characters and activity/style keep independent default weights",func
     local other=mage();other.name="Alt"
     G:ImportPawnScale(ch,good)
     eq(G:ActiveWeightProfile(other),nil)
-    assert(G:WeightSource(other):find("Zygor Frost Mage",1,true))
+    assert(G:WeightSource(other):find("unavailable",1,true))
     eq(G:ActiveWeightProfile(ch,"balanced","leveling"),nil)
     eq(G:ActiveWeightProfile(ch,"dps","pve"),nil)
 end)
@@ -126,8 +127,8 @@ test("Comparison explains percent as item stat score, never DPS improvement",fun
         scorePct=22.1,changes={},oldStats={},newStats={},
         activity="leveling",style="dps",reason="test",weightSource="Pawn user import"})
     local all=table.concat(lines,"\n")
-    assert(all:find("item's stat score",1,true))
-    assert(all:find("NOT DPS",1,true))
+    assert(all:find("NOT an upgrade percentage",1,true))
+    assert(all:find("predicted DPS",1,true))
     assert(all:find("Weight source:",1,true))
 end)
 

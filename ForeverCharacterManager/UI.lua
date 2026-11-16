@@ -742,6 +742,7 @@ function UI:RenderDungeonDetail(r,ch)
                 else
                     line(label..": data unavailable",23,"aeb9ca",8)
                 end
+                line('Source: '..short(comparison.weightSource or 'No numerical model',110),48,'aeb9ca',8)
             end
             line("Unmodeled: procs, caps, set bonuses, PvP effects.",33,"99aaba",8)
         end
@@ -2266,6 +2267,10 @@ local function buildRows(ui)
         rows[#rows+1]={id=tostring(id),title=title,summary=summary or "",detail=detail,
             recipe=recipe,request=request,crafters=crafters,recipientKey=recipientKey,ready=ready}
     end
+    if ch and (tab=='Gear' or tab=='Upgrades' or tab=='Upgrade Plan') then
+        add('scoring-source','Active gear scoring source',FCM.Gear:WeightSource(ch),
+            FCM.Gear:WeightSource(ch)..'\n\n'..FCM.PriorityGuides:Description(ch)..'\n\nLegacy numerical profiles are preserved but inactive. Without an applicable numerical model, scores and upgrade percentages are unavailable. Explicit new user scales remain provisional.')
+    end
     local function charDetails(c)
         local p={"|cffffd983"..FCM:DisplayCharacter(c).."|r","",
             (c.class or "Class unknown").."  /  "..(c.race or "Race unknown").."  /  "..(c.faction or "Faction unknown"),
@@ -2404,7 +2409,7 @@ local function buildRows(ui)
                     end)
             end
         end
-        if #rows==0 then add("no-upgrades","No actionable upgrades found","Scan gear and recipes on the appropriate characters.",
+        if #rows==0 or (#rows==1 and rows[1].id=='scoring-source') then add("no-upgrades","No actionable upgrades found","A matching numerical model and recorded equipment are required.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
     elseif tab=="Gathering" then
         local count=FCM:GatherCounts()
@@ -2912,6 +2917,7 @@ local function buildRows(ui)
                             local delta=comparison.delta
                             d[#d+1]=comparison.label.." ["..FCM.modeLabels[comparison.style].."]: "..
                                 (delta and string.format("%+.1f points",delta) or "Insufficient equipment/stat data")
+                            d[#d+1]='  Source: '..tostring(comparison.weightSource or 'Numerical model unavailable')
                         end
                         d[#d+1]=""
                         d[#d+1]="Crafter: "..FCM:DisplayCharacter(crafter)
@@ -2931,7 +2937,7 @@ local function buildRows(ui)
         end
         if ch and #FCM.Gear:Candidates(ch)==0 then add("no-gear","No calculated crafted upgrades yet",
             "Open professions on each crafter and ensure item data has loaded.",function()
-                return "The gear advisor uses only recipes already recorded on your characters. It does not yet include all unlearned patterns or dungeon drops.\n\nGear ratings use approximate class weights, not exact DPS simulations. Some items, class restrictions and unique effects need manual confirmation."
+                return "The gear advisor uses only recipes already recorded on your characters. It does not yet include all unlearned patterns or dungeon drops.\n\nNumerical scores are unavailable without a compatible model or explicit new provisional user scale. Some items, class restrictions and unique effects need manual confirmation."
             end) end
     elseif tab=="Crafting" then
         local profession=(FCM.db.settings and FCM.db.settings.craftProfession) or "all"
@@ -3624,14 +3630,14 @@ local function buildRows(ui)
             "The round FCM emblem appears as soon as you log in. Drag it around the minimap to a preferred spot. Its location is saved for the whole account across sessions.\n\nRight-click the icon, click Reset Minimap Icon below, or type /fcm minimap reset to return it to its default location.")
         add("settings","Gear activity and priority","Choose both dropdowns above (saved per character)",
             "Activity: Leveling, PvP, or Endgame PvE.\nSecondary style: DPS, Balanced, Survivability, Healing, or Tank.\n\n"..
-            "Each character remembers its activity and its style for EACH activity. Changing spec on Talents changes weightings.\n"..
+            "Each character remembers its activity and its style for EACH activity. Changing spec invalidates incompatible numerical scales.\n"..
             "Slash commands: /fcm gearprofile leveling|pvp|pve and /fcm gearstyle dps|balanced|survival|healing|tank.\n"..
             "Numerical profile: /fcm pawnimport (paste a Pawn v1 scale in the dialog), /fcm weightprofile to inspect, /fcm weightprofile reset to remove it.\n"..
-            "A user-imported scale is tied to this toon, specialization, activity, style and level bracket (1-39, 40-59, or 60). FCM does not rescale it with speculative factors.\n"..
+            "A new PROVISIONAL user-imported scale is tied to this toon, game build, specialization, activity, style and level bracket (1-39, 40-59, or 60). FCM does not rescale it with speculative factors.\n"..
             "Optional cap-aware comparisons: /fcm hitrating <current HIT RATING> <cap HIT RATING>. Both numbers must be rating points, never percentages; /fcm hitrating reset clears the manual snapshot. Refresh after gear/talent changes.\n"..
             "Custom stat override: /fcm gearweight spell 5 (per toon/activity); /fcm gearweight reset. Manual overrides are preserved on import.\n\n"..
             "Selected source: "..(ch and FCM.Gear and FCM.Gear:WeightSource(ch) or "No character selected").."\n\n"..
-            "Scores are estimated ITEM stat scores, not percent DPS, PvP success, measured healing or complete simulator models. Reviewed Icy Veins WoW Forever guides provide stat PRIORITIES only, not numerical coefficients. For supported contexts, mixed stat tradeoffs are flagged for manual review while obvious no-loss stat improvements can pass. Existing imports and manual overrides take precedence. Hit-cap handling applies only when valid rating units are entered. Other fallback defaults remain provisional heuristics.")
+            "Scores are estimated ITEM stat scores, not percent DPS, PvP success, measured healing or complete simulator models. Reviewed Icy Veins WoW Forever guides provide stat PRIORITIES only, not numerical coefficients. Without an applicable numerical model, known stat changes and ordinal guidance are shown without a score or upgrade percentage. Only new context-matched provisional user scales/manual settings or curated numerical models may score. Legacy saved scales never reactivate automatically. Hit-cap handling applies only when valid rating units are entered. No bundled numerical fallback is active. Legacy saved scales remain stored but inactive; rejected deprecated sources cannot be enabled.")
         add("guide","Talent plan customization","Use slash commands to add or clear planned talent steps.",
             "/fcm talentbuild <profile ID> (see Talents tab for this spec's available profiles)\n/fcm talentsource icy|custom\n/fcm talentspec <spec>\n/fcm talentadd <level> <talent name>\n/fcm talentrank <level> <rank> <talent name>\n/fcm talentclear <level>\n/fcm talentaudit\n\nGuide modules include verified notes and selected exact steps. All 27 specializations have at least three profile slots; distinct IV alternate builds are added where verified. Full exact point order remains incomplete and is labeled clearly.")
         add("window","Resizable interface","Drag the lower-right corner; /fcm ui reset to restore defaults.",

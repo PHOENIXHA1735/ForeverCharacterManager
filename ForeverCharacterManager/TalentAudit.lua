@@ -120,6 +120,10 @@ function FCM:TalentGearHints(ch,count)
         return {lines={"Gear weight reference unavailable."},priorities={}} end
     local activity=self:GearActivity(ch)
     local mode=self:Mode(ch,activity)
+    if not self.Gear:ActiveWeightProfile(ch,mode,activity) and not self.Gear:CustomWeightContext(ch,mode,activity) and not self.Gear:VerifiedStatProfile(ch,mode,activity) then
+        return {priorities={},activity=activity,mode=mode,lines={self.Gear:WeightSource(ch,mode,activity),
+            self.PriorityGuides and self.PriorityGuides:Description(ch,activity) or 'No reviewed Forever guide for this context.'}}
+    end
     local ranks={}
     for key,label in pairs(labels) do
         local value=self.Gear:Weight(key,ch,mode,activity)
@@ -140,7 +144,8 @@ function FCM:TalentGearHints(ch,count)
         local item=ranks[i]
         result.lines[#result.lines+1]=i..". "..item.name.." (relative weight "..string.format("%.2f",item.weight)..")"
     end
-    result.lines[#result.lines+1]="These are existing FCM heuristic stat weights, NOT verified guide weights or predicted DPS."
+    result.lines[#result.lines+1]='Active source: '..self.Gear:WeightSource(ch,mode,activity)
+    result.lines[#result.lines+1]='Numerical estimates are not predicted DPS; provisional user coefficients are not published guide weights.'
     result.lines[#result.lines+1]="Talent profile alternatives do not automatically change these weights; class/spec/activity/style do."
     result.lines[#result.lines+1]="Caps, procs, set bonuses and individual talent synergies are not modeled."
     return result

@@ -1,3 +1,5 @@
+POLICY CORRECTION (2026-11-16): Historical references below to Zygor numerical weights are obsolete. QA7 removal is preserved. Current FCM uses Icy Veins WoW Forever ordinal guidance; deprecated numerical profiles cannot activate.
+
 # FCM v0.9.1 — Local Gathering / GitHub Community Preview
 
 ## QA6 fishing school tooltip + loot verification (November 14)

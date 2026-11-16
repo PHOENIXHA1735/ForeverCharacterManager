@@ -1,5 +1,11 @@
 # Offline regression tests
 
+Current gear-policy checks (Lua 5.1): `qa_gear_evidence.lua`,
+`qa_weight_profiles_v091.lua`, and `qa_zygor_frost_v090.lua`. The last filename
+is retained as a regression entry point; it now verifies that the deprecated
+source cannot activate. It contains no recovered Zygor profile. Fixture
+coefficients in tests are synthetic and never become installed defaults.
+
 From the repository root with `texlua` installed:
 
 ```

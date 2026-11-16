@@ -918,22 +918,24 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         local aliases={intellect="int",stamina="stam",strength="str",agility="agi",
             spirit="spi",spellpower="spell",["spell power"]="spell",attackpower="ap",
             critical="crit",criticalstrike="crit",hitrating="hit",hasterating="haste",
-            mana="mp5",defense="def",resistance="resist"}
+            mana="mana",mp5="mp5",defense="defense_skill",defenserating="def"}
         key=aliases[key] or key
         if input=="list" or input=="show" then
             local activity=FCM:GearActivity(ch)
-            local override=ch and ch.gearCustomWeights and ch.gearCustomWeights[activity] or {}
+            local override=ch and ch.gearCustomPolicyWeights and FCM.Gear:CustomWeightContext(ch,FCM:Mode(ch,activity),activity) and ch.gearCustomPolicyWeights[activity] or {}
             local report={}
             for stat,weight in pairs(override) do report[#report+1]=stat.."="..tostring(weight) end
             table.sort(report)
-            FCM:Say("Custom weights for "..activity..": "..(#report>0 and table.concat(report,", ") or "none (defaults)"))
+            FCM:Say("Active PROVISIONAL custom weights for "..activity..": "..(#report>0 and table.concat(report,", ") or "none (numerical model unavailable)"))
         elseif input=="reset" and ch then
             ch.gearCustomWeights=ch.gearCustomWeights or {}
             ch.gearCustomWeights[FCM:GearActivity(ch)]=nil
+            if ch.gearCustomPolicyWeights then ch.gearCustomPolicyWeights[FCM:GearActivity(ch)]=nil end
+            if ch.gearCustomWeightContexts then ch.gearCustomWeightContexts[FCM:GearActivity(ch)]=nil end
             FCM:Say("Custom stat weights reset for "..FCM:GearActivity(ch)..".")
             if FCM.Refresh then FCM:Refresh() end
         elseif ch and key and value and FCM.Gear and FCM.Gear:SetCustomWeight(ch,key,tonumber(value)) then
-            FCM:Say("Set "..key.." base weight to "..tostring(value).." for "..ch.name.." / "..FCM:GearActivity(ch)..".")
+            FCM:Say("Set PROVISIONAL manual coefficient "..key.." to "..tostring(value).." for "..ch.name.." / "..FCM:GearActivity(ch).."; this is not a published guide weight.")
             if FCM.Refresh then FCM:Refresh() end
         else
             FCM:Say("Usage: /fcm gearweight spell 5 | intellect 1 | list | reset (current toon/activity; value 0-100)")

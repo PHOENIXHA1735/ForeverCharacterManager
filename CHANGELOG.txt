@@ -1,3 +1,5 @@
+POLICY CORRECTION (2026-11-16): Historical references below to Zygor numerical weights are obsolete. QA7 removal is preserved. Current FCM uses Icy Veins WoW Forever ordinal guidance; deprecated numerical profiles cannot activate.
+
 v0.9.1 QA4l — Verified world-map gathering icons and controls (source preview)
 - Live-tested Teldrassil gathering icons now appear at Shadowglen rather than
   Oracle Glade, with map-canvas scaling corrected.

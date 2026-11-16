@@ -1,3 +1,5 @@
+POLICY CORRECTION (2026-11-16): Historical references below to Zygor numerical weights are obsolete. QA7 removal is preserved. Current FCM uses Icy Veins WoW Forever ordinal guidance; deprecated numerical profiles cannot activate.
+
 # FCM v0.9.1 QA1 — combined Gathering, Legacy and Crafting preview
 
 This test candidate merges the v0.9.0 QA6e player-tested crafting quantity

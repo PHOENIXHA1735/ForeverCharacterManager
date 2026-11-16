@@ -5,6 +5,16 @@ local _, FCM = ...
 FCM.StatWeightEngine = FCM.StatWeightEngine or {}
 local E = FCM.StatWeightEngine
 E.schema = 1
+E.statUnits={str='point',agi='point',int='point',stam='point',spi='point',armor='point',
+    spell='point',healing='point',ap='point',rap='point',crit='point',hit='point',haste='point',
+    expertise='point',def='point',defense_skill='point',dodge='point',parry='point',block='point',block_value='point',
+    weapon_skill='point',weapon_skill_rating='point',dps='point',mp5='point',mana='point',health='point',health_regen='point',
+    spell_pen='point',spell_pierce='point',spell_frost='point',spell_fire='point',spell_shadow='point',
+    spell_arcane='point',spell_nature='point',spell_holy='point',spell_hit_pct='percentage_point',spell_crit_pct='percentage_point'}
+for _,school in ipairs({'fire','frost','nature','shadow','arcane'}) do E.statUnits['resist_'..school]='point' end
+function E:Deprecated(source)
+    return type(source)=='string' and source:lower():find('zygor',1,true)~=nil
+end
 
 local function finite(value)
     return type(value)=="number" and value==value and
@@ -22,19 +32,23 @@ function E:WeightsFromSamples(baselineOutput,samples,referenceStat)
     end
     local marginal={}
     for key,sample in pairs(samples) do
-        if type(key)~="string" or type(sample)~="table" or
+        if not self.statUnits[key] or type(sample)~="table" or
             not finite(sample.delta) or sample.delta<=0 or
             not finite(sample.output) then
             return nil,"Invalid simulation sample: "..tostring(key)
         end
         marginal[key]=(sample.output-baselineOutput)/sample.delta
+        if not finite(marginal[key]) then return nil,'Nonfinite marginal sample.' end
     end
     local reference=marginal[referenceStat]
     if not finite(reference) or reference<=0 then
         return nil,"Reference stat has no positive measured marginal value."
     end
     local weights={}
-    for key,value in pairs(marginal) do weights[key]=value/reference end
+    for key,value in pairs(marginal) do
+        weights[key]=value/reference
+        if not finite(weights[key]) then return nil,'Nonfinite normalized coefficient.' end
+    end
     return {schema=self.schema,reference=referenceStat,weights=weights,
         marginals=marginal,baselineOutput=baselineOutput}
 end
@@ -50,11 +64,11 @@ function E:CappedChange(current,cap,delta)
     return after-before
 end
 
--- Only curated, versioned, build-matched profiles may replace the heuristic
--- scorer. A source without numerical measurements, an unverified profile or
+-- Only curated, versioned, build-matched profiles may enable numerical
+-- scoring. A source without numerical measurements, an unverified profile or
 -- a duplicate exact match is not sufficient evidence to rank equipment.
 function E:VerifiedProfile(catalog,ch,mode,activity,clientBuild)
-    if type(catalog)~="table" or catalog.schema~=self.schema or
+    if type(catalog)~="table" or catalog.game~='wow-forever' or catalog.schema~=self.schema or
         type(catalog.version)~="string" or type(catalog.profiles)~="table" or
         type(ch)~="table" or type(ch.level)~="number" then
         return nil,"No compatible weight catalog."
@@ -65,7 +79,8 @@ function E:VerifiedProfile(catalog,ch,mode,activity,clientBuild)
     end
     local matched=nil
     for _,profile in ipairs(catalog.profiles) do
-        if type(profile)=="table" and profile.class==ch.class and
+        if type(profile)=="table" and finite(profile.levelMin) and finite(profile.levelMax) and
+            profile.levelMin>=1 and profile.levelMax<=60 and profile.levelMin<=profile.levelMax and profile.class==ch.class and
             profile.spec==ch.talentSpec and profile.activity==activity and
             profile.style==mode and ch.level>=(profile.levelMin or 61) and
             ch.level<=(profile.levelMax or 0) then
@@ -79,13 +94,24 @@ function E:VerifiedProfile(catalog,ch,mode,activity,clientBuild)
         not next(matched.weights) then
         return nil,"No verified numerical weights for this build."
     end
+    if self:Deprecated(matched.source) or self:Deprecated(matched.sourceURL) or self:Deprecated(matched.methodology) or self:Deprecated(matched.sourceType) or self:Deprecated(matched.name) then
+        return nil,'Deprecated numerical source.'
+    end
+    if type(matched.sourceURL)~='string' or not matched.sourceURL:match('^https://') or
+        type(matched.methodology)~='string' or matched.methodology=='' or
+        type(matched.reviewedAt)~='string' or not matched.reviewedAt:match('^%d%d%d%d%-%d%d%-%d%d$') or
+        type(matched.normalization)~='table' or matched.normalization.method~='marginal/reference' or
+        not matched.weights[matched.normalization.referenceStat] or
+        matched.weights[matched.normalization.referenceStat].value~=1 then
+        return nil,'Numerical source, review date, methodology or normalization is unverified.'
+    end
     if matched.talentProfile and matched.talentProfile~=ch.talentProfile then
         return nil,"Talent build does not match the verified profile."
     end
     for key,entry in pairs(matched.weights) do
-        if type(key)~="string" or type(entry)~="table" or
+        if not self.statUnits[key] or type(entry)~="table" or
             not finite(entry.value) or
-            (entry.unit~="point" and entry.unit~="percentage_point") then
+            entry.unit~=self.statUnits[key] then
             return nil,"Invalid weight entry in verified catalog."
         end
     end
@@ -107,7 +133,7 @@ end
 function E:ScoreChanges(oldStats,newStats,profile,context)
     if type(oldStats)~="table" or type(newStats)~="table" or
         type(profile)~="table" or profile.schema~=self.schema or
-        type(profile.weights)~="table" then
+        type(profile.weights)~="table" or self:Deprecated(profile.source) or self:Deprecated(profile.sourceURL) then
         return nil,"Invalid stat snapshot or profile."
     end
     context=context or {}
@@ -125,7 +151,7 @@ function E:ScoreChanges(oldStats,newStats,profile,context)
         if change~=0 then
             local entry=profile.weights[key]
             if type(entry)~="table" or not finite(entry.value) or
-                (entry.unit~="point" and entry.unit~="percentage_point") then
+                entry.unit~=self.statUnits[key] then
                 result.complete=false
                 result.unknown[#result.unknown+1]=key
             else

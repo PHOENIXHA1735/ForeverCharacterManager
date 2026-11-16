@@ -17,6 +17,9 @@ jobs:
       - name: Validate Lua syntax
         run: |
           find ForeverCharacterManager -name '*.lua' -type f -print0 | xargs -0 -r luac5.1 -p
+          lua5.1 tests/qa_gear_evidence.lua
+          lua5.1 tests/qa_zygor_frost_v090.lua
+          lua5.1 tests/qa_weight_profiles_v091.lua
           lua5.1 tests/qa_gathering_v091.lua
       - name: Validate overnight catalog schedule safeguards
         run: python3 tests/qa_overnight_catalog.py
