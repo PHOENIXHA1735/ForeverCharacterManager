@@ -163,6 +163,9 @@ local function push(out,row)
     row.unitValue=row.kind=="cook" and row.profitEach or
         math.floor((tonumber(row.quote.median) or 0)*0.95+0.5)
     local daily=tonumber(row.quote.soldPerDay)
+    -- A known zero-sales item is not a "selling now" recommendation. Missing
+    -- demand remains explicitly unknown and sorts below measured activity.
+    if daily and daily==0 then return end
     row.salesPerDay=daily and daily>=0 and daily or nil
     row.marketCeiling=row.salesPerDay and row.salesPerDay*row.unitValue or nil
     out[#out+1]=row

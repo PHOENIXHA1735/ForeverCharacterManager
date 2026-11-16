@@ -10,6 +10,7 @@ local prices={
     [1003]={median=500,quantity=100,soldPerDay=10,market=market,updated=now},
     [1004]={median=900,quantity=100,soldPerDay=10,market=market,updated=now},
     [1005]={median=700,quantity=100,soldPerDay=10,market=market,updated=now,snapshot=true},
+    [1006]={median=900,quantity=100,soldPerDay=0,market=market,updated=now},
     [2001]={median=1000,quantity=60,soldPerDay=12,market=market,updated=now},
     [2002]={median=300,quantity=60,soldPerDay=12,market=market,updated=now},
     [2003]={median=200,quantity=20,soldPerDay=3,market=market,updated=now},
@@ -21,6 +22,7 @@ local FCM={externalData={items={
     [1003]={name="Unknown-source-level Meat",farmSources={{kind="mob",name="Unknown mob",zone="Ashenvale"}}},
     [1004]={name="Needs Mining Skill",farmSources={{kind="mining",zone="Feralas",skillRequired=175,levelMin=20,levelMax=30}}},
     [1005]={name="Bundled Snapshot Herb",farmSources={{kind="herbalism",zone="Westfall",skillRequired=1,levelMin=10,levelMax=30}}},
+    [1006]={name="Not Selling Meat",farmSources={{kind="mob",name="Bear",zone="Ashenvale",levelMin=20,levelMax=30}}},
     [2001]={name="Cooked Fish"},[2002]={name="Raw Fish"},[2003]={name="Wrong Faction"},
 },recipes={}},db={settings={}}}
 function FCM:PriceQuote(id,ch)
@@ -56,6 +58,7 @@ assert(not found[1002],"high-level mobs excluded")
 assert(found[1003] and not found[1003].sourceVerifiedLevel,"unknown level flagged, not invented")
 assert(not found[1004],"missing Mining profession excluded")
 assert(not found[1005],"bundled price snapshot excluded")
+assert(not found[1006],"items with reported zero sales do not appear as current selling opportunities")
 assert(found[2001] and found[2001].kind=="cook","learned recipe appears")
 assert(math.abs(found[2001].profitCraft-310)<0.01,"5% cut and regular 40c vendor spices")
 assert(found[2001].marketCeiling==3720,"profit per item times market-wide daily units")

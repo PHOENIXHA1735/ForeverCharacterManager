@@ -906,6 +906,7 @@ function UI:CharacterRecipeProfessions(ch)
 end
 function UI:Navigate(tab)
     self.tab=tab
+    if tab=="Settings" then self.flipMarginDraft=nil end
     -- Read actual open-session bags when Gold Finder is entered; the Core
     -- BAG_UPDATE_DELAYED event already keeps them current while playing.
     if tab=="Gold Finder" and FCM.ScanBags and self:GetCharacter()==FCM:Current() then
@@ -1256,6 +1257,57 @@ function UI:Create()
     end)
     self.flipMarginButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
     self.flipMarginButton:Hide()
+    self.flipMarginHint=text(panel,"Minimum net return on merchant cost (0-500%)",
+        "GameFontHighlightSmall",16,-140,375)
+    self.flipMarginHint:Hide()
+    self.flipMarginSlider=CreateFrame("Slider","FCMFlipMarginSlider",panel,"OptionsSliderTemplate")
+    self.flipMarginSlider:SetSize(260,18)
+    self.flipMarginSlider:SetPoint("TOPLEFT",panel,"TOPLEFT",19,-169)
+    self.flipMarginSlider:SetOrientation("HORIZONTAL")
+    self.flipMarginSlider:SetMinMaxValues(0,500)
+    self.flipMarginSlider:SetValueStep(0.5)
+    if _G and _G.FCMFlipMarginSliderLow then _G.FCMFlipMarginSliderLow:SetText("0%") end
+    if _G and _G.FCMFlipMarginSliderHigh then _G.FCMFlipMarginSliderHigh:SetText("500%") end
+    if _G and _G.FCMFlipMarginSliderText then _G.FCMFlipMarginSliderText:SetText("") end
+    if self.flipMarginSlider.SetObeyStepOnDrag then
+        self.flipMarginSlider:SetObeyStepOnDrag(true)
+    end
+    self.flipMarginSlider:Hide()
+    self.flipMarginEdit=CreateFrame("EditBox",nil,panel,"InputBoxTemplate")
+    self.flipMarginEdit:SetSize(74,24)
+    self.flipMarginEdit:SetAutoFocus(false)
+    self.flipMarginEdit:SetMaxLetters(6)
+    self.flipMarginEdit:SetPoint("LEFT",self.flipMarginSlider,"RIGHT",20,0)
+    self.flipMarginEdit:Hide()
+    self.flipMarginApply=button(panel,"Apply",83,25,function()
+        self:ApplyFlipMargin()
+    end)
+    self.flipMarginApply:SetPoint("LEFT",self.flipMarginEdit,"RIGHT",12,0)
+    self.flipMarginApply:Hide()
+    self.flipMarginState=text(panel,"Saved","GameFontHighlightSmall",0,0,90)
+    self.flipMarginState:ClearAllPoints()
+    self.flipMarginState:SetPoint("LEFT",self.flipMarginApply,"RIGHT",12,0)
+    self.flipMarginState:Hide()
+    self.flipMarginSlider:SetScript("OnValueChanged",function(_,raw)
+        if self.suppressFlipUpdate then return end
+        local value=math.floor(math.max(0,math.min(500,tonumber(raw) or 0))*2+0.5)/2
+        self.flipMarginDraft=value
+        self.flipMarginEdit:SetText(string.format("%g",value))
+        self.flipMarginState:SetText("Not saved")
+    end)
+    self.flipMarginEdit:SetScript("OnTextChanged",function(edit,userInput)
+        if self.suppressFlipUpdate or not userInput then return end
+        self.flipMarginDraft=edit:GetText()
+        self.flipMarginState:SetText("Not saved")
+    end)
+    self.flipMarginEdit:SetScript("OnEnterPressed",function(edit)
+        edit:ClearFocus()
+        self:StageFlipMarginInput()
+    end)
+    self.flipMarginEdit:SetScript("OnEscapePressed",function(edit)
+        edit:ClearFocus();self.flipMarginDraft=nil
+        self:SyncFlipMarginControls(FCM.db.settings.flipMinProfitPct or 30,"Saved")
+    end)
     if self.searchPending then self.search:SetText(self.searchPending); self.searchPending=nil end
 
     -- This toolbar filters learned recipes only. Global item search is hidden
@@ -1929,11 +1981,47 @@ function UI:ShowFlipMarginMenu()
     for _,pct in ipairs({15,25,30,50,75,100}) do
         local value=pct
         options[#options+1]={label=tostring(value).."% minimum projected return",run=function()
-            FCM.db.settings.flipMinProfitPct=value
+            self.flipMarginDraft=value
+            self:SyncFlipMarginControls(value,"Not saved")
             self.selectedRow=nil
         end}
     end
     self:MakeMenu(self.flipMarginButton,options,235,true)
+end
+
+function UI:SyncFlipMarginControls(value,state)
+    value=math.max(0,math.min(500,tonumber(value) or 30))
+    if not (self.flipMarginSlider and self.flipMarginEdit) then return end
+    self.suppressFlipUpdate=true
+    self.flipMarginSlider:SetValue(value)
+    self.flipMarginEdit:SetText(string.format("%g",value))
+    self.suppressFlipUpdate=false
+    if self.flipMarginState then self.flipMarginState:SetText(state or "Saved") end
+end
+
+function UI:StageFlipMarginInput()
+    local value=tonumber(self.flipMarginEdit and self.flipMarginEdit:GetText())
+    if not value or value<0 or value>500 or value~=value then
+        if self.flipMarginState then self.flipMarginState:SetText("Use 0-500") end
+        return nil
+    end
+    self.flipMarginDraft=value
+    self:SyncFlipMarginControls(value,"Not saved")
+    return value
+end
+
+function UI:ApplyFlipMargin()
+    local value=self:StageFlipMarginInput()
+    if not value then
+        FCM:Say("Enter a flip profit percentage between 0 and 500, then Apply.")
+        return false
+    end
+    FCM.db.settings.flipMinProfitPct=value
+    self.flipMarginDraft=nil
+    self:SyncFlipMarginControls(value,"Saved")
+    FCM:Say("Merchant flip minimum saved: "..string.format("%g",value).."% net return.")
+    self:Refresh()
+    return true
 end
 
 function UI:ShowCraftProgressQuantity(req)
@@ -2478,8 +2566,8 @@ local function buildRows(ui)
                 "GOLD FINDER — PRICES FROM AHLEDGER (ahledger.com)\n\n"..
                 "FCM reads the freshest price table already loaded by AHledger Sync. The AHledger addon can scan while the auction house is open; FCM cannot open or scan the AH from anywhere in the world or download new prices while WoW is running.\n\n"..
                 "COOK: Only actually learned, scanned Cooking recipes are ranked. Ingredient cost is subtracted and the 5% auction cut is included. Unknown reagent prices are excluded rather than guessed.\n\n"..
-                "FISH/FARM: Reported sources are checked against recorded character level and gathering skill where provided. Without a measured catch/kill pace, values are potential sales AFTER the AH cut, NOT farm profit or gold/hour. Unknown source levels are flagged.\n\n"..
-                "Market/day is the maximum theoretical whole-market demand, not your personal income. Fresh AHledger Sync data requires /reload or logging in to become visible in game; Recheck loaded prices only refreshes what FCM currently has.\n\n"..
+                "FISH/FARM: Reported sources are checked against recorded character level and gathering skill where provided. Select a row to see its source and zone; unknown locations/levels are flagged, not invented. Without a measured catch/kill pace, values are potential sales AFTER the AH cut, NOT farm profit or gold/hour.\n\n"..
+                "Market/day is an estimate from recent AH scans, not proof of a sale or your personal income. Items with an explicit zero sold/day estimate are excluded; items with unknown demand are marked unknown. Fresh AHledger Sync data requires /reload or logging in to become visible in game; a newer own scan can load locally on your next login. Recheck loaded prices only refreshes what FCM currently has.\n\n"..
                 "To populate Cooking: open the Cooking profession window and use Scan. To populate Farming: update the companion's reference item sources. No private character data is uploaded.")
             for _,entry in ipairs(found) do
                 local e=entry
@@ -2487,6 +2575,9 @@ local function buildRows(ui)
                 local value=e.kind=="cook" and "profit/item " or "net sale/item "
                 local summary=label.." | "..value..FCM:MoneyLabel(e.unitValue)..
                     " | "..(e.salesPerDay and string.format("~%.0f sold/day",e.salesPerDay) or "sales unknown")
+                if e.source and e.source.zone and e.source.zone~="" then
+                    summary=summary.." | "..short(tostring(e.source.zone),25)
+                end
                 add("gold:"..e.kind..":"..e.itemID,e.name,summary,
                     function() return FCM:GoldOpportunityLines(e,ch) end)
                 rows[#rows].itemID=e.itemID
@@ -3695,7 +3786,7 @@ local function buildRows(ui)
             "Minimum projected return: "..tostring(FCM.db.settings.flipMinProfitPct or 30).."% after AH cut",
             "MERCHANT FLIP TOOLTIP\n\n"..
             "Move your cursor over an item for sale at a merchant. If FCM can identify the merchant's actual gold price and a recent AHledger lowest buyout, it subtracts a 5% auction cut, then calculates the projected return on your purchase.\n\n"..
-            "Use the Flip minimum selector above for presets, or type /fcm flipmargin 35 to choose any percentage from 0 to 500.\n\n"..
+            "Choose a preset or drag the slider. Type an exact percentage (0-500, decimals allowed) in the number box, press Enter to preview, then click Apply to save it for all characters. You can also type /fcm flipmargin 35.\n\n"..
             "BAG TOOLTIP\n\n"..
             "Hover an item in your bags to compare its likely AH proceeds after the auction cut against its vendor sell value. Bound or uncertain items never receive a confident auction recommendation.\n\n"..
             "Only recent, non-snapshot prices qualify. Listings can expire or fail to sell. Deposits and travel time are excluded; FCM never purchases or posts automatically.")
@@ -3992,9 +4083,19 @@ function UI:Refresh()
         self.goldRecheckButton:SetShown(gold)
         local settingsPage=(tab=="Settings")
         self.flipMarginButton:SetShown(settingsPage)
+        self.flipMarginHint:SetShown(settingsPage)
+        self.flipMarginSlider:SetShown(settingsPage)
+        self.flipMarginEdit:SetShown(settingsPage)
+        self.flipMarginApply:SetShown(settingsPage)
+        self.flipMarginState:SetShown(settingsPage)
         if settingsPage then
-            self.flipMarginButton:SetText("Flip minimum: "..
-                tostring(FCM.db.settings.flipMinProfitPct or 30).."%")
+            self.flipMarginButton:SetText("Flip preset: "..
+                tostring(tonumber(self.flipMarginDraft) or FCM.db.settings.flipMinProfitPct or 30).."%")
+            if self.flipMarginDraft==nil then
+                self:SyncFlipMarginControls(FCM.db.settings.flipMinProfitPct or 30,"Saved")
+            elseif type(self.flipMarginDraft)=="number" then
+                self:SyncFlipMarginControls(self.flipMarginDraft,"Not saved")
+            end
         end
         if gold then
             local choices={all="All",bags="Bags",farm="Farm",fish="Fish",cook="Cook"}
@@ -4054,11 +4155,13 @@ function UI:Refresh()
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
         -- Move content down only while the AH-style filter toolbar is visible.
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests or gold or settingsPage) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,settingsPage and -215 or
+            ((browsing or crafting or gathering or requests or gold) and -143 or -107))
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests or gold or settingsPage) and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,settingsPage and -215 or
+            ((browsing or crafting or gathering or requests or gold) and -143 or -107))
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
             tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
