@@ -34,6 +34,7 @@ Planner.lua
 SmartCrafting.lua
 UpgradeIntelligence.lua
 FarmingAdvisor.lua
+GoldOpportunities.lua
 ItemDecisions.lua
 Diagnostics.lua
 UI.lua
