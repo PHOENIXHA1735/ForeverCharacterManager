@@ -6,7 +6,7 @@ Account-wide character, crafting, gathering, inventory, progression, and market-
 
 ## Start here
 
-1. [Full installation and usage instructions](docs/INSTALL_AND_USE.md) — exact Windows folder, first login, all 26 tabs, crafting, gathering, troubleshooting and privacy.
+1. [Full installation and usage instructions](docs/INSTALL_AND_USE.md) — exact Windows folder, first login, all 27 tabs, crafting, gathering, troubleshooting and privacy.
 2. [Personal AH history and Gold Advisor](docs/AH_HISTORY.md) — optional private 365-day observations, local processing and scheduler controls.
 3. [Gear source audit](docs/GEAR_SOURCES_2026-11-16.md) — evidence-based Forever stat priorities and limitations.
 4. [Offline tests and validation](tests/README.md) — reproducible Lua/Python checks; in-game QA remains separate.
