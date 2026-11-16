@@ -20,6 +20,12 @@ $cacheFile = Join-Path $addon 'AHPrices.generated.lua'
 $statusFile = Join-Path $companion 'ah-refresh-status.json'
 $credit = 'Prices from AHledger (ahledger.com); https://ahledger.com'
 $now = [DateTimeOffset]::UtcNow
+# Official Sync supplies market tables. The legacy scheduled Run entry point
+# now delegates locally instead of making duplicate provider requests.
+if ($Mode -eq 'Run') {
+    & (Join-Path $companion 'FCM-AHHistory.ps1') -AddonRoot $addon
+    return
+}
 function Say([string]$message) { if (-not $Quiet) { Write-Host ('[FCM AH] ' + $message) } }
 function Save-Status($obj) {
     # No character names, game account data, raw price tables, or credentials are logged.
@@ -97,43 +103,7 @@ foreach ($market in $markets) {
             throw 'Invalid source snapshot metadata.'
         }
         $rows=New-Object 'System.Collections.Generic.List[string]'
-        $ids=New-Object 'System.Collections.Generic.HashSet[int]'
-        foreach ($line in $lines | Select-Object -Skip 1) {
-            $p=($line -replace "`r",'').Trim()
-            if ($p -notmatch '^\d+:') {continue}
-            $parts=$p.Split(':')
-            if ($parts.Length -lt 5 -or $parts.Length -gt 12) {continue}
-            $id=0; $median=0L; $low=0L
-            if (-not [int]::TryParse($parts[0],[ref]$id) -or $id -le 0 -or $id -gt 9999999) {continue}
-            if (-not [long]::TryParse($parts[1],[ref]$median) -or $median -le 0) {continue}
-            if (-not $ids.Add($id)) {continue}
-            [void][long]::TryParse($parts[2],[ref]$low)
-            $m7=0L; $m30=0L; $qty=0L; $sold10=0L
-            [void][long]::TryParse($parts[3],[ref]$qty)
-            [void][long]::TryParse($parts[4],[ref]$m7)
-            if ($parts.Length -gt 5) {[void][long]::TryParse($parts[5],[ref]$m30)}
-            if ($parts.Length -gt 8) {[void][long]::TryParse($parts[8],[ref]$sold10)}
-            $items=@('median='+$median, 'minBuyout='+[Math]::Max(0,$low), 'quantity='+[Math]::Max(0,$qty))
-            if ($m7 -gt 0) {$items+=('median7d='+$m7)}
-            if ($m30 -gt 0) {$items+=('median30d='+$m30)}
-            if ($sold10 -ge 0 -and $parts.Length -gt 8 -and $parts[8] -ne '') {$items+=('soldPerDay='+([double]$sold10/10.0).ToString('0.0',[Globalization.CultureInfo]::InvariantCulture))}
-            $rows.Add('FCM.externalData.pricesByMarket["'+$market+'"]['+$id+']={' +($items -join ',')+',market="'+$market+'"}')
-        }
-        if ($rows.Count -lt 1) {throw 'Price table had no valid priced items; retaining prior unexpired cache.'}
-        $results[$market]=@{rows=$rows;observedAt=[long]$fields[2];maxAge=$maxAge;count=$rows.Count}
-        Say "$market`: $($rows.Count) currently priced items received."
-    } catch {
-        $failed+=($market+': '+$_.Exception.Message)
-        Say ($market+': unavailable ('+$_.Exception.Message+').')
-    }
-}
-if ($results.Count -ne 2) {
-    Save-Status ([ordered]@{runAt=$now.ToString('o');result='failed';markets=$markets;errors=$failed;note='No fabricated data; previous cache retained only until its expiration.'})
-    throw 'Both faction price tables are required. Previous unexpired cache unchanged.'
-}
-$expires= [long]::MaxValue
-foreach ($m in $markets) {
-    $e=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+[long]$results[$m].maxAge
+        $ids=New-Object 'S…610 tokens truncated…Now.ToUnixTimeSeconds()+[long]$results[$m].maxAge
     if ($e -lt $expires) {$expires=$e}
 }
 $out=New-Object System.Text.StringBuilder

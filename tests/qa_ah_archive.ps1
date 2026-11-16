@@ -27,4 +27,8 @@ try {
     catch { if ($_.Exception.Message -notmatch 'Archival errors') { throw } }
 } finally { $input.Dispose() }
 if (@(Get-ChildItem -LiteralPath (Join-Path $addon 'AHHistory\Incoming') -File).Count) { throw 'Incomplete copy published' }
+$disableProbe=@{Called=$false}
+function Disable-ScheduledTask { param($TaskName,$ErrorAction) if ($TaskName -ne 'FCM-AHHistory') { throw 'Wrong task' }; $disableProbe.Called=$true }
+& $script -AddonRoot $addon -Mode Disable
+if (-not $disableProbe.Called -or @(Get-ChildItem -LiteralPath (Join-Path $addon 'AHHistory\RawScans') -Recurse -Filter '*.lua').Count -ne 2) { throw 'Disable changed archive contents' }
 Write-Output 'PASS: initial copy, deduplication, preservation, UTC/hash metadata, change retention, overlap lock and locked-source cleanup. Synthetic fixture only.'

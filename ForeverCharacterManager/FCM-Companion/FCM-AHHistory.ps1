@@ -23,6 +23,8 @@ if ($Mode -eq 'Enable') {
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 25) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+    $legacy=Get-ScheduledTask -TaskName 'FCM Daily Auction House Refresh' -ErrorAction SilentlyContinue
+    if ($legacy) { Disable-ScheduledTask -TaskName $legacy.TaskName -ErrorAction Stop | Out-Null }
     return
 }
 foreach ($part in @('Incoming','RawScans','MarketTables','Index','Logs','Parsed','Quarantine')) {
@@ -82,7 +84,10 @@ try {
     if (-not $SkipAnalysis) {
         $processor = Join-Path $companion 'fcm_history.py'
         if (Test-Path -LiteralPath $processor) {
-            & python.exe $processor --addon $AddonRoot
+            $python='python.exe'
+            $pythonConfig=Join-Path $companion 'python-path.local.txt'
+            if (Test-Path -LiteralPath $pythonConfig) { $python=([IO.File]::ReadAllText($pythonConfig)).Trim() }
+            & $python $processor --addon $AddonRoot
             if ($LASTEXITCODE -ne 0) { throw 'History processor failed' }
         }
     }

@@ -17,6 +17,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 tests/check_private_paths.py
           sha256sum -c SOURCE_MANIFEST_SHA256.txt
           if find ForeverCharacterManager -type f \( -iname '*.dpapi' -o -name 'settings.json' -o -name 'reference-cache.json' -o -name 'AHPrices.generated.lua' -o -name 'ExternalData.generated.lua' -o -name 'FCM_DB.lua' -o -name 'fcm-gathering-contribution.json' -o -name 'foreverdb-request-budget.json' -o -name 'foreverdb-request-backoff.json' -o -name 'overnight-catalog-budget.json' -o -name 'overnight-catalog-backoff.json' -o -name 'overnight-catalog-status.json' \) | grep -q .; then
             echo 'Private or machine-generated file in release source' >&2
@@ -24,8 +25,8 @@ jobs:
           fi
           grep -q '^## Version: 0.9.1$' ForeverCharacterManager/ForeverCharacterManager.toc
           mkdir -p dist
-          zip -q -r dist/FCM-v0.9.1.zip ForeverCharacterManager
-          zip -q -r dist/FCM-v0.9.1-Addon-and-Companion.zip ForeverCharacterManager README.md FCM_v091_RELEASE_NOTES.md
+          zip -q -r dist/FCM-v0.9.1.zip ForeverCharacterManager -x '*/AHHistory/*' '*/AHHistory.generated.lua' '*/AHledger/*' '*/AHledger.lua' '*/AHledger_Data.lua' '*/python-path.local.txt'
+          zip -q -r dist/FCM-v0.9.1-Addon-and-Companion.zip ForeverCharacterManager README.md FCM_v091_RELEASE_NOTES.md -x '*/AHHistory/*' '*/AHHistory.generated.lua' '*/AHledger/*' '*/AHledger.lua' '*/AHledger_Data.lua' '*/python-path.local.txt'
           cd dist
           sha256sum FCM-v0.9.1.zip > FCM-v0.9.1.zip.sha256
           sha256sum FCM-v0.9.1-Addon-and-Companion.zip > FCM-v0.9.1-Addon-and-Companion.zip.sha256
@@ -57,6 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 tests/check_private_paths.py
           if gh release view v0.9.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit v0.9.1 --repo "$GITHUB_REPOSITORY" --title 'Forever Character Manager v0.9.1 - Gathering Preview' --notes-file FCM_v091_RELEASE_NOTES.md
             gh release upload v0.9.1 dist/FCM-v0.9.1.zip dist/FCM-v0.9.1.zip.sha256 dist/FCM-v0.9.1-Addon-and-Companion.zip dist/FCM-v0.9.1-Addon-and-Companion.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber

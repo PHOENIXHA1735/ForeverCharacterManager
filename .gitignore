@@ -39,3 +39,8 @@ Thumbs.db
 **/*.dpapi
 **/ah-history-status.json
 **/ah-refresh-status.json
+**/python-path.local.txt
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/pricetables/
