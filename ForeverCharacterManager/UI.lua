@@ -46,6 +46,7 @@ local tabPalettes={
     gear={accent="73e6b4",summary="b6dfcd",row={0.06,0.19,0.15},selected={0.12,0.33,0.24}},
     craft={accent="ffcb76",summary="e4cda6",row={0.20,0.15,0.08},selected={0.34,0.24,0.11}},
     gather={accent="9ee47c",summary="c5dcad",row={0.12,0.20,0.09},selected={0.22,0.32,0.13}},
+    gold={accent="ffda7b",summary="e2d1a4",row={0.20,0.16,0.07},selected={0.34,0.26,0.11}},
     reference={accent="84c0ff",summary="b8cde6",row={0.08,0.14,0.24},selected={0.13,0.24,0.39}},
     progression={accent="d3a3ff",summary="d7c2eb",row={0.16,0.11,0.23},selected={0.26,0.17,0.37}},
     system={accent="aebdd4",summary="c1cad7",row={0.13,0.16,0.20},selected={0.23,0.28,0.35}},
@@ -55,6 +56,7 @@ local tabPaletteGroups={
     Gear="gear",Upgrades="gear",["Upgrade Plan"]="gear",
     Crafting="craft",Planner="craft",Requests="craft",Shopping="craft",Professions="craft",
     Gathering="gather",Inventory="gather",
+    ["Gold Finder"]="gold",
     Catalog="reference",["Item Explorer"]="reference",Dungeons="reference",Auction="reference",
     Talents="progression",Legacy="progression",Reputation="progression",
     Settings="system",Diagnostics="system",Help="system",["Global Search"]="reference",
@@ -904,6 +906,11 @@ function UI:CharacterRecipeProfessions(ch)
 end
 function UI:Navigate(tab)
     self.tab=tab
+    -- Read actual open-session bags when Gold Finder is entered; the Core
+    -- BAG_UPDATE_DELAYED event already keeps them current while playing.
+    if tab=="Gold Finder" and FCM.ScanBags and self:GetCharacter()==FCM:Current() then
+        FCM:ScanBags()
+    end
     if (tab=="Item Explorer" or tab=="Global Search") and FCM.db then
         local settings=FCM.db.settings
         settings.itemCategory="all";settings.itemType="all";settings.itemSlot="all"
@@ -1143,7 +1150,7 @@ function UI:Create()
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
     background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
+    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Gold Finder", "Catalog", "Item Explorer", "Dungeons", "Auction", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
     -- Sidebar can exceed the window height when a character has multiple
     -- profession tabs. Keep every destination reachable with wheel or arrows.
     local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
@@ -1232,6 +1239,18 @@ function UI:Create()
     end)
     self.requestViewButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
     self.requestViewButton:Hide()
+    self.goldViewButton=button(panel,"Opportunities: All",183,25,function()
+        self:ShowGoldViewMenu()
+    end)
+    self.goldViewButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
+    self.goldViewButton:Hide()
+    self.goldRecheckButton=button(panel,"Recheck loaded prices",177,25,function()
+        if self:GetCharacter()==FCM:Current() then FCM:ScanBags() end
+        self.selectedRow=nil
+        self:Refresh()
+    end)
+    self.goldRecheckButton:SetPoint("LEFT",self.goldViewButton,"RIGHT",10,0)
+    self.goldRecheckButton:Hide()
     if self.searchPending then self.search:SetText(self.searchPending); self.searchPending=nil end
 
     -- This toolbar filters learned recipes only. Global item search is hidden
@@ -1886,6 +1905,20 @@ function UI:ShowRequestViewMenu()
     self:MakeMenu(self.requestViewButton,options,240,true)
 end
 
+function UI:ShowGoldViewMenu()
+    local choices={{"All opportunities + bag value","all"},{"My bag sale estimates","bags"},
+        {"Farming & gathering","farm"},{"Fishing","fish"},{"Cooking profits","cook"}}
+    local options={}
+    for _,choice in ipairs(choices) do
+        local label,key=choice[1],choice[2]
+        options[#options+1]={label=label,run=function()
+            FCM.db.settings.goldView=key
+            self.selectedRow=nil
+        end}
+    end
+    self:MakeMenu(self.goldViewButton,options,220,true)
+end
+
 function UI:ShowCraftProgressQuantity(req)
     local recipe=req and FCM:RecipeByID(req.recipeID)
     if not recipe or not FCM:CanCraftRequest(req,FCM:Current(),recipe) then
@@ -2385,6 +2418,69 @@ local function buildRows(ui)
         end
         if #rows==0 then add("no-upgrades","No actionable upgrades found","Scan gear and recipes on the appropriate characters.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
+    elseif tab=="Gold Finder" then
+        if not ch then
+            add("gold-no-character","Choose a character to find gold opportunities",
+                "Character level, profession skills, and market are required.",
+                "Log into a character to scan their level and skills. FCM will never substitute another faction's market prices.")
+        else
+            local view=FCM.db.settings.goldView or "all"
+            local found=view=="bags" and {} or FCM:GoldOpportunities(ch,view)
+            local bag=FCM:BagSaleEstimate(ch)
+            local count={farm=0,fish=0,cook=0}
+            for _,entry in ipairs(found) do count[entry.kind]=count[entry.kind]+1 end
+            if view=="all" or view=="bags" then
+                add("gold-bag-summary","My bags: estimated sale value",
+                    "Unbound after AH fee "..FCM:MoneyLabel(bag.confirmedNet)..
+                    " | binding unverified "..FCM:MoneyLabel(bag.uncertainNet),
+                    "BAG VALUE — "..(ch.name or "selected character").."\n\n"..
+                    "Last bag scan: "..FCM:Age(ch.bagsStamp).."\n"..
+                    "Confirmed UNBOUND stack value at AH median after 5% cut: "..FCM:MoneyLabel(bag.confirmedNet).."\n"..
+                    "Confirmed unbound value using lowest observed buyouts: "..FCM:MoneyLabel(bag.confirmedLowNet).."\n"..
+                    "Binding UNKNOWN value (not counted as sellable): "..FCM:MoneyLabel(bag.uncertainNet).."\n"..
+                    "Bound items excluded: "..tostring(bag.bound).." units\n"..
+                    "Units without current pricing: "..tostring(bag.unpriced).."\n\n"..
+                    "CURRENT PRICE CHECK\n"..
+                    "Open the AH and type /ahl scan. When it finishes, check the cheapest actual listing before posting. "..
+                    "AHledger Sync downloads public tables about every 30 minutes; an updated table may require /reload. "..
+                    "Recheck loaded prices only reads what the game currently has; it cannot initiate an internet refresh.\n\n"..
+                    "Estimated sales are asking prices, not completed transactions. No listing deposits, bind-unknown items or personal travel time included.")
+                for i,record in ipairs(bag.rows) do
+                    if view=="bags" or i<=12 then
+                        local r=record
+                        add("gold-bag:"..r.itemID,r.name,
+                            tostring(r.unbound).." unbound | "..FCM:MoneyLabel(r.confirmedNet)..
+                            " net | "..tostring(r.unknown).." binding unknown",
+                            function() return FCM:BagSaleEstimateLines(r,ch) end)
+                        rows[#rows].itemID=r.itemID
+                    end
+                end
+            end
+            add("gold-guide","Gold opportunities for "..(ch.name or "selected character"),
+                count.cook.." cooking | "..count.fish.." fishing | "..count.farm.." farming",
+                "GOLD FINDER — PRICES FROM AHLEDGER (ahledger.com)\n\n"..
+                "FCM reads the freshest price table already loaded by AHledger Sync. The AHledger addon can scan while the auction house is open; FCM cannot open or scan the AH from anywhere in the world or download new prices while WoW is running.\n\n"..
+                "COOK: Only actually learned, scanned Cooking recipes are ranked. Ingredient cost is subtracted and the 5% auction cut is included. Unknown reagent prices are excluded rather than guessed.\n\n"..
+                "FISH/FARM: Reported sources are checked against recorded character level and gathering skill where provided. Without a measured catch/kill pace, values are potential sales AFTER the AH cut, NOT farm profit or gold/hour. Unknown source levels are flagged.\n\n"..
+                "Market/day is the maximum theoretical whole-market demand, not your personal income. Fresh AHledger Sync data requires /reload or logging in to become visible in game; Recheck loaded prices only refreshes what FCM currently has.\n\n"..
+                "To populate Cooking: open the Cooking profession window and use Scan. To populate Farming: update the companion's reference item sources. No private character data is uploaded.")
+            for _,entry in ipairs(found) do
+                local e=entry
+                local label=e.kind=="cook" and "COOK" or (e.kind=="fish" and "FISH" or "FARM")
+                local value=e.kind=="cook" and "profit/item " or "net sale/item "
+                local summary=label.." | "..value..FCM:MoneyLabel(e.unitValue)..
+                    " | "..(e.salesPerDay and string.format("~%.0f sold/day",e.salesPerDay) or "sales unknown")
+                add("gold:"..e.kind..":"..e.itemID,e.name,summary,
+                    function() return FCM:GoldOpportunityLines(e,ch) end)
+                rows[#rows].itemID=e.itemID
+            end
+            if #found==0 and view~="bags" then
+                add("gold-empty","No fully priced, eligible opportunities yet",
+                    "Requires AHledger Sync, scanned skills/recipes and source records.",
+                    "FCM deliberately excludes bundled price snapshots, unsourced high-level fish, unlearned recipes, and crafts with unknown ingredient costs.\n\n"..
+                    "Check AHledger Sync, log back in or /reload, open Cooking and scan, and use the companion's source import. Other characters' faction and ruleset prices are never substituted.")
+            end
+        end
     elseif tab=="Gathering" then
         local count=FCM:GatherCounts()
         local total=count.herbalism+count.mining+count.fishing+count.treasure
@@ -3720,7 +3816,7 @@ function UI:Refresh()
             end
         end
     end
-    if (FCM.db.settings.advisorSort or "recommended")=="name" then
+    if tab~="Gold Finder" and (FCM.db.settings.advisorSort or "recommended")=="name" then
         table.sort(entries,sortByName)
     end
     -- The box is also useful for looking up ordinary inventory items while on
@@ -3806,7 +3902,7 @@ function UI:Refresh()
         -- on hover. Place it to the left so it does not hide the stats panel.
         -- The dedicated preview also includes bag capacity without hovering.
         local hoveredID=previewItemID(row)
-        if hoveredID and (tab=="Item Explorer" or tab=="Global Search" or
+        if hoveredID and (tab=="Gold Finder" or tab=="Item Explorer" or tab=="Global Search" or
             tab=="Crafting" or tab:sub(1,11)=="Profession:") then
             widget:SetScript("OnEnter",function(btn)
                 self:DungeonTooltip(btn,hoveredID,"left")
@@ -3866,6 +3962,13 @@ function UI:Refresh()
         self.craftQuantityLabel:SetShown(crafting)
         self.craftQuantityEdit:SetShown(crafting)
         local gathering=(tab=="Gathering")
+        local gold=(tab=="Gold Finder")
+        self.goldViewButton:SetShown(gold)
+        self.goldRecheckButton:SetShown(gold)
+        if gold then
+            local choices={all="All",bags="Bags",farm="Farm",fish="Fish",cook="Cook"}
+            self.goldViewButton:SetText("Opportunities: "..(choices[FCM.db.settings.goldView or "all"] or "All"))
+        end
         self.gatherDistanceButton:SetShown(gathering)
         self.gatherPinsButton:SetShown(gathering)
         self.gatherRimButton:SetShown(gathering)
@@ -3920,11 +4023,11 @@ function UI:Refresh()
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
         -- Move content down only while the AH-style filter toolbar is visible.
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests or gold) and -143 or -107)
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests or gold) and -143 or -107)
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
             tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
