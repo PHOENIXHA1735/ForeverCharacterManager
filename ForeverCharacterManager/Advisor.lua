@@ -57,9 +57,16 @@ local function availableFor(recipe, crafter, excludeKey, requestedQuantity)
             end
         end
     end
-    return {ready=complete,uncertain=not complete and totalMissing==0,lines=rows,
+    local skillState,skillDetail
+    if crafter and type(FCM.RecipeSkillStatus)=="function" then
+        skillState,skillDetail=FCM:RecipeSkillStatus(recipe,crafter)
+        if skillState=="blocked" then complete=false end
+    end
+    return {ready=complete,uncertain=(not complete and totalMissing==0) or skillState=="verify",
+        skillStatus=skillState,skillDetail=skillDetail,lines=rows,
         transfers=transfers,missing=totalMissing,
-        reason=complete and "Recorded materials are sufficient, subject to snapshot/trade restrictions" or "Shortages or unverified ingredients"}
+        reason=skillState=="blocked" and skillDetail or
+            (complete and "Recorded materials are sufficient, subject to snapshot/trade restrictions" or "Shortages or unverified ingredients")}
 end
 
 function FCM:CraftAvailability(recipe, crafter, excludeKey, requestedQuantity)
