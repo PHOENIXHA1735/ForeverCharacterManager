@@ -1,91 +1,41 @@
 # Forever Character Manager (FCM)
 
-An account-wide character management addon for **World of Warcraft: Forever**, with an optional Windows Data Companion for public reference-data updates.
+Account-wide character, crafting, gathering, inventory, progression, and market-data guidance for **World of Warcraft: Forever**. An optional Windows companion handles local files and public reference updates when the game is closed.
 
-## Current source: v0.9.1 QA6 (fishing-school detection test candidate)
+**Current source:** v0.9.1, under ongoing QA stabilization. [Development review and CI results](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/2). This is source work, **not a new published release**; install a tested build intentionally.
 
-**QA6 addresses Frosty Bit's Oily Blackmouth School test at Twilight Shore.**
-The visible fishing pool produced a real catch, but FCM failed to record a
-location because the Fishing cast did not supply a school name. FCM can now
-read an explicitly named school/pool tooltip while hovering it, associate that
-observation with the next Fishing cast, and save the standing-location marker
-only after an actual bobber loot event. A successful Fishing cast by itself
-does not create a location. Open-water catches without named-school evidence
-remain unrecorded; the client cannot prove the bobber landed inside a pool. Use
-`/fcm gather fishstatus` to see the last captured pool name, spell ID and
-recording decision. In-game behavior still needs testing on Forever; do not
-publish community coordinates from QA alone.
+## Start here
 
-**QA5 makes item search easier to read:** The Item Explorer and Global Search
-right-hand pane is wider, with clear sections explaining **where an item comes
-from**, **what it is used for**, **which characters have it**, **auction
-pricing**, and **data reliability**. Raw inventory codes and Unix timestamps
-are hidden in favor of readable labels. Normal cooking materials no longer
-say their combat stats are missing; equipment still shows actual imported or
-client stats. Clam Meat #5503 now includes ForeverDB's documented **Giant
-Clam** container source, explicitly marked as **Seen in Forever**, with no
-invented drop percentage or zone. Missing source data remains visible as a
-limitation and provides the public item-page path. The Windows companion also
-recognizes explicit boss IDs in loot associations, but never assigns a boss
-when the provider did not identify one. Run the QA5 checklist before treating
-these changes as live-tested.
+1. [Full installation and usage instructions](docs/INSTALL_AND_USE.md) — exact Windows folder, first login, all 27 tabs, crafting, gathering, troubleshooting and privacy.
+2. [Personal AH history and Gold Advisor](docs/AH_HISTORY.md) — optional private 365-day observations, local processing and scheduler controls.
+3. [Gear source audit](docs/GEAR_SOURCES_2026-11-16.md) — evidence-based Forever stat priorities and limitations.
+4. [Offline tests and validation](tests/README.md) — reproducible Lua/Python checks; in-game QA remains separate.
+5. [Previous QA and feature notes](FCM_v091_RELEASE_NOTES.md) — historical changes, superseded where later corrections apply.
 
-**QA4l aligns world-map gathering icons and adds map-header filters:** Live
-testing confirmed the QA4k markers finally rendered, but spots recorded in
-**Shadowglen** appeared northwest around Oracle Glade. FCM now converts the
-scrolling canvas's effective scale into the overlaid pin host's scale, so
-locations stay aligned at the correct map coordinates. It recalculates if
-the canvas scale changes when zooming. While the world map is open, use the
-**FCM Pins: On/Off** button near the top right to hide/show every gathering
-marker, or the adjacent **Herbs**, **Ore**, **Fish** and **Chests** buttons
-to turn those resource types on or off individually. These map settings do
-not affect minimap markers or saved gathering observations. Brandon
-confirmed in-game that QA4l places Shadowglen icons correctly and that the
-on-map master and category visibility controls work.
+### Current behavior worth knowing
 
-**QA4k addresses invisible world-map markers:** Spotty Dotty's live
-Teldrassil test found **45 matching saved gathering points on map 1438**,
-but no visible icons. The map ID and records were correct. FCM now parents
-the markers to the visible world-map frame, draws them over the map's detail
-layers, and still anchors positions to the scrolling map canvas for panning
-and zoom. The last map-open diagnostic persists when the map is closed to
-open FCM and reports icon render count and first-pin visibility where the
-client supports that check. Live confirmation remains necessary.
-
-**QA4j shows bag capacity:** In FCM's Item Explorer or Global Search, select a bag
-to see its slot count in the item preview and details panel. Hover an item
-row to open the game's original tooltip beside the list. FCM uses an explicit
-reference count or scans the loaded game's item tooltip; if neither supplies
-a number, it says the capacity is unavailable instead of guessing, especially
-for new Forever bags. The saved gathering database is unchanged.
-
-**QA4j world-map follow-up:** Teldrassil's two known map IDs, 41 and 1438,
-are now reconciled when displaying saved nodes. Open the map and then FCM >
-Diagnostics to see the selected map ID, how many nodes matched, the available
-saved-zone IDs and canvas dimensions. If the herbs still do not appear, send
-that diagnostic text; the UI may be using a different map surface in Forever.
-These changes have offline tests but still need live-client verification.
-
-**QA4i adds saved resource icons to the full world map:** Open a **zone** map (such as Teldrassil) and see FCM's recorded herbs, ore, fishing locations and treasure at their original map coordinates, not just the minimap. Hover for the resource and personal gather count. **FCM > Gathering > World Map: On/Off** or `/fcm gatherpins world on|off` controls this overlay independently from the minimap pin toggle. The world-map display ignores minimap view distance and near-hide distance, so saved locations remain visible across the selected zone; it is not live-spawn tracking. The regular gathering Size control scales map icons too. Up to 500 pins per selected zone are displayed, prioritizing personally confirmed observations. This preview still needs in-game validation of the Forever world-map canvas.
-
-**QA4h aligns distant gathering icons with the minimap's book markers:** Historical herb, ore, fishing and treasure icons on the directional rim are **centered on the circular border**, straddling it like the game's small book symbols, instead of floating outside it. With **FCM > Gathering > Size: 16 px** (default), rim icons display at about **12 px**, while closer in-map icons stay **16 px**. The size selector (10, 12, 14, 16, 18, 20, 24, 28 px) and `/fcm gatherpins size <8-32>` scale both; the launcher emblem does not change. Hide-within and Rim-beyond thresholds remain independently adjustable. Live WoW Forever testing is still pending.
-
-The **v0.9.1 QA4f preview** includes all QA3 features (local gathering, optional GatherMate2 import, Legacy advisor, Frost Mage weights, profession/recipe filtering, Reach Total/Craft Additional, and the Windows quota-ledger repair). Crafting now has a permanent quantity box with a live right-side estimate of owned items, casts, reagents, stock by character and eligible material transfers. Gathering draws saved account-wide nodes on the minimap using distinct resource art and circular masks where the WoW client supports them. **Distant resource markers now occupy a grouped directional compass on the outer minimap ring instead of covering the map itself.** They move onto the map when within 45 yards (adjustable), then disappear within the independently adjustable 15-yard hide distance so WoW's native tracking dots are visible. Change this using **FCM > Gathering > Rim beyond** (0, 25, 35, 45, 55, 65, 85 or 100 yards), **Hide within** (0, 5, 10, 15, 20, 25, 35 or 50 yards) and **Pins: On/Off**. Slash alternatives: `/fcm gatherpins rim <0-100>`, `/fcm gatherpins near <0-50>`, `/fcm gatherpins on|off`. Hover a saved node to see its personal gather count. Named treasure chest interactions can also be recorded after an actual loot event, subject to the game reporting the chest name. Windows companion and WoW Forever in-game behavior still require player testing. This candidate is not a published GitHub release.
+- **No bundled Zygor numerical weights.** The addon uses current Icy Veins WoW Forever **ordinal stat priorities** and keeps unvalidated numeric comparisons unavailable. Imported manual/Pawn coefficients are separately identified as provisional and need matching context. An ordering such as Spell Power > Spirit cannot be converted into numeric gain or DPS without measured evidence.
+- **Crafting quantities:** Reach Total counts the recipient's recorded finished items; Craft Additional requests new output. The recipe's output count, skill requirement, recorded bags/bank, reservations and binding matter. A request is stored locally for all characters and does **not** assign an automatic maker.
+- **Gathering pins:** Local, personally confirmed herbs/ore, named fishing schools and chests can appear on the minimap and world map, with source/quantity caveats. A named fishing school needs hover evidence, a cast and actual loot before a standing-location marker is recorded; open-water catches do not manufacture pool locations.
+- **Gold:** Public source code lets each player use **their own available AHledger data**. Nobody receives somebody else's 30-day tables or private 365-day history through GitHub. Provider retention and licensing must be respected. Quotes and listing trends do not prove completed sales.
+- **Live state:** Character snapshots, bank and profession data can be stale; the addon cannot poll game state while WoW is closed or read arbitrary Windows folders without the optional companion.
 
 ## Features
 
 - Account-wide character, inventory, professions, recipes, gold and crafting tracking.
 - First names and surnames recorded separately, stable character IDs, and non-destructive saved-data migrations.
 - Faction, ruleset and region-aware evaluation of transfer eligibility; unknown item binding and rulesets stay unverified.
-- Gear scoring, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
+- Evidence-labelled gear priority guidance, BoE protection, crafting/upgrades, talent guidance, reputation, leveling, auction data, dungeon information and search.
 - Windows companion scripts for read-only public reference import, auction reference updates and local tooling.
 - Gathering tab: account-wide personally observed herbs, ore and eligible named treasure chests, one-time read-only GatherMate2 import, minimap/zone world-map overlays, and versioned public resource snapshots.
 - Tree-specific Legacy goals and manual point/rank tracking (not automatic spending); Icy Veins WoW Forever stat-priority references for every supported spec, with no active bundled numerical weights. New explicit user scales are provisional; deprecated Zygor scales stay inactive.
-- Crafting requests accept finished-item quantities (including multi-output recipes), with a client-safe Enter/Continue popup handler.
+- Crafting requests accept finished-item quantities (including multi-output recipes), with an inline quantity preview and guarded Enter/Continue handling where an older popup is still used.
 - The Crafting tab offers a saved profession dropdown and a separate search covering learned recipes, their output items and recipe IDs only.
 - New craft requests default to **Reach Total**: only the recipient's last-scanned bags and bank count toward the target. **Craft Additional** always requests new items; older saved requests retain their original additional-item meaning. Reservations and shopping lists adjust to the needed amount.
 
 ## Installation
+
+For full Windows and first-login steps, see [Install and use FCM](docs/INSTALL_AND_USE.md).
 
 1. Back up the existing addon folder and your WoW SavedVariables before replacing code.
 2. Exit World of Warcraft and the Windows companion.
@@ -138,12 +88,12 @@ FCM **does not ship with anybody's API key**. For authenticated ForeverDB import
 - `INSTALL-QA4g.txt`: prior safe installation and marker-sizing test guide.
 - `INSTALL-QA4h.txt`: previous book-style rim placement test guide.
 - `INSTALL-QA4i.txt`: previous full world-map overlay test guide.
-- `INSTALL-QA4j.txt`: latest installation, bag-capacity and world-map diagnostic checks.
+- `INSTALL-QA4j.txt`: historical installation, bag-capacity and world-map diagnostic checks.
 - `INSTALL-QA4k.txt`: previous map-overlay layer fix and live-test instructions.
-- `INSTALL-QA4l.txt`: current map-position correction and world-map filter testing.
+- `INSTALL-QA4l.txt`: historical map-position correction and world-map filter testing.
 
 ## Important limitations
 
-Gear scores are weighted estimates, **not** simulated or measured DPS. Some procs, caps and set bonuses may not be modeled. In-game transfer permissions still must be confirmed before mailing valuable items. Recognizing rulesets depends on the game's available identity API and can remain unverified. Screenshot validation covered the faction correction and zero API errors after rescanning; not every WoW interaction was tested.
+There are **no active bundled numerical gear weights**. Guide priorities are ordinal; numerical estimates, if explicitly supplied by a player and context-matched, are **provisional**, not simulated or measured DPS. Unknown caps, procs, effects and class restrictions prevent definitive numeric comparison. In-game transfer permissions, binding and skill prerequisites still require verification before mailing valuable items. Recognizing rulesets depends on the game's available identity API. Automated checks do not replace in-game QA.
 
 The public repository excludes personal character SavedVariables, local reference snapshots, passwords, tokens and credentials. Existing source is public, but no open-source license has been selected; do not assume redistribution rights beyond those expressly granted.

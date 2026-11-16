@@ -507,7 +507,7 @@ function UI:RenderItemPreview(row)
         tostring(store.category or ""):lower()~="armor" and
         tostring(store.category or ""):lower()~="weapons" then
         -- Ordinary reagents and recipe items should not show equipment advice.
-        preview.stats:SetText("")
+        preview.stats:SetText("Crafting material - no combat stats")
     else
         preview.stats:SetText("Equipment stats not yet recorded")
     end
@@ -2631,7 +2631,7 @@ local function buildRows(ui)
             add("searchitem:"..e.id,e.name,"#"..e.id.." | "..e.group..
                 (e.itemType~="all" and " / "..e.itemType or "")..
                 (e.owned and " | Owned" or ""),
-                function() return FCM:CatalogItemDetails(e.id,ch) end)
+                function() return FCM:ReadableItemDetails(e.id,ch) end)
         end
         -- Learned recipe matches are account-wide. The Item Details pane also
         -- performs reverse-reagent lookups through ExpandedItemDetails.
@@ -2679,7 +2679,7 @@ local function buildRows(ui)
                 (selected.uncertain and "  |  Review availability" or "")..
                 (not selected.externallySourced and "  |  Reference missing" or "")
             add("item:"..tostring(entry.id),entry.name,summary,
-                function() return FCM:CatalogItemDetails(selected.id,ch) end)
+                function() return FCM:ReadableItemDetails(selected.id,ch) end)
         end
         if total==0 then
             add("item-explorer-help", "No items match these filters", "Clear filters or run the companion's Reference Data sync.",
@@ -2828,7 +2828,7 @@ local function buildRows(ui)
                     local item=result
                     add("overview-item:"..item.id,item.name,
                         "Item search: "..searchTerm.." | #"..item.id.." | "..item.group,
-                        function() return FCM:CatalogItemDetails(item.id,ch) end)
+                        function() return FCM:ReadableItemDetails(item.id,ch) end)
                 end
                 if total==0 then
                     add("overview-item-help:"..searchTerm,
@@ -2987,7 +2987,10 @@ local function buildRows(ui)
             if #eligible>0 then
             local listedCrafter=eligible[1]
             local listedPlan=FCM:CraftAvailability(r,listedCrafter)
-            add("recipe:"..r.id,r.name,(r.profession or "Craft").." | "..#eligible.." compatible crafter(s) | "..
+            local listedSkill,listedSkillNote=FCM:RecipeSkillStatus(r,listedCrafter)
+            local skillLabel=listedSkill=="ready" and "Skill checked" or "Skill needs verification"
+            add("recipe:"..r.id,r.name,(r.profession or "Craft").." | "..#eligible.." compatible learner(s) | "..
+                skillLabel.." | "..
                 (listedPlan.ready and "Materials ready" or ("Missing "..listedPlan.missing.." / verify")),function()
                 local d={"|cffffd983"..r.name.."|r","","Recipe ID: "..r.id,
                     "Profession: "..(r.profession or "Unknown"),
@@ -2995,7 +2998,8 @@ local function buildRows(ui)
                     "Edit Qty above to preview before requesting. Nothing is sent automatically.",
                     "Material estimates scale to the required recipe casts.","","Known by:"}
                 for _,c in ipairs(eligible) do
-                    d[#d+1]="  "..FCM:DisplayCharacter(c)
+                    local status,note=FCM:RecipeSkillStatus(r,c)
+                    d[#d+1]="  "..FCM:DisplayCharacter(c).." ["..status.."] - "..note
                 end
                 local crafter=eligible[1]
                 local mode=FCM:DefaultCraftRequestMode()
@@ -3032,6 +3036,10 @@ local function buildRows(ui)
                 end
                 d[#d+1]=""
                 d[#d+1]="Preview crafter: "..FCM:DisplayCharacter(crafter)
+                if listedSkill~="ready" then
+                    d[#d+1]=color(listedSkillNote,"ffb66e")
+                    d[#d+1]="Recorded materials are not proof of sufficient profession skill."
+                end
                 if preview.casts==0 then
                     d[#d+1]=color("Target already met: no crafts or materials needed.","77e2a0")
                     d[#d+1]="No transfers required for this target."
@@ -3164,9 +3172,13 @@ local function buildRows(ui)
             local recipientName = recipient and FCM:DisplayCharacter(recipient) or "Recipient record missing"
             local crafterName = crafter and FCM:DisplayCharacter(crafter) or "None recorded"
             local mine = canCraft
+            local skillState,skillNote
+            if recipe and loggedIn then
+                skillState,skillNote=FCM:RecipeSkillStatus(recipe,loggedIn)
+            end
             local wanted=FCM:CraftRequestQuantity(req)
             local runs,produced,yieldPerCraft,needed,owned,known,mode,stock=FCM:CraftRequestRuns(recipe,req,recipient)
-            local title = (mine and "[CAN CRAFT] " or "") ..
+            local title = (mine and (skillState=="verify" and "[SKILL UNVERIFIED] " or "[CAN CRAFT] ") or "") ..
                 (mode=="total" and ("TARGET "..wanted.."x ") or ("MAKE "..wanted.."x ")) .. recipeName
             local summary = "For: " .. short(recipientName,18) .. " | "..needed.." more needed / "..
                 runs.." craft(s) | " .. tostring(#entry.eligible).." eligible maker(s)"
@@ -3190,7 +3202,9 @@ local function buildRows(ui)
                     "Best materials preview: "..crafterName,
                     "Requested: " .. FCM:Age(req.created), "Status: " .. (req.status or "requested"), ""}
                 if canCraft then
-                    d[#d+1]="|cff67e89bYour logged-in character knows this recipe and is compatible.|r"
+                    d[#d+1]=(skillState=="verify" and "|cffffb66e" or "|cff67e89b")..
+                        "Your logged-in character knows this recipe and is compatible. "..
+                        tostring(skillNote or "Profession skill still needs a live check.").."|r"
                 elseif #entry.eligible==0 then
                     d[#d+1]="No eligible learned crafter recorded. Open the profession pane on a compatible toon."
                 else

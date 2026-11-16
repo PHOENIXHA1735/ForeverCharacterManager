@@ -408,6 +408,131 @@ end
 local function field(lines,label,value)
     if value~=nil and clean(value)~="" then lines[#lines+1]=label..": "..clean(value) end
 end
+-- Human-readable, evidence-labelled detail view shared by Item Explorer and
+-- Global Search. Reference listings are not proof of a live drop or sale.
+function FCM:ReadableItemDetails(itemID,character)
+    local id=tonumber(itemID)
+    if not id then return "Invalid item ID" end
+    local item=(self.externalData and self.externalData.items and
+        (self.externalData.items[id] or self.externalData.items[tostring(id)])) or {}
+    local lines={}
+    local function header(name)
+        if #lines>0 then lines[#lines+1]="" end
+        lines[#lines+1]="|cffffd983"..name.."|r"
+    end
+    local function value(s)
+        return s~=nil and tostring(s)~="" and tostring(s) or nil
+    end
+    header("HOW TO GET IT")
+    local source=value(item.where) or value(item.soldBy) or
+        value(item.vendorSource) or value(item.acquisitionSource)
+    if id==5503 then
+        -- Curated, item-specific ForeverDB container reference; a container
+        -- association is not a measured drop rate or location.
+        lines[#lines+1]="Giant Clam container - Seen in Forever (ForeverDB item reference)."
+        lines[#lines+1]="Source: https://foreverdb.net/item/5503"
+    elseif source then
+        lines[#lines+1]="Reported reference source: "..source
+        lines[#lines+1]="Availability and location not independently confirmed in this session."
+    else
+        lines[#lines+1]="No acquisition location in the imported data yet."
+    end
+    if value(item.availabilityNote) then lines[#lines+1]=item.availabilityNote end
+    if item.betaEvent then
+        lines[#lines+1]="Historical beta-event item; availability at launch unverified."
+    end
+
+    local related={}
+    if type(self.ItemRelations)=="function" then
+        local ok,result=pcall(self.ItemRelations,self,id)
+        if ok and type(result)=="table" then related=result end
+    end
+    header("CRAFTING & USES")
+    local uses=related.usedIn or {}
+    local made=related.producedBy or {}
+    if #uses==0 and #made==0 then
+        lines[#lines+1]="No recorded crafting relationships for this item."
+    end
+    for i=1,math.min(12,#uses) do
+        local record=uses[i]
+        lines[#lines+1]="Used in: "..tostring(record.name or "Unknown recipe")..
+            (record.profession and (" ("..record.profession..")") or "")..
+            (tonumber(record.count) and ("; "..record.count.." per craft") or "")
+    end
+    for i=1,math.min(8,#made) do
+        local record=made[i]
+        lines[#lines+1]="Produced by: "..tostring(record.name or "Unknown recipe")..
+            (record.profession and (" ("..record.profession..")") or "")
+    end
+
+    header("YOUR CHARACTERS")
+    local owned=related.owned or {}
+    if #owned==0 then
+        lines[#lines+1]="No owned copies recorded. Offline inventory may be incomplete."
+    else
+        lines[#lines+1]="Last-recorded total: "..tostring(related.total or "unknown")
+        for i=1,math.min(16,#owned) do
+            local record=owned[i]
+            local who=record.char and
+                (type(self.DisplayCharacter)=="function" and self:DisplayCharacter(record.char) or
+                 record.char.name or record.char.key) or record.name or "Unknown character"
+            lines[#lines+1]=tostring(who).." / "..tostring(record.location or "unknown storage")..
+                ": "..tostring(record.count or 0)
+        end
+    end
+
+    header("AUCTION HOUSE")
+    local quote
+    if type(self.PriceQuote)=="function" then
+        local ok,result=pcall(self.PriceQuote,self,id,character)
+        if ok and type(result)=="table" then quote=result end
+    end
+    local median=quote and tonumber(quote.median or quote.price)
+    if median and median>0 then
+        local money=(type(self.MoneyLabel)=="function" and
+            self:MoneyLabel(median)) or (tostring(median).." copper")
+        lines[#lines+1]="Recorded listing median: "..money
+        if value(quote.market) then lines[#lines+1]="Market: "..quote.market end
+        local at=tonumber(quote.observedAt or quote.updated)
+        if at and at>0 and type(date)=="function" then
+            local ok,formatted=pcall(date,"%b %d, %Y %I:%M %p",at)
+            if ok and value(formatted) then lines[#lines+1]="Last observation: "..formatted end
+        end
+        lines[#lines+1]="Auction snapshots are asking prices, not confirmed sales."
+    else
+        lines[#lines+1]="No current auction quote recorded for this market."
+    end
+
+    header("ITEM FACTS")
+    lines[#lines+1]="Item: "..tostring(item.name or ("Item #"..id)).." (#"..id..")"
+    lines[#lines+1]="Quality: "..self:ItemQualityName(item)
+    if tonumber(item.itemLevel or item.ilvl) then
+        lines[#lines+1]="Item level: "..tostring(item.itemLevel or item.ilvl)
+    end
+    if tonumber(item.requiredLevel or item.minLevel) then
+        lines[#lines+1]="Required level: "..tostring(item.requiredLevel or item.minLevel)
+    end
+    local capacity,isContainer=self:ContainerCapacity(id,item)
+    if isContainer then
+        lines[#lines+1]=capacity and ("Bag capacity: "..capacity.." slots") or
+            "Bag capacity unavailable in current data"
+    end
+    if value(item.subclass) then lines[#lines+1]="Subtype: "..item.subclass end
+    if character then
+        lines[#lines+1]="Equipment suitability requires in-game verification."
+    end
+
+    header("ABOUT THIS DATA")
+    lines[#lines+1]="Reference: "..tostring(item.sourceProvider or "Local client/ForeverDB records")
+    if value(item.sourceStatus) then lines[#lines+1]=item.sourceStatus end
+    if value(item.referenceCheckedAt) then
+        lines[#lines+1]="Reference review: "..item.referenceCheckedAt
+    end
+    lines[#lines+1]="Stock is last-scanned, not synchronized live across characters."
+    lines[#lines+1]="No missing location, drop rate or sale price is invented."
+    return table.concat(lines,"\n")
+end
+
 function FCM:CatalogItemDetails(id,ch)
     id=tonumber(id)
     if not id then return "Invalid item ID" end

@@ -196,7 +196,15 @@ function FCM:FarmAdviceLines(itemID,quantity,character,maxRows)
             rows[#rows+1]=""
             rows[#rows+1]="AH median (cached): "..each.." each | approx "..total.." total"
             local observed=plan.price.observedAt or plan.price.updated
-            local when=self.TimestampLabel and self:TimestampLabel(observed) or str(observed or "timestamp unknown")
+            local when=self.TimestampLabel and self:TimestampLabel(observed) or nil
+            if not when then
+                local epoch=tonumber(observed)
+                if epoch and epoch>0 and type(date)=="function" then
+                    local ok,text=pcall(date,"%b %d, %Y %I:%M %p",epoch)
+                    if ok and type(text)=="string" then when=text end
+                end
+            end
+            when=when or "Timestamp unavailable"
             rows[#rows+1]="Market data: "..when..
                 " | Listings are not guaranteed sales or purchases."
             if type(self.MarketItemAdvice)=="function" then

@@ -1,8 +1,9 @@
 FCM LOCAL AUCTION-HOUSE SCAN ARCHIVE
 
 This folder contains PRIVATE local auction-house history.
-RawScans stores personal scans; MarketTables stores provider tables only when
-their retention has been explicitly authorized for personal use.
+RawScans stores personal scans. MarketTables is excluded by default; provider
+tables may be archived only using -IncludeProviderTables when their retention
+has been explicitly authorized for personal use.
 Permission to retain never implies permission to redistribute.
 
 The Windows folder setup script creates the following directories:

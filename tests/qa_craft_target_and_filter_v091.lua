@@ -14,7 +14,7 @@ local function setup()
         bags={linen={itemID=101,count=6,bound=false},fish={itemID=102,count=9,bound=false}},bank={}}
     local recipient={key="mage",name="Frosty Bit",faction="Alliance",recipes={},
         bags={linen={itemID=101,count=2,bound=false}},
-        bank={finished={itemID=901,count=2,bound=false},food={itemID=902,count=1,bound=false}}}
+        bank={finished={itemID=901,count=2,bound=false},food={itemID=902,count=1,bound=false}},bagsStamp=12345,bankStamp=12345}
     local other={key="other",name="Another Mage",faction="Alliance",recipes={},bags={},
         bank={finished={itemID=901,count=100,bound=false}}}
     local fcm={db={characters={tailor=tailor,mage=recipient,other=other},craftingQueue={},
@@ -25,6 +25,8 @@ local function setup()
     function fcm:Now() return 12345 end
     function fcm:DisplayCharacter(ch) return ch and ch.name or "Unknown" end
     function fcm:CanCollaborate(a,b) return a and b and a.faction==b.faction end
+    function fcm:InFactionView(ch) return ch~=nil end
+    function fcm:VisibleCharacters() return self:Characters() end
     function fcm:NormalizeFaction(v) return v end
     function fcm:Refresh() end
     assert(loadfile("ForeverCharacterManager/Crafting.lua"))("ForeverCharacterManager",fcm)

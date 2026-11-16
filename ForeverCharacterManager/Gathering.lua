@@ -840,7 +840,89 @@ function FCM:CaptureTreasureTooltip()
     local label=GameTooltipTextLeft1
     if not label or type(label.GetText)~="function" then return end
     local ok,name=pcall(label.GetText,label)
-    if ok then self:RememberTreasureHover(name) end
+    if ok then
+        self:RememberTreasureHover(name)
+        self:RememberFishingHover(name)
+    end
+end
+
+local lootObjectEvidence
+
+-- A named pool tooltip is evidence of a possible fishing school, not a
+-- completed gathering event. Keep it only briefly and require a subsequent
+-- Fishing cast and real loot before recording the player's standing location.
+function FCM:RememberFishingHover(value)
+    if type(issecretvalue)=="function" and issecretvalue(value) then return end
+    local name=safeName(value)
+    if not name then return end
+    local lower=name:lower()
+    if not lower:find("school",1,true) and not lower:find("pool",1,true) then return end
+    self._fishingHover={name=name,at=self:Now()}
+end
+
+function FCM:FishingStatus()
+    local lines={"Fishing school diagnostics"}
+    if self._fishingHover then
+        lines[#lines+1]="Tooltip: "..self._fishingHover.name
+    else
+        lines[#lines+1]="Tooltip: no verified named school"
+    end
+    if self._fishingCast then
+        lines[#lines+1]="Cast: "..self._fishingCast.name
+    end
+    if self._fishingLastSpellID then
+        lines[#lines+1]="Last spell ID: "..tostring(self._fishingLastSpellID)
+    end
+    if self._fishingLastResult then
+        lines[#lines+1]=self._fishingLastResult
+    end
+    return table.concat(lines," | ")
+end
+
+local function isFishingSpell(spellID)
+    if spellKinds[spellID]=="fishing" then return true end
+    if C_Spell and type(C_Spell.GetSpellName)=="function" then
+        local ok,name=pcall(C_Spell.GetSpellName,spellID)
+        if ok and type(name)=="string" and name:lower()=="fishing" then return true end
+    end
+    return false
+end
+
+local function playerGatherPosition()
+    if not C_Map or type(C_Map.GetBestMapForUnit)~="function" or
+       type(C_Map.GetPlayerMapPosition)~="function" then return end
+    local mapID=FCM:Try(C_Map.GetBestMapForUnit,"player")
+    if not number(mapID,1,200000) then return end
+    local pos=FCM:Try(C_Map.GetPlayerMapPosition,mapID,"player")
+    if not pos or type(pos.GetXY)~="function" then return end
+    local x,y=FCM:Try(pos.GetXY,pos)
+    if type(x)~="number" or type(y)~="number" or x<0 or x>1 or y<0 or y>1 then return end
+    return mapID,math.floor(x*10000+0.5),math.floor(y*10000+0.5)
+end
+
+function FCM:RecordFishingSchoolLoot()
+    local cast=self._fishingCast
+    if not cast then return end
+    -- A single loot event can be raised twice: consume this cast immediately.
+    self._fishingCast=nil
+    if self:Now()-(cast.at or 0)>120 then
+        self._fishingLastResult="Fishing cast expired; no school recorded"
+        return
+    end
+    -- Reject known NPC sources; accept unavailable GUID APIs only with both
+    -- a recent named tooltip and a real loot event.
+    if lootObjectEvidence and lootObjectEvidence()==false then
+        self._fishingLastResult="Creature loot; no fishing school recorded"
+        return
+    end
+    if not cast.mapID or not cast.x or not cast.y then
+        self._fishingLastResult="Fishing map position unavailable; no marker recorded"
+        return
+    end
+    self:AddGatherNode("fishing",cast.mapID,cast.x,cast.y,cast.name,"personal")
+    self._fishingLastResult="Recorded "..cast.name..
+        " (standing location; pool/bobber intersection not independently confirmed)"
+    if self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
 end
 
 function FCM:StartTreasureTracking()
@@ -849,10 +931,22 @@ function FCM:StartTreasureTracking()
     local ok=pcall(GameTooltip.HookScript,GameTooltip,"OnShow",function()
         FCM:CaptureTreasureTooltip()
     end)
-    if ok then self._treasureTooltipHooked=true end
+    if ok then
+        self._treasureTooltipHooked=true
+        -- Some Forever builds populate a game-object tooltip title after
+        -- OnShow. Recheck while it is displayed so a named fishing pool is
+        -- observed before the next cast; hover alone never creates a node.
+        pcall(GameTooltip.HookScript,GameTooltip,"OnUpdate",function(_,elapsed)
+            FCM._gatherTooltipElapsed=(FCM._gatherTooltipElapsed or 0)+
+                (tonumber(elapsed) or 0)
+            if FCM._gatherTooltipElapsed<0.15 then return end
+            FCM._gatherTooltipElapsed=0
+            FCM:CaptureTreasureTooltip()
+        end)
+    end
 end
 
-local function lootObjectEvidence()
+lootObjectEvidence=function()
     if type(GetLootSourceInfo)~="function" or type(GetNumLootItems)~="function" then
         return nil -- Older clients can still use the named-tooltip fallback.
     end
@@ -980,14 +1074,34 @@ function FCM:GatherEvent(event,...)
             self:RememberTreasureHover(target)
         end
         local kind=spellKinds[spellID]
+        if isFishingSpell(spellID) then
+            self._fishingLastSpellID=spellID
+            self._fishingCast=nil
+            local hover=self._fishingHover
+            if hover and self:Now()-(hover.at or 0)<=8 then
+                local mapID,x,y=playerGatherPosition()
+                self._fishingCast={name=hover.name,at=self:Now(),guid=castGUID,
+                    spellID=spellID,mapID=mapID,x=x,y=y}
+                self._fishingLastResult="Cast: "..hover.name.." (awaiting bobber loot)"
+            else
+                self._fishingLastResult="Fishing cast without a recent named school tooltip"
+            end
+            return
+        end
         if not kind then return end
         if type(issecretvalue)=="function" and issecretvalue(target) then return end
         pending={kind=kind,name=safeName(target),guid=castGUID,spellID=spellID,at=self:Now()}
     elseif event=="UNIT_SPELLCAST_FAILED" or event=="UNIT_SPELLCAST_INTERRUPTED" then
         local unit,castGUID=...
         if unit=="player" and pending and pending.guid==castGUID then pending=nil end
+        if unit=="player" and event=="UNIT_SPELLCAST_FAILED" and
+            self._fishingCast and self._fishingCast.guid==castGUID then
+            self._fishingCast=nil
+            self._fishingLastResult="Fishing cast failed; no school recorded"
+        end
     elseif event=="LOOT_READY" or event=="LOOT_OPENED" then
         self:RecordTreasureLoot()
+        self:RecordFishingSchoolLoot()
     elseif event=="UNIT_SPELLCAST_SUCCEEDED" then
         local unit,castGUID,spellID=...
         if unit~="player" or not pending or pending.spellID~=spellID or

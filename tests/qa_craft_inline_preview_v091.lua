@@ -6,7 +6,7 @@ end
 local bag={id=6686,name="Red Linen Bag",outputID=5766,quantity=1,
     profession="Tailoring",learned=true,reagents={{itemID=2996,count=4}}}
 local mage={key="mage",name="Frosty Bit",faction="Alliance",recipes={},
-    bags={},bank={finished={itemID=5766,count=2,bound=false}}}
+    bags={},bank={finished={itemID=5766,count=2,bound=false}},bagsStamp=12345,bankStamp=12345}
 local warlock={key="tailor",name="Tator",faction="Alliance",recipes={[6686]=bag},bags={},bank={}}
 local fcm={db={characters={mage=mage,tailor=warlock},craftingQueue={},settings={}},
     _characters={mage,warlock},currentKey="mage"}

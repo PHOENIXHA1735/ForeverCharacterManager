@@ -12,8 +12,15 @@ in. It needs no running game. Disable prevents future runs without deleting
 archives or interrupting an active safe copy. The task ignores overlapping
 runs, and a file lock also covers manual invocations.
 
+By default, Sync and the optional task archive ONLY personal AHledger.lua
+SavedVariables. To archive downloaded AHledger_Data.lua provider tables, a
+user must independently have retention permission and explicitly pass
+`-IncludeProviderTables` when invoking Sync or Enable; this is never a public
+or unconditional 365-day retention right. Do not use that switch without
+authorized cache/retention terms.
+
 RawScans holds personal SavedVariables snapshots. MarketTables holds downloaded
-AHledger_Data.lua snapshots. Source-path hashes separate accounts without
+AHledger_Data.lua snapshots **only after authorized opt-in**. Source-path hashes separate accounts without
 putting account identifiers in filenames. Metadata contains private source
 paths locally. Archives use SHA-256 and UTC metadata, exclusive copying,
 flushed temporary files and same-volume publication. No retention deletion runs.

@@ -12,7 +12,7 @@ end
 local core=assert(io.open(base..'Core.lua','r')):read('*a')
 local partial=assert(core:match('^(.-)local f = CreateFrame%('),'core methods boundary')
 local FCM={}
-assert(load(partial))('ForeverCharacterManager',FCM)
+assert((loadstring or load)(partial))('ForeverCharacterManager',FCM)
 local function copy(t)
  local o={};for k,v in pairs(t) do o[k]=v end;return o
 end

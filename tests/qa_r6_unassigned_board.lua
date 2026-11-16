@@ -7,7 +7,7 @@ local coreFile=assert(io.open("ForeverCharacterManager/Core.lua","r"))
 local source=coreFile:read("*a");coreFile:close()
 local partial=assert(source:match("^(.-)local f = CreateFrame%(") )
 local FCM={}
-assert(load(partial))("ForeverCharacterManager",FCM)
+assert((loadstring or load)(partial))("ForeverCharacterManager",FCM)
 
 local recipe={id=4501,name="Training Vest",outputID=5501,quantity=1,
     profession="Tailoring",learned=true,complex=false,reagents={{itemID=6001,count=2}}}
