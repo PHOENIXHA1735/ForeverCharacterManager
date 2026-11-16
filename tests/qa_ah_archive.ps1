@@ -27,8 +27,25 @@ try {
     catch { if ($_.Exception.Message -notmatch 'Archival errors') { throw } }
 } finally { $input.Dispose() }
 if (@(Get-ChildItem -LiteralPath (Join-Path $addon 'AHHistory\Incoming') -File).Count) { throw 'Incomplete copy published' }
+# Provider table retention requires an explicit opt-in, even for named input.
+$providerSource=Join-Path $sourceDir 'AHledger_Data.lua'
+Set-Content -LiteralPath $providerSource -Value 'AHledgerData = { synthetic = true }'
+try {
+    & $script -AddonRoot $addon -Sources @($providerSource) -SkipAnalysis
+    throw 'Expected non-opted-in provider-table archival to be refused'
+} catch {
+    if ($_.Exception.Message -notmatch 'Archival errors') { throw }
+}
+$providerDir=Join-Path $addon 'AHHistory\MarketTables'
+if (@(Get-ChildItem -LiteralPath $providerDir -Recurse -Filter '*.lua').Count -ne 0) {
+    throw 'Provider table copied without explicit retention opt-in'
+}
+& $script -AddonRoot $addon -Sources @($providerSource) -IncludeProviderTables -SkipAnalysis
+if (@(Get-ChildItem -LiteralPath $providerDir -Recurse -Filter '*.lua').Count -ne 1) {
+    throw 'Explicit synthetic provider-table opt-in did not work'
+}
 $disableProbe=@{Called=$false}
 function Disable-ScheduledTask { param($TaskName,$ErrorAction) if ($TaskName -ne 'FCM-AHHistory') { throw 'Wrong task' }; $disableProbe.Called=$true }
 & $script -AddonRoot $addon -Mode Disable
 if (-not $disableProbe.Called -or @(Get-ChildItem -LiteralPath (Join-Path $addon 'AHHistory\RawScans') -Recurse -Filter '*.lua').Count -ne 2) { throw 'Disable changed archive contents' }
-Write-Output 'PASS: initial copy, deduplication, preservation, UTC/hash metadata, change retention, overlap lock and locked-source cleanup. Synthetic fixture only.'
+Write-Output 'PASS: initial copy, deduplication, preservation, UTC/hash metadata, change retention, overlap lock and locked-source cleanup. Synthetic fixture only, including provider opt-in.'
