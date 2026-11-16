@@ -1,19 +1,19 @@
 # Installing and using Forever Character Manager
 
-Updated 2026-11-16. This guide covers the **v0.9.1 development source**. It is not a claim that every feature has been live-tested or included in a published GitHub release.
+Updated 2026-11-16. This guide covers **v0.9.1**, including optional companion features that require separate setup. Automated tests passed; some individual in-game paths, client APIs and background schedules still need validation on each installation.
 
 ## 1. Download and install the addon
 
 1. Exit World of Warcraft fully. Close the Windows FCM companion if it is open.
 2. Back up the existing `Interface\\AddOns\\ForeverCharacterManager` folder and the game's `WTF` SavedVariables. Do not delete or replace the `WTF` directory.
-3. Download the intended tested source/ZIP from the [FCM repository](https://github.com/PHOENIXHA1735/ForeverCharacterManager). If using **Code > Download ZIP**, unzip it first.
+3. Download the intended v0.9.1 package from [GitHub Releases](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases), or the latest source from the [FCM repository](https://github.com/PHOENIXHA1735/ForeverCharacterManager). The GitHub **Source code (zip)** contains the outer repository folder; unzip it first.
 4. Copy the **inner** `ForeverCharacterManager` directory (the one containing `ForeverCharacterManager.toc`) into:
    `C:\\Program Files (x86)\\World of Warcraft\\_forever_\\Interface\\AddOns\\`
 5. Merge with the existing folder, replacing matching addon **program files**, but retain the existing private `AHHistory` folder and companion configuration.
 6. Do **not** erase local `WTF` records, `FCM_DB`, `FCM_GatherExport`, API credentials, or local generated data. Before accepting any overwrite of `ExternalData.generated.lua`, `AHPrices.generated.lua` or `AHHistory.generated.lua`, keep a backup.
 7. Log into WoW. Type `/fcm`, then open **Diagnostics** to verify the addon loads without API errors.
 
-There should be a single addon folder, not `ForeverCharacterManager/ForeverCharacterManager/ForeverCharacterManager`. The game's displayed version can remain `0.9.1` during QA patches; compare the source commit/test notes when checking freshness.
+There should be a single addon folder, not `ForeverCharacterManager/ForeverCharacterManager/ForeverCharacterManager`. The game's displayed version is `0.9.1`; when diagnosing a problem, compare the actual source commit or release tag as well as the version number.
 
 ### First scan and cross-character information
 
