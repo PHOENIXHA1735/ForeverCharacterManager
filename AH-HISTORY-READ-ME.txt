@@ -21,12 +21,17 @@ It verifies FCM exists, then creates these folders if missing:
 
 Existing folders and files are left untouched. Running it again is safe.
 
-NOT ENABLED: No scheduled copy of AHledger.lua, no historical scan imports,
-no cleanup/retention automation, no NAS or other backup, and no restrictive
-Windows permissions. We will design those separately when requested.
+The folder SETUP command only creates directories. It does not start a
+scheduled task or download anything. The separately installed
+FCM-Companion/FCM-AHHistory.ps1 offers manual Sync and optional 30-minute
+Enable/Disable/Status task controls. You must explicitly enable a task.
+The source code and GitHub installation do not activate the task for you.
 
-Store ONLY personally collected AH scans here. Do not archive downloaded
-AHledger provider price tables or any expired externally sourced price data.
+By default, FCM archives ONLY your locally saved AHledger.lua scans.
+AHledger_Data.lua downloaded provider tables are excluded. Provider
+retention beyond cache expiry requires explicit authorization and the
+- IncludeProviderTables opt-in (without the space after the dash).
+Never redistribute provider raw tables or private data.
 
 When updating FCM, merge the new addon files into the existing folder; do
 not delete the entire ForeverCharacterManager directory first. The current
