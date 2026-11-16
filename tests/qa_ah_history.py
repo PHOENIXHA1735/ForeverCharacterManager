@@ -105,5 +105,19 @@ class HistoryTests(unittest.TestCase):
             self.assertTrue(private(p),p)
         self.assertFalse(private('ForeverCharacterManager/GoldAdvisor.lua'))
 
+    def test_confirmed_sales_are_separate_and_deduplicated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'RawScans').mkdir()
+            p=root/'RawScans'/'synthetic.lua'
+            text='AHledgerDB={ledger={{s=1,t=1800000000,k="sale",id=1,q=2,p=1000,cut=50,dep=10},{s=2,t=1800000000,k="post",id=1,q=2,p=1000},{s=3,t=1800000000,k="sale",q=1,p=200,cut=10,dep=2}}}'
+            p.write_text(text)
+            Path(str(p)+'.json').write_text(json.dumps({'sourceId':'synthetic','sha256':hashlib.sha256(p.read_bytes()).hexdigest().upper(),'sourceLength':len(p.read_bytes())}))
+            db=h.connect(':memory:')
+            h.import_sales(db,root,NOW);h.import_sales(db,root,NOW)
+            sales=h.personal_sales(db,NOW,ZoneInfo('America/Los_Angeles'))['1']
+            self.assertEqual((sales['events'],sales['units'],sales['netProceeds'],sales['refundedDeposits']),(1,2,950,10))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM observations').fetchone()[0],0)
+            self.assertEqual(h.personal_sales(db,NOW,ZoneInfo('America/Los_Angeles'))['0']['netProceeds'],190)
+
 
 if __name__=='__main__': unittest.main()

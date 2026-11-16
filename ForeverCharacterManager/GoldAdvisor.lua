@@ -217,5 +217,16 @@ function G:Rows(ch)
     end
     add('gold-times','Best Days and Times','Available inside each item detail | '..tostring(FCM_AHHistory and FCM_AHHistory.timezone or 'timezone unavailable'),
         'Weekday comparisons require at least 10 observations across 4 dates per bucket. Hour comparisons require at least 10 observations across 5 dates. At least two supported buckets are compared. Prices are normalized against each UTC day to reduce long-term trend bias. Sparse or stale evidence yields no timing recommendation. Personal confirmed sales are not inferred from listings.')
+    add('gold-personal-sales','Confirmed Personal Sales | market unassigned','Separate account ledger | excluded from market averages and rankings',
+        'These are recorded sale-mail events, separate from listing prices and estimated demand. The ledger does not record region/ruleset/faction, so FCM cannot safely assign these events to a market. Recorded timestamps may reflect mail collection and are not used as sale-hour evidence. Net proceeds subtract the recorded AH cut; refunded deposits are listed separately. Acquisition costs are unknown, so proceeds are not profit.')
+    local saleIds={}
+    for id in pairs(FCM_AHHistory and FCM_AHHistory.personalSales or {}) do saleIds[#saleIds+1]=id end
+    table.sort(saleIds,function(a,b)return tonumber(a)<tonumber(b) end)
+    for i=1,math.min(50,#saleIds) do
+        local id=saleIds[i];local s=FCM_AHHistory.personalSales[id]
+        add('personal-sale:'..id,tonumber(id)==0 and 'Unresolved item sales (may contain multiple items)' or (FCM.ItemName and FCM.ItemName(tonumber(id))) or ('Item #'..id),
+            tostring(s.events)..' confirmed records | '..tostring(s.units)..' units | net proceeds '..money(s.netProceeds),
+            'Market unassigned; excluded from faction/region comparisons.\nGross: '..money(s.gross)..' | AH cut: '..money(s.cut)..' | Refunded deposits: '..money(s.refundedDeposits)..'\nLatest recorded event: '..tostring(s.latestRecordedLocal)..' '..tostring(FCM_AHHistory.timezone)..'\nAcquisition cost and exact sale time are unknown. These are proceeds, not profit.')
+    end
     return rows
 end

@@ -61,8 +61,12 @@ including DST rules. Relative daily prices reduce long-term trend bias. At least
 two adequately sampled buckets are required: 10 observations on 4 dates for a
 weekday, or 10 observations on 5 dates for an hour. These are descriptive
 listing-price patterns, not proven causal effects or guaranteed buying/selling
-windows. Confirmed personal sale analysis is not implemented; listing snapshots
-are never represented as completed sales.
+windows. Confirmed personal sale-mail records are summarized separately by item,
+with gross, recorded cut, net proceeds and refunded deposits. The ledger lacks
+market identity, so these records remain account-scoped and are excluded from
+market statistics/rankings. Recorded times are not assumed to be exact sale times.
+Acquisition costs are unknown: proceeds are never labeled profit. Listing
+snapshots are never represented as completed sales.
 
 Tests: qa_ah_archive.ps1 (PowerShell 5.1); qa_ah_history.py; qa_gold_advisor.lua
 (Lua 5.1); check_private_paths.py. All committed fixtures are synthetic.

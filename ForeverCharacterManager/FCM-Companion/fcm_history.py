@@ -177,7 +177,38 @@ def connect(path):
     db = sqlite3.connect(path)
     db.execute('CREATE TABLE IF NOT EXISTS archives(hash TEXT PRIMARY KEY)')
     db.execute('CREATE TABLE IF NOT EXISTS observations(market TEXT,item INTEGER,ts INTEGER,kind TEXT,price REAL,low REAL,supply REAL,pace REAL, PRIMARY KEY(market,item,ts,kind))')
+    db.execute('CREATE TABLE IF NOT EXISTS sale_archives(hash TEXT PRIMARY KEY)')
+    db.execute('CREATE TABLE IF NOT EXISTS sales(source TEXT,seq INTEGER,ts INTEGER,item INTEGER,qty INTEGER,gross INTEGER,cut INTEGER,deposit INTEGER,PRIMARY KEY(source,seq,ts,item))')
     return db
+
+
+def import_sales(db, history, now):
+    for path in sorted((history / 'RawScans').rglob('*.lua')):
+        try:
+            content=path.read_bytes()
+            digest=hashlib.sha256(content).hexdigest().upper()
+            meta=json.loads(Path(str(path)+'.json').read_text(encoding='utf-8-sig'))
+            if meta['sha256']!=digest or meta['sourceLength']!=len(content): continue
+            marker='v2:'+digest
+            if db.execute('SELECT 1 FROM sale_archives WHERE hash=?',(marker,)).fetchone(): continue
+            data=LuaData(content.decode('utf-8-sig')).database()
+            with db:
+                for event in data.get('ledger',{}).values():
+                    if not isinstance(event,dict) or event.get('k')!='sale': continue
+                    seq,ts,item,qty,gross,cut,deposit=(int(event.get(k,0)) for k in ('s','t','id','q','p','cut','dep'))
+                    if min(seq,qty,gross)<=0 or item<0 or min(cut,deposit)<0 or cut>gross or not 946684800<=ts<=now: continue
+                    # Account-scoped only: the ledger format has no market identity.
+                    db.execute('INSERT OR IGNORE INTO sales VALUES(?,?,?,?,?,?,?,?)',(meta['sourceId'],seq,ts,item,qty,gross,cut,deposit))
+                db.execute('INSERT INTO sale_archives VALUES(?)',(marker,))
+        except (ValueError,KeyError,TypeError,OSError,UnicodeError):
+            continue
+
+
+def personal_sales(db, now, zone):
+    result={}
+    for item,events,qty,gross,cut,deposit,latest in db.execute('SELECT item,COUNT(*),SUM(qty),SUM(gross),SUM(cut),SUM(deposit),MAX(ts) FROM sales WHERE ts>? AND ts<=? GROUP BY item',(now-365*DAY,now)):
+        result[str(item)]=dict(events=events,units=qty,gross=gross,cut=cut,netProceeds=gross-cut,refundedDeposits=deposit,latestRecordedUtc=latest,latestRecordedLocal=datetime.fromtimestamp(latest,UTC).astimezone(zone).isoformat())
+    return result
 
 
 def import_archives(db, history, now):
@@ -288,7 +319,7 @@ def compact(data, allowed):
             buckets = {mode: {k: v for k, v in buckets.items() if v['adequate']} for mode, buckets in s['timing'].items()}
             if any(buckets.values()): timing_data.setdefault(market, {})[item] = buckets
         packed[market] = '\n'.join(lines)
-    result = dict(schema=1, generatedUtc=data['generatedUtc'], timezone=data['timezone'], packed=packed, timing=timing_data)
+    result = dict(schema=1, generatedUtc=data['generatedUtc'], timezone=data['timezone'], packed=packed, timing=timing_data, personalSales=data.get('personalSales',{}))
     return '-- Private local FCM history. Never distribute.\nFCM_AHHistory=' + lua(result) + '\n'
 
 
@@ -304,8 +335,10 @@ def main():
     now = int(datetime.now(UTC).timestamp())
     with connect(history / 'Parsed' / 'observations.sqlite3') as db:
         imported, rejected = import_archives(db, history, now)
+        import_sales(db, history, now)
         markets = summarize(db, now, zone)
-    data = dict(schema=1, generatedUtc=now, timezone=args.timezone, markets=markets)
+        sales=personal_sales(db,now,zone)
+    data = dict(schema=1, generatedUtc=now, timezone=args.timezone, markets=markets,personalSales=sales)
     atomic(history / 'Index' / 'summary.json', json.dumps(data, separators=(',', ':')))
     market = args.market
     if not market:
