@@ -846,6 +846,8 @@ function FCM:CaptureTreasureTooltip()
     end
 end
 
+local lootObjectEvidence
+
 -- A named pool tooltip is evidence of a possible fishing school, not a
 -- completed gathering event. Keep it only briefly and require a subsequent
 -- Fishing cast and real loot before recording the player's standing location.
@@ -944,7 +946,7 @@ function FCM:StartTreasureTracking()
     end
 end
 
-local function lootObjectEvidence()
+lootObjectEvidence=function()
     if type(GetLootSourceInfo)~="function" or type(GetNumLootItems)~="function" then
         return nil -- Older clients can still use the named-tooltip fallback.
     end
