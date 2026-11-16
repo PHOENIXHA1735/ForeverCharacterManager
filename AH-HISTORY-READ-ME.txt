@@ -30,7 +30,7 @@ The source code and GitHub installation do not activate the task for you.
 By default, FCM archives ONLY your locally saved AHledger.lua scans.
 AHledger_Data.lua downloaded provider tables are excluded. Provider
 retention beyond cache expiry requires explicit authorization and the
-- IncludeProviderTables opt-in (without the space after the dash).
+-IncludeProviderTables opt-in switch.
 Never redistribute provider raw tables or private data.
 
 When updating FCM, merge the new addon files into the existing folder; do
