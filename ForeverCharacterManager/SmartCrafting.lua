@@ -34,7 +34,9 @@ local function eligibleCrafters(recipe,recipient,outputID)
     local list={}
     local bop=outputID and boundInfo(outputID)==1
     for _,ch in ipairs(recipe and recipe.crafters or {}) do
+        local skill=type(FCM.RecipeSkillStatus)=="function" and FCM:RecipeSkillStatus(recipe,ch) or nil
         if ch and ch.key and recipient and FCM:CanCollaborate(ch,recipient) and
+            skill~="blocked" and
             (not bop or ch.key==recipient.key) then list[#list+1]=ch end
     end
     table.sort(list,function(a,b)return tostring(a.key)<tostring(b.key) end)
@@ -70,6 +72,11 @@ local function makePlan(recipe,recipient,crafter,crafts,excludeKey)
     local function block(msg) addUnique(plan.blockers,blockSeen,msg) end
     if not recipient then block("No recipient selected.") end
     if not crafter then block("No eligible learned crafter is recorded for this recipient.") end
+    if crafter and type(FCM.RecipeSkillStatus)=="function" then
+        local skill,detail=FCM:RecipeSkillStatus(recipe,crafter)
+        if skill=="blocked" then block(detail)
+        elseif skill=="verify" then warn(detail) end
+    end
     if not recipe or recipe.complex or type(recipe.reagents)~="table" or #recipe.reagents==0 then
         block("Main recipe has unknown, alternative, or incomplete reagent requirements.")
     end
