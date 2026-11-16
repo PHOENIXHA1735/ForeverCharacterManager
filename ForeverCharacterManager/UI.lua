@@ -3172,8 +3172,10 @@ local function buildRows(ui)
             local recipientName = recipient and FCM:DisplayCharacter(recipient) or "Recipient record missing"
             local crafterName = crafter and FCM:DisplayCharacter(crafter) or "None recorded"
             local mine = canCraft
-            local skillState,skillNote=recipe and loggedIn and
-                FCM:RecipeSkillStatus(recipe,loggedIn) or nil
+            local skillState,skillNote
+            if recipe and loggedIn then
+                skillState,skillNote=FCM:RecipeSkillStatus(recipe,loggedIn)
+            end
             local wanted=FCM:CraftRequestQuantity(req)
             local runs,produced,yieldPerCraft,needed,owned,known,mode,stock=FCM:CraftRequestRuns(recipe,req,recipient)
             local title = (mine and (skillState=="verify" and "[SKILL UNVERIFIED] " or "[CAN CRAFT] ") or "") ..
