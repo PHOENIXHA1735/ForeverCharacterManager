@@ -2,7 +2,7 @@
 
 Account-wide character, crafting, gathering, inventory, progression, and market-data guidance for **World of Warcraft: Forever**. An optional Windows companion handles local files and public reference updates when the game is closed.
 
-**Current source:** v0.9.1, under ongoing QA stabilization. [Development review and CI results](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/2). This is source work, **not a new published release**; install a tested build intentionally.
+**Current source:** v0.9.1, QA-stabilized and merged into `main` on November 16, 2026. [Tested changes (PR #2)](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/2) · [GitHub Releases](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases). Install the intended version and preserve your personal data.
 
 ## Start here
 
@@ -45,13 +45,13 @@ For full Windows and first-login steps, see [Install and use FCM](docs/INSTALL_A
 
 Windows companion entry point: `ForeverCharacterManager/FCM-Companion/OPEN-FCM-DATA-UPDATER.cmd`.
 
-### Overnight catalog refresh (v0.9.1 Windows QA preview)
+### Overnight catalog refresh (v0.9.1 optional Windows companion)
 
 The optional [overnight catalog task](ForeverCharacterManager/FCM-Companion/OVERNIGHT_CATALOG_SETUP.txt) updates the *actual* ForeverDB item and recipe cache every 15 minutes from **10:00 PM through 11:45 AM Pacific** when WoW is closed. It is separate from the low-cost build-number checker and AHledger. The companion enforces four-second spacing across **manual, automated and build-check** ForeverDB calls, a shared **4,500-request UTC-day budget**, and a reserve of 500 when ForeverDB reports remaining requests. Local item cache and generated Lua files are preserved if a refresh is skipped or fails. New items appear after restarting WoW; a missing item such as Clam Meat may still be absent upstream or hidden by search filters.
 
 On the Windows PC, save the approved key with **Remember encrypted**, then double-click `FCM-Companion/ENABLE-FCM-OVERNIGHT.cmd` from the **installed** FCM folder. This registers the Windows task for your logged-in user; the ZIP alone does not activate it. First-night Windows validation remains pending. Details, verification and uninstall instructions are in the linked setup file.
 
-## Gathering v0.9.1 testing
+## Gathering v0.9.1 setup and verification
 
 1. With WoW closed, install the preview and keep GatherMate2 installed for the first import.
 2. If using GatherMate2_Data, import its data inside GatherMate2 first.
