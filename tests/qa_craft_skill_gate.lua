@@ -26,6 +26,7 @@ function fcm:DisplayCharacter(ch)return ch and ch.name or "Unknown"end
 function fcm:Try(fn,...)if fn then return fn(...)end end
 function fcm:Now()return 12345 end
 function fcm:Refresh()end
+function fcm:IsPendingRequest(req)return req and req.status=="requested" end
 function fcm.ItemName(id)return "Item #"..id end
 assert(loadfile("ForeverCharacterManager/Crafting.lua"))("ForeverCharacterManager",fcm)
 assert(loadfile("ForeverCharacterManager/Advisor.lua"))("ForeverCharacterManager",fcm)
