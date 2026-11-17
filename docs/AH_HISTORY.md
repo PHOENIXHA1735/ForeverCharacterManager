@@ -40,8 +40,13 @@ Observations are provider snapshot medians or quantity-weighted personal scan
 buyout medians, in copper. Bid-only listings are excluded. Provider rolling
 averages are never imported as observations. Market identity includes ruleset,
 region and faction. A personal scan wins an exact timestamp collision with a
-provider snapshot. The 365-day window excludes older observations; archives and
-the underlying database retain them. Each window averages its observed daily
+provider snapshot. The newest observation supplies the current quote, including
+when a personal scan is newer than a provider table. A personal scan does not
+measure estimated demand: the most recent provider demand estimate is used only
+if its table observation is at most seven days old; otherwise demand stays
+unknown and recommendation eligibility fails closed. The 365-day window
+excludes older observations; archives and the underlying database retain them.
+Each window averages its observed daily
 means equally. Missing dates are never filled. Historical extrema are extrema
 of observed snapshot medians, not every individual auction listing.
 
