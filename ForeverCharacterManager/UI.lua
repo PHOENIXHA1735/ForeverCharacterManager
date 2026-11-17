@@ -1327,7 +1327,7 @@ function UI:Create()
     self.gatherWorldButton:Hide()
 
     self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
-    self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-74)
+    self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
     self.goldFeesButton:Hide()
     self.goldFarmButton=button(panel,"Gold: measured farm rate",210,25,function() self:PromptGoldSettings(true) end)
     self.goldFarmButton:SetPoint("LEFT",self.goldFeesButton,"RIGHT",8,0)
@@ -3961,13 +3961,14 @@ function UI:Refresh()
         local requestView=FCM.db.settings.requestView or "all"
         local requestViewNames={all="All",mine="For Me",craftable="Can Craft",missing="Needs Mats"}
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
-        -- Move content down only while the AH-style filter toolbar is visible.
+        -- A second toolbar (including Gold settings) needs its own row below the common filters.
+        local hasSecondToolbar=browsing or crafting or gathering or requests or tab=="Gold"
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,hasSecondToolbar and -143 or -107)
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,(browsing or crafting or gathering or requests) and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,hasSecondToolbar and -143 or -107)
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
             tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
