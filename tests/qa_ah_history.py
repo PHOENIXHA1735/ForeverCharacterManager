@@ -56,6 +56,29 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(summaries[M]['1']['observations'],1)
         self.assertEqual(summaries[M]['1']['current'],100)
 
+    def test_newer_personal_scan_overrides_older_provider_price(self):
+        db=h.connect(':memory:')
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?)',
+                   (M,1,NOW-3*h.DAY,'table',10000,9000,30,4))
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?)',
+                   (M,1,NOW-60,'scan',6000,5500,20,None))
+        summary=h.summarize(db,NOW,ZoneInfo('America/Los_Angeles'))[M]['1']
+        self.assertEqual(summary['current'],6000)
+        self.assertEqual(summary['currentSource'],'scan')
+        self.assertEqual(summary['low'],5500)
+        self.assertLess(summary['ageSeconds'],3600)
+        self.assertEqual(summary['demand'],4)
+
+    def test_stale_provider_demand_is_not_carried_into_fresh_scan(self):
+        db=h.connect(':memory:')
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?)',
+                   (M,1,NOW-9*h.DAY,'table',10000,9000,30,4))
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?)',
+                   (M,1,NOW-60,'scan',6000,5500,20,None))
+        summary=h.summarize(db,NOW,ZoneInfo('America/Los_Angeles'))[M]['1']
+        self.assertEqual(summary['current'],6000)
+        self.assertIsNone(summary['demand'])
+
     def test_365_boundaries_and_freshness(self):
         db=h.connect(':memory:')
         for age in (0,7,30,90,180,364,365):
