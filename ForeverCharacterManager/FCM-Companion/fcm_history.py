@@ -271,9 +271,14 @@ def summarize(db, now, zone):
                 if r[2] > now - n * DAY: window_days[r[2] // DAY].append(r[4])
             vals = [statistics.mean(v) for v in window_days.values()]
             windows[str(n)] = {'average': statistics.mean(vals) if vals else None, 'days': len(vals), 'coverage': min(1, len(vals) / n)}
-        latest = rows[-1]
+        # The newest observation is the current price, even when it came from
+        # a personal AH scan after the provider's most recent price table.
+        # Demand is not measured by personal scans; carry forward a recent
+        # provider estimate without substituting its older price for the scan.
+        current = rows[-1]
         provider = [r for r in rows if r[3] == 'table']
-        current = provider[-1] if provider else latest
+        recent_provider = provider[-1] if provider and now - provider[-1][2] <= 7 * DAY else None
+        demand = current[7] if current[7] is not None else (recent_provider[7] if recent_provider else None)
         age = now - current[2]; average = windows['365']['average']
         recent = [v for d, v in daily.items() if d * DAY > now - 7 * DAY]
         previous = [v for d, v in daily.items() if now - 14 * DAY < d * DAY <= now - 7 * DAY]
@@ -282,7 +287,7 @@ def summarize(db, now, zone):
         confidence = 'low'
         if len(daily) >= 14 and age <= DAY: confidence = 'moderate'
         if len(daily) >= 60 and age <= 3600 and (volatility or 0) < .3: confidence = 'high'
-        markets[market][str(item)] = dict(current=current[4], currentUtc=current[2], currentSource=current[3], low=current[5], supply=current[6], demand=current[7], ageSeconds=age, windows=windows, minimum=min(r[4] for r in rows), maximum=max(r[4] for r in rows), comparisonPct=(current[4] / average - 1) * 100, observedDays=len(daily), observations=len(rows), confidence=confidence, volatility=volatility, trendPct=trend, timing=timing(rows, daily, zone))
+        markets[market][str(item)] = dict(current=current[4], currentUtc=current[2], currentSource=current[3], low=current[5], supply=current[6], demand=demand, ageSeconds=age, windows=windows, minimum=min(r[4] for r in rows), maximum=max(r[4] for r in rows), comparisonPct=(current[4] / average - 1) * 100, observedDays=len(daily), observations=len(rows), confidence=confidence, volatility=volatility, trendPct=trend, timing=timing(rows, daily, zone))
     return dict(markets)
 
 
