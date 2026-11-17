@@ -15,7 +15,7 @@ local ui=file(addon.."UI.lua")
 local crafting=file(addon.."Crafting.lua")
 local companion=file(addon.."FCM-Companion/FCMDataUpdater.ps1")
 
-includes(core,'FCM.version = "0.9.1"','version')
+local currentVersion=assert(core:match('FCM%.version%s*=%s*"([^"]+)"'),"missing core version")
 includes(core,'FCM:MergeCommunityGathering()','login-time community merge')
 includes(core,'FCM:GatherEvent(event,...)','game-event forwarding')
 for _,event in ipairs({'UNIT_SPELLCAST_SENT','UNIT_SPELLCAST_SUCCEEDED',
@@ -39,10 +39,10 @@ includes(companion,'GatheringSync.ps1','Windows gathering synchronization')
 includes(companion,'Export Gathering Contribution','Windows opt-in contribution export')
 for _,name in ipairs({'ForeverCharacterManager.toc','ForeverCharacterManager_Camelot.toc'}) do
     local manifest=file(addon..name)
-    includes(manifest,'## Version: 0.9.1','addon version')
+    includes(manifest,'## Version: '..currentVersion,'addon version')
     includes(manifest,'## SavedVariables: FCM_DB, FCM_GatherExport','private storage')
     includes(manifest,'Gathering.lua','gathering module load')
     includes(manifest,'CommunityGathering.generated.lua','community snapshot load')
     includes(manifest,'LegacyAdvisor.lua','Legacy Advisor module load')
 end
-print('PASS: combined v0.9.1 source wires QA6e, Legacy and Gathering in both toc variants')
+print('PASS: combined source wires QA6e, Legacy and Gathering in both toc variants (version '..currentVersion..')')
