@@ -18,6 +18,69 @@ function G:ConfigureFarm(input)
     return true
 end
 local function now() return (time and time()) or os.time() end
+local LIVE_CACHE_SECONDS=30
+local PRICE_MAX_AGE=24*60*60
+local DEMAND_MAX_AGE=7*24*60*60
+local function recent(stamp,maxAge)
+    stamp=tonumber(stamp)
+    return stamp and stamp>0 and now()-stamp>=0 and now()-stamp<=maxAge
+end
+local function liveAPI()
+    local api=AHledgerAPI
+    return type(api)=='table' and type(api.GetPrice)=='function' and api or nil
+end
+local function liveQuote(base,id,market,api,info)
+    -- Never mutate the private historical record: live values are an ephemeral overlay.
+    local q={}
+    for key,value in pairs(base) do q[key]=value end
+    q.priceStatus='Archived FCM observation; live AHledger price unavailable.'
+    q.demandSource=q.demand and 'archived provider estimate' or 'unavailable'
+    if not api then return q end
+    local ok,p=pcall(api.GetPrice,tonumber(id),market)
+    if not ok or type(p)~='table' then return q end
+    -- AHledgerAPI expects slash-separated market identifiers. Never use the
+    -- logged-in character's Alliance price for an offline Horde character.
+    if p.market~=market then
+        q.priceStatus='AHledger market mismatch; archived FCM observation retained.'
+        return q
+    end
+    local stamp=tonumber(p.updated)
+    if not stamp or stamp<=0 or stamp>now() then
+        q.priceStatus='AHledger timestamp missing or invalid; archived FCM observation retained.'
+        return q
+    end
+    if p.snapshot then
+        q.priceStatus='AHledger bundled snapshot is not live; archived FCM observation retained.'
+        return q
+    end
+    -- A personal scan can update p.updated without refreshing the provider's
+    -- sales pace. Validate the underlying table timestamp separately.
+    local demand=tonumber(p.soldPerDay)
+    if info and info.market==market and not info.snapshot and recent(info.updated,DEMAND_MAX_AGE) and demand and demand>0 then
+        q.demand=demand
+        q.demandSource='AHledger recent provider-table estimate'
+    end
+    local median=tonumber(p.median)
+    local low=tonumber(p.minBuyout)
+    local supply=tonumber(p.quantity)
+    if not recent(stamp,PRICE_MAX_AGE) then
+        q.priceStatus='AHledger quote is stale; archived FCM observation retained.'
+    elseif stamp<(tonumber(q.stamp) or 0) then
+        q.priceStatus='FCM archive contains a newer personal observation; latest price retained.'
+    elseif not median or median<=0 or not low or low<=0 or not supply or supply<=0 then
+        q.priceStatus='AHledger quote is incomplete; archived FCM observation retained.'
+    else
+        q.current=median
+        q.low=low
+        q.supply=supply
+        q.stamp=stamp
+        q.currentSource='AHledger live'
+        q.priceStatus='LIVE AHledger quote; historical averages remain from FCM archives.'
+        local baseline=q.averages and q.averages[365]
+        if baseline and baseline>0 then q.comparison=(median/baseline-1)*100 end
+    end
+    return q
+end
 local function countStock(ch,id)
     local n=0
     for _,where in ipairs({'bags','bank'}) do
@@ -42,20 +105,33 @@ function G:Prices(ch)
     local data=FCM_AHHistory
     local market=self:Market(ch)
     if not market or not data or data.schema~=1 then return {},market end
-    if self.generation~=data.generatedUtc then self.cache={};self.generation=data.generatedUtc end
-    if self.cache[market] then return self.cache[market],market end
-    local out={}
-    for line in tostring(data.packed and data.packed[market] or ''):gmatch('[^\n]+') do
-        local f={};local i=0
-        for v in (line..','):gmatch('(.-),') do i=i+1;f[i]=tonumber(v) end
-        if f[1] and f[2] and f[3] then
-            local q={current=f[2],stamp=f[3],low=f[4],supply=f[5],demand=f[6],averages={},coverage={},minimum=f[17],maximum=f[18],comparison=f[19],days=f[20] or 0,observations=f[21] or 0,volatility=f[22],trend=f[23],confidence=({'low','moderate','high'})[f[24]] or 'low'}
-            for j,n in ipairs({7,30,90,180,365}) do q.averages[n]=f[6+j];q.coverage[n]=f[11+j] or 0 end
-            q.currentSource=f[25]==2 and 'personal scan' or 'provider table'
-            out[f[1]]=q
+    if self.generation~=data.generatedUtc then self.cache={};self.liveCache={};self.generation=data.generatedUtc end
+    if not self.cache[market] then
+        local decoded={}
+        for line in tostring(data.packed and data.packed[market] or ''):gmatch('[^\n]+') do
+            local f={};local i=0
+            for v in (line..','):gmatch('(.-),') do i=i+1;f[i]=tonumber(v) end
+            if f[1] and f[2] and f[3] then
+                local q={current=f[2],stamp=f[3],low=f[4],supply=f[5],demand=f[6],averages={},coverage={},minimum=f[17],maximum=f[18],comparison=f[19],days=f[20] or 0,observations=f[21] or 0,volatility=f[22],trend=f[23],confidence=({'low','moderate','high'})[f[24]] or 'low'}
+                for j,n in ipairs({7,30,90,180,365}) do q.averages[n]=f[6+j];q.coverage[n]=f[11+j] or 0 end
+                q.currentSource=f[25]==2 and 'personal scan' or 'provider table'
+                decoded[f[1]]=q
+            end
         end
+        self.cache[market]=decoded
     end
-    self.cache[market]=out
+    local api=liveAPI()
+    self.liveCache=self.liveCache or {}
+    local entry=self.liveCache[market]
+    if entry and entry.api==api and recent(entry.checked,LIVE_CACHE_SECONDS) then return entry.prices,market end
+    local tableInfo
+    if api and type(api.GetTableInfo)=='function' then
+        local ok,result=pcall(api.GetTableInfo,market)
+        if ok and type(result)=='table' then tableInfo=result end
+    end
+    local out={}
+    for id,base in pairs(self.cache[market]) do out[id]=liveQuote(base,id,market,api,tableInfo) end
+    self.liveCache[market]={api=api,checked=now(),prices=out}
     return out,market
 end
 function G:Item(id,q,ch)
@@ -117,8 +193,9 @@ function G:Farm(id,q,ch,effort)
     else r.reason='Estimated acquisition value does not beat the alternative use of time.' end
     return r
 end
-function G:Opportunities(ch)
-    local prices=self:Prices(ch);local out={}
+function G:Opportunities(ch,prices)
+    prices=prices or self:Prices(ch)
+    local out={}
     for id,q in pairs(prices) do out[#out+1]=self:Item(id,q,ch) end
     local settings=FCM.db and FCM.db.settings or {}
     for _,r in ipairs(FCM.AllRecipes and FCM:AllRecipes() or {}) do
@@ -139,14 +216,22 @@ end
 local function money(n)
     return type(n)=='number' and string.format('%.2fg',n/10000) or 'unknown'
 end
+local function updatedAt(stamp)
+    local formatter=date or (os and os.date)
+    if type(formatter)~='function' or type(stamp)~='number' then return 'unknown' end
+    local ok,result=pcall(formatter,'%Y-%m-%d %H:%M',stamp)
+    return ok and result or 'unknown'
+end
 function G:Details(r,ch)
     local q=r.quote
     local lines={r.reason or 'Insufficient evidence.', 'Advisory only. Listing observations are not completed sales.'}
     if not q then return table.concat(lines,'\n') end
     lines[#lines+1]='Current median ('..tostring(q.currentSource or 'snapshot')..'): '..money(q.current)..' | Lowest listing: '..money(q.low)
+    lines[#lines+1]='Quote status: '..tostring(q.priceStatus or 'Historical quote; live status unknown.')
+    lines[#lines+1]='Price updated (local): '..updatedAt(q.stamp)
     lines[#lines+1]='Observed days: '..q.days..' | Observations: '..q.observations..' | Confidence: '..q.confidence
     lines[#lines+1]='Age: '..math.floor(math.max(0,now()-q.stamp)/3600)..' hours | Supply: '..tostring(q.supply or 'unknown')
-    lines[#lines+1]='Estimated units/day: '..tostring(q.demand or 'unknown')..' (provider estimate, not confirmed personal sales)'
+    lines[#lines+1]='Estimated units/day: '..tostring(q.demand or 'unknown')..' ('..tostring(q.demandSource or 'provider estimate')..'; not confirmed personal sales)'
     for _,n in ipairs({7,30,90,180,365}) do
         lines[#lines+1]='FCM '..n..'-day daily average: '..money(q.averages[n])..' | '..tostring(q.coverage[n] or 0)..' observed days'
     end
@@ -182,9 +267,9 @@ function G:Rows(ch)
     local rows={}
     local function add(id,title,summary,detail) rows[#rows+1]={id=id,title=title,summary=summary,detail=detail} end
     local prices,market=self:Prices(ch)
-    add('gold-status','Gold Advisor | '..tostring(market or 'market unknown'),'Private AHledger snapshots | advisory only',
-        'FCM calculates daily historical values from timestamped snapshots, never overlapping provider rolling averages. Missing days remain missing. Offline bags/bank are recorded snapshots.\n\nManual Sync / Enable / Disable controls are installed in FCM-Companion. In-game Lua cannot run Windows tasks.\nCrafting net-profit advice requires configured AH fees and transferable output. Farming advice requires measured acquisition effort; unknown inputs stay unknown.')
-    local opportunities=self:Opportunities(ch)
+    add('gold-status','Gold Advisor | '..tostring(market or 'market unknown'),'Current AHledger prices when fresh | Private FCM historical snapshots',
+        'Fresh prices, supply and estimated demand come from the optional in-game AHledgerAPI, never from an extra network request or a new stored provider-table archive. When live data is unavailable, FCM labels the historical fallback.\nFCM calculates daily historical values from timestamped personal archives, not overlapping provider rolling averages. Missing days remain missing. Offline bags/bank are recorded snapshots.\n\nManual Sync / Enable / Disable controls are installed in FCM-Companion. In-game Lua cannot run Windows tasks.\nCrafting net-profit advice requires configured AH fees and transferable output. Farming advice requires measured acquisition effort; unknown inputs stay unknown.')
+    local opportunities=self:Opportunities(ch,prices)
     local function recommendation(r,prefix)
         local id=r.id
         local label=(FCM.ItemName and FCM.ItemName(id)) or ('Item #'..tostring(id))

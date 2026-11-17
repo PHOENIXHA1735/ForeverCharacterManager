@@ -63,6 +63,21 @@ recipe, matching profession, verified transferable output, all reagent prices,
 and explicit fee assumptions entered with the Gold fee button. Farming requires
 a measured rate and explicit opportunity-cost assumptions entered with the Gold
 farm button. Rates and fees are user assumptions, never fabricated observations.
+When AHledger is installed, the Gold Advisor also reads `AHledgerAPI.GetPrice`
+with the selected character's explicit ruleset, faction and region. A newer
+complete, non-bundled quote can update the on-screen current median, lowest
+buyout and supply without adding a provider observation to private history.
+Estimated daily demand is read only when `AHledgerAPI.GetTableInfo` confirms
+that the provider table is non-bundled and no more than seven days old; a newer
+personal scan timestamp alone does not refresh an older demand estimate.
+Source, local update time and stale/snapshot/fallback status appear in each
+item's details. Live lookups are cached for at most 30 seconds during a session.
+If the optional API is absent, incomplete, stale or for another market, FCM
+retains the archived quote. All 7/30/90/180/365-day daily averages, observation
+counts, extrema, volatility and timing evidence continue to come solely from
+the local archived-scan summary, never the temporary live overlay. This uses
+the in-game API, not a new network call, and does not change provider-table
+archival or private GitHub exclusions.
 Inventory and bank values are snapshots. Farm assumptions use copper/hour;
 craft deposit is expected unrecovered copper per crafting batch. Buy/sell/hold
 spreads assume a 5% faction AH cut and explicitly exclude deposits; sell spreads

@@ -4,7 +4,8 @@ function FCM:NormalizeFaction(x) return (x=='Alliance' or x=='Horde') and x or n
 function FCM.Gear:Info(id) return {bindType=id==999 and 1 or 2} end
 function FCM:AllRecipes() return {} end
 function FCM.ItemName(id) return 'Synthetic '..tostring(id) end
-time=function() return 1800000000 end
+local clock=1800000000
+time=function() return clock end
 assert(loadfile('ForeverCharacterManager/GoldAdvisor.lua'))('FCM',FCM)
 local G=FCM.GoldAdvisor
 assert(G:ConfigureFees('5 100') and FCM.db.settings.goldAdvisorFees.deposit==100,'fee controls')
@@ -49,6 +50,60 @@ assert(farm.action=='FARM' and farm.profit==17900,'farming net opportunity cost'
 assert(G:Farm(1,quote(1000),ch,{}).action=='NO CLEAR RECOMMENDATION','unknown effort')
 FCM_AHHistory={schema=1,generatedUtc=time(),timezone='America/Los_Angeles',packed={['forever/normal/alliance/us']='1,700,1800000000,650,4,2,800,900,1000,1000,1000,7,14,14,14,14,500,1500,-30,14,40,0.1,5,2'},timing={}}
 assert(G:Prices(ch)[1].current==700,'compact summary decode')
+local apiCalls=0
+local live={median=800,minBuyout=750,quantity=12,soldPerDay=8,market='forever/normal/alliance/us',updated=clock,snapshot=false}
+local tableInfo={market='forever/normal/alliance/us',updated=clock,snapshot=false}
+AHledgerAPI={GetPrice=function(id,market)
+    apiCalls=apiCalls+1
+    assert(id==1 and market=='forever/normal/alliance/us','explicit market isolation')
+    return live
+end,GetTableInfo=function(market)
+    assert(market=='forever/normal/alliance/us','table market isolation')
+    return tableInfo
+end}
+local current=G:Prices(ch)[1]
+assert(current.current==800 and current.low==750 and current.supply==12 and current.demand==8,'fresh API quote overlays archived current price')
+assert(current.averages[365]==1000 and current.days==14 and current.observations==40,'live quote never changes historical statistics')
+assert(math.abs(current.comparison+20)<.001 and current.currentSource=='AHledger live','live comparison and source label')
+assert(G:Details(G:Item(1,current,ch),ch):find('LIVE AHledger quote',1,true),'fresh source visible in details')
+assert(G:Details(G:Item(1,current,ch),ch):find('Price updated (local):',1,true),'quote timestamp displayed')
+assert(G:Prices(ch)[1].current==800 and apiCalls==1,'live lookups cached briefly')
+clock=clock+31
+live.median=810;live.minBuyout=760;live.updated=clock
+assert(G:Prices(ch)[1].current==810 and apiCalls==2,'live cache expires to pick up fresh quote')
+clock=clock+31
+tableInfo.updated=clock-8*86400
+live.updated=clock
+local oldDemand=G:Prices(ch)[1]
+assert(oldDemand.current==810 and oldDemand.demand==2,'fresh personal scan cannot refresh old provider sales pace')
+clock=clock+31
+tableInfo.updated=clock;tableInfo.snapshot=true;live.updated=clock
+assert(G:Prices(ch)[1].demand==2,'bundled provider table is not trusted for demand')
+clock=clock+31
+tableInfo.snapshot=false
+live.snapshot=true
+local fallback=G:Prices(ch)[1]
+assert(fallback.current==700 and fallback.priceStatus:find('bundled snapshot',1,true),'bundled fallback is not treated as live')
+clock=clock+31
+live.snapshot=false;live.market='forever/normal/horde/us'
+fallback=G:Prices(ch)[1]
+assert(fallback.current==700 and fallback.priceStatus:find('market mismatch',1,true),'no cross-faction price leak')
+clock=clock+31
+live.market='forever/normal/alliance/us';live.updated=clock-90000
+fallback=G:Prices(ch)[1]
+assert(fallback.current==700 and fallback.priceStatus:find('stale',1,true),'stale provider quote rejected')
+clock=clock+31
+live.updated=clock;live.median=nil
+fallback=G:Prices(ch)[1]
+assert(fallback.current==700 and fallback.priceStatus:find('incomplete',1,true),'incomplete live quote rejected')
+clock=clock+31
+live.median=800;live.updated=clock+3600
+fallback=G:Prices(ch)[1]
+assert(fallback.current==700 and fallback.priceStatus:find('timestamp',1,true),'future quote rejected')
+AHledgerAPI=nil
+fallback=G:Prices(ch)[1]
+assert(fallback.current==700 and fallback.priceStatus:find('unavailable',1,true),'optional dependency fallback')
+assert(FCM_AHHistory.packed['forever/normal/alliance/us']:find('1,700',1,true),'on-disk history remains unchanged')
 ch.faction='Horde';assert(next((G:Prices(ch)))==nil,'no faction fallback')
 ch.faction='Alliance';ch.region='eu';assert(next((G:Prices(ch)))==nil,'no region fallback')
 ch.region='us'
@@ -57,4 +112,4 @@ assert(#rows>8,'Gold rows and sections')
 assert(G:Details(buy,ch):find('No supported best buying/selling day or hour',1,true),'weak timing withheld')
 FCM_AHHistory.timing['forever/normal/alliance/us']={['1']={weekday={['0']={adequate=true,relative=.8,observations=20,days=5},['1']={adequate=true,relative=1.2,observations=20,days=5}}}}
 assert(G:Details(buy,ch):find('Lower observed prices: Monday',1,true),'supported timing comparison')
-print('PASS: Gold Advisor actions, eligibility, fees, opportunity cost, missing data, freshness, market separation and row generation (synthetic)')
+print('PASS: Gold Advisor actions, historical isolation, live AHledger API, stale/missing fallbacks, market separation and row generation (synthetic)')
