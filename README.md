@@ -2,7 +2,7 @@
 
 Account-wide character, crafting, gathering, inventory, progression, and market-data guidance for **World of Warcraft: Forever**. An optional Windows companion handles local files and public reference updates when the game is closed.
 
-**Current release:** v0.9.2, including the in-game-verified Gold toolbar spacing fix ([PR #3](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/3)) and the previous QA stabilization ([PR #2](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/2)) · [GitHub Releases](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases). Install the intended version and preserve your personal data.
+**Current release:** v0.9.3, including the Gold quote freshness correction ([PR #5](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/5)) and the in-game-verified Gold toolbar spacing fix ([PR #3](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/3)) · [GitHub Releases](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases). Install the intended version and preserve your personal data.
 
 ## Start here
 
