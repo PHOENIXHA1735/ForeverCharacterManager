@@ -1,0 +1,98 @@
+name: Publish FCM v0.9.3 Gold Quote Freshness
+
+on:
+  # Maintainer explicitly dispatches after the release-preparation PR passes.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'PHOENIXHA1735/ForeverCharacterManager' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify source and Gold Advisor calculations
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.1
+          python3 tests/check_private_paths.py
+          python3 tests/qa_ah_history.py
+          lua5.1 tests/qa_gold_advisor.lua
+          grep -q '^## Version: 0.9.3$' ForeverCharacterManager/ForeverCharacterManager.toc
+          grep -q '^## Version: 0.9.3$' ForeverCharacterManager/ForeverCharacterManager_Camelot.toc
+          grep -q 'FCM.version = "0.9.3"' ForeverCharacterManager/Core.lua
+
+      - name: Package public addon and companion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          zip -q -r dist/FCM-v0.9.3.zip ForeverCharacterManager \
+            -x '*/AHHistory/*' '*/AHHistory.generated.lua' '*/AHledger/*' \
+               '*/AHledger.lua' '*/AHledger_Data.lua' '*/python-path.local.txt' \
+               '*/settings.json' '*/reference-cache.json' '*.dpapi' '*.sqlite3'
+          zip -q -r dist/FCM-v0.9.3-Addon-and-Companion.zip \
+            ForeverCharacterManager README.md FCM_v093_RELEASE_NOTES.md \
+            docs/AH_HISTORY.md docs/INSTALL_AND_USE.md \
+            -x '*/AHHistory/*' '*/AHHistory.generated.lua' '*/AHledger/*' \
+               '*/AHledger.lua' '*/AHledger_Data.lua' '*/python-path.local.txt' \
+               '*/settings.json' '*/reference-cache.json' '*.dpapi' '*.sqlite3'
+          cd dist
+          sha256sum FCM-v0.9.3.zip > FCM-v0.9.3.zip.sha256
+          sha256sum FCM-v0.9.3-Addon-and-Companion.zip > FCM-v0.9.3-Addon-and-Companion.zip.sha256
+          sha256sum -c FCM-v0.9.3.zip.sha256 FCM-v0.9.3-Addon-and-Companion.zip.sha256
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          required = {
+              'ForeverCharacterManager/Core.lua',
+              'ForeverCharacterManager/GoldAdvisor.lua',
+              'ForeverCharacterManager/FCM-Companion/fcm_history.py',
+              'ForeverCharacterManager/ForeverCharacterManager.toc',
+              'ForeverCharacterManager/ForeverCharacterManager_Camelot.toc',
+              'ForeverCharacterManager/FCM-Companion/FCM-AHHistory.ps1',
+              'ForeverCharacterManager/FCM-Companion/GitHubUpdates.ps1',
+          }
+          for archive_path in (Path('FCM-v0.9.3.zip'), Path('FCM-v0.9.3-Addon-and-Companion.zip')):
+              assert 0 < archive_path.stat().st_size < 15_000_000, archive_path
+              with ZipFile(archive_path) as archive:
+                  names = [name for name in archive.namelist() if not name.endswith('/')]
+                  assert required.issubset(names), required - set(names)
+                  assert len(names) <= 180, len(names)
+                  assert b'## Version: 0.9.3' in archive.read('ForeverCharacterManager/ForeverCharacterManager.toc')
+                  assert b'FCM.version = "0.9.3"' in archive.read('ForeverCharacterManager/Core.lua')
+                  for name in names:
+                      assert '..' not in name and ':' not in name and not name.startswith(('/', './')), name
+                      low = name.lower()
+                      assert '/ahhistory/' not in low and not low.endswith('ahhistory.generated.lua'), name
+                      assert '/ahledger/' not in low and not low.endswith(('ahledger.lua','ahledger_data.lua')), name
+                      assert not low.endswith(('settings.json','.dpapi','.sqlite3','python-path.local.txt')), name
+                  if archive_path.name == 'FCM-v0.9.3.zip':
+                      assert all(name.startswith('ForeverCharacterManager/') for name in names)
+          PY
+
+      - name: Publish v0.9.3 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.9.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v0.9.3 already exists; refusing to overwrite a published release.' >&2
+            exit 1
+          fi
+          gh release create v0.9.3 \
+            dist/FCM-v0.9.3.zip dist/FCM-v0.9.3.zip.sha256 \
+            dist/FCM-v0.9.3-Addon-and-Companion.zip \
+            dist/FCM-v0.9.3-Addon-and-Companion.zip.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title 'Forever Character Manager v0.9.3 - Gold Quote Freshness' \
+            --notes-file FCM_v093_RELEASE_NOTES.md
