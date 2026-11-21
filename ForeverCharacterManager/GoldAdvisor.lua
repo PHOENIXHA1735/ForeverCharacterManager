@@ -377,7 +377,9 @@ local function buildGoldRows(self,ch)
     local rows={}
     local function add(id,title,summary,detail) rows[#rows+1]={id=id,title=title,summary=summary,detail=detail} end
     local prices,market=self:Prices(ch)
-    add('gold-status','Gold Advisor | '..tostring(market or 'market unknown'),'Current AHledger prices when fresh | Private FCM historical snapshots',
+    local history=self.providerData
+    local historyLabel=history and (history.classification=='public30' and 'Public30 history' or 'Private365 history') or 'History unavailable'
+    add('gold-status','Gold Advisor | '..tostring(market or 'market unknown'),'Current AHledger prices when fresh | '..historyLabel,
         'Fresh prices, supply and estimated demand come from the optional in-game AHledgerAPI, never from an extra network request or a new stored provider-table archive. When live data is unavailable, FCM labels the historical fallback.\nFCM calculates daily historical values from timestamped personal archives, not overlapping provider rolling averages. Missing days remain missing. Offline bags/bank are recorded snapshots.\n\nManual Sync / Enable / Disable controls are installed in FCM-Companion. In-game Lua cannot run Windows tasks.\nCrafting net-profit advice requires configured AH fees and transferable output. Farming advice requires measured acquisition effort; unknown inputs stay unknown.')
     local opportunities=self:Opportunities(ch,prices)
     local function recommendation(r,prefix)

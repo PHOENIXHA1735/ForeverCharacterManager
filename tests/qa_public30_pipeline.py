@@ -64,6 +64,7 @@ for _,toc in ipairs({'ForeverCharacterManager.toc','ForeverCharacterManager_Came
   assert(q.averages[7]==120 and q.averages[30]==100 and q.averages[365]==nil)
   assert(not q.recommendationsAllowed)
   assert(g:Item(424242,q,ch).action=='NO CLEAR RECOMMENDATION')
+  assert(g:Rows(ch)[1].summary:find('Public30 history',1,true))
   assert(g:Prices({market='forever/normal/horde/us'})[424242].current==200)
   assert(g:Prices({market='forever/pvp/alliance/eu'})[424242].current==300)
   assert(g:Prices({market='forever/normal/alliance/eu'})[424242]==nil)
