@@ -71,24 +71,34 @@ exit 0
 '@ | Set-Content -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1') -Encoding UTF8
 $wscript=Join-Path $env:SystemRoot 'System32\wscript.exe'
 if (-not (Test-Path -LiteralPath $wscript)) { throw 'Windows Script Host unavailable to test hidden launcher' }
-& $wscript '//B' '//NoLogo' $probeLauncher 'personal'
-if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath (Join-Path $addon 'launcher-probe.txt') -Raw).Trim() -ne 'personal') {
-    throw 'Personal mode did not invoke the fixed synthetic target correctly'
+# wscript.exe is a GUI-subsystem executable. PowerShell's bare & invocation
+# can return before it finishes, so use Start-Process -Wait -PassThru.
+function Invoke-HiddenProbe([string]$mode) {
+    $args=('//B //NoLogo "{0}" {1}' -f $probeLauncher,$mode)
+    $process=Start-Process -FilePath $wscript -ArgumentList $args -Wait -PassThru -ErrorAction Stop
+    return $process.ExitCode
 }
-& $wscript '//B' '//NoLogo' $probeLauncher 'provider'
-if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath (Join-Path $addon 'launcher-probe.txt') -Raw).Trim() -ne 'provider') {
-    throw 'Explicit provider mode failed to propagate opt-in'
+$probeFile=Join-Path $addon 'launcher-probe.txt'
+$code=Invoke-HiddenProbe 'personal'
+$observed=if (Test-Path -LiteralPath $probeFile) { (Get-Content -LiteralPath $probeFile -Raw).Trim() } else { '<missing>' }
+if ($code -ne 0 -or $observed -ne 'personal') {
+    throw "Personal mode failed: exit=$code probe=$observed"
+}
+$code=Invoke-HiddenProbe 'provider'
+$observed=if (Test-Path -LiteralPath $probeFile) { (Get-Content -LiteralPath $probeFile -Raw).Trim() } else { '<missing>' }
+if ($code -ne 0 -or $observed -ne 'provider') {
+    throw "Explicit provider mode failed: exit=$code probe=$observed"
 }
 $failureFlag=Join-Path $addon 'launcher-error.flag'
 Set-Content -LiteralPath $failureFlag -Value 'synthetic-failure'
-& $wscript '//B' '//NoLogo' $probeLauncher 'personal'
-if ($LASTEXITCODE -ne 9) { throw 'Hidden launcher did not forward child PowerShell failure' }
+$code=Invoke-HiddenProbe 'personal'
+if ($code -ne 9) { throw "Hidden launcher failed to forward child exit 9; got $code" }
 Remove-Item -LiteralPath $failureFlag
-& $wscript '//B' '//NoLogo' $probeLauncher 'unexpected'
-if ($LASTEXITCODE -ne 64) { throw 'Hidden launcher accepted an unexpected mode' }
+$code=Invoke-HiddenProbe 'unexpected'
+if ($code -ne 64) { throw "Hidden launcher accepted unexpected mode; exit=$code" }
 Remove-Item -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1')
-& $wscript '//B' '//NoLogo' $probeLauncher 'personal'
-if ($LASTEXITCODE -ne 2) { throw 'Missing target script must return exit code 2' }
+$code=Invoke-HiddenProbe 'personal'
+if ($code -ne 2) { throw "Missing target script expected exit 2; got $code" }
 Write-Output 'PASS: fixed-mode hidden AHHistory launcher, opt-in routing, invalid-mode refusal and exit codes (synthetic fixture).'
 
 Write-Output 'PASS: initial copy, deduplication, preservation, UTC/hash metadata, change retention, overlap lock and locked-source cleanup. Synthetic fixture only, including provider opt-in.'
