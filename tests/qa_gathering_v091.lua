@@ -684,15 +684,20 @@ assert(catalog:GatherResourceRows('Coarse Stone','mining')[1])
 assert(catalog:GatherResourceRows('Heavy Stone','mining')[1])
 assert(catalog:GatherResourceRows('Solid Stone','mining')[1])
 assert(catalog:GatherResourceRows('Dense Stone','mining')[1])
+local function findNamedCatalogItem(name,profession)
+    for _,entry in ipairs(catalog:GatherResourceRows(name,profession)) do
+        if entry.name==name then return entry end
+    end
+end
 for _,name in ipairs({'Malachite','Tigerseye','Jade','Citrine','Arcane Crystal'}) do
-    local mat=catalog:GatherResourceRows(name,'mining')[1]
+    local mat=findNamedCatalogItem(name,'mining')
     assert(mat and mat.detail():find('SOURCE NODES',1,true),'mining material catalog entry: '..name)
 end
-local swift=catalog:GatherResourceRows('Swiftthistle','herbalism')[1]
+local swift=findNamedCatalogItem('Swiftthistle','herbalism')
 assert(swift and swift.detail():find('Mageroyal',1,true))
-local lichen=catalog:GatherResourceRows('Frilled Lichen','herbalism')[1]
+local lichen=findNamedCatalogItem('Frilled Lichen','herbalism')
 assert(lichen and lichen.detail():find('Earthroot',1,true))
-local seeds=catalog:GatherResourceRows('Commonplace Herb Seeds','herbalism')[1]
+local seeds=findNamedCatalogItem('Commonplace Herb Seeds','herbalism')
 assert(seeds and seeds.count==0 and seeds.detail():find('Peacebloom',1,true))
 assert(#catalog:GatherNodes()==0,'reference materials never produce personal map pins')
 local fish=catalog:GatherResourceRows('251524','fishing')[1]

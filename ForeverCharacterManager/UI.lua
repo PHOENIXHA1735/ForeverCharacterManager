@@ -82,6 +82,10 @@ function UI:DecorateDetail(content,tab)
             not line:find("https:",1,true) then
             if header then
                 line=color(line,accent)
+            elseif raw:match("^Can gather:") or raw:match("^Can gain skill:") then
+                if raw:find(": YES",1,true) then line=color(line,"7be6a4")
+                elseif raw:find(": NO",1,true) then line=color(line,"ff8080")
+                else line=color(line,"ffcb76") end
             elseif lower:find("unknown",1,true) or lower:find("unverified",1,true) or
                 lower:find("not verified",1,true) or lower:find("missing ",1,true) or
                 lower:match("^still needed: [1-9]") or
