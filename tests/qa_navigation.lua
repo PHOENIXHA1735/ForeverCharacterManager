@@ -22,7 +22,7 @@ end
 CreateFrame=frame
 assert(loadfile('ForeverCharacterManager/UI.lua'))('FCM',FCM)
 local ui=FCM.UI
-local destinations={"Overview","Upgrade Plan","Upgrades","Characters","Gear","Crafting","Planner","Requests","Shopping",
+local destinations={"Overview","Upgrade Plan","Future Gear","Upgrades","Characters","Gear","Crafting","Planner","Requests","Shopping",
     "Professions","Gathering","Catalog","Item Explorer","Dungeons","Auction","Gold","Reputation","Talents","Leveling",
     "Inventory","Legacy","QA Tests","Settings","Diagnostics","Help"}
 ui.Navigate=function(self,name) self.tab=name end
@@ -66,4 +66,4 @@ ui.professionButtons[2].scripts.OnClick()
 assert(ui.tab=='Profession:mining')
 ui:RefreshProfessionTabs({})
 assert(ui.tab=='Professions' and ui.professionButtons[2].shown==false and ui.tabButtons.Professions.accent.shown)
-print('PASS: grouped navigation retained all 25 tabs, dynamic professions, selection, scroll and bounds')
+print('PASS: grouped navigation retained all 26 tabs, dynamic professions, selection, scroll and bounds')
