@@ -695,7 +695,11 @@ assert(model.zoneGroups[1].remaining>0,'default view limits long zone lists')
 local expandedModel=catalog:GatherMaterialDetailModel(ore,{professions={}},true)
 eq(expandedModel.zoneGroups[1].remaining,0,'expanded model exposes full reference zone list')
 assert(#expandedModel.zoneGroups[1].locations>4,'expanded list contains the hidden zones')
-assert(catalog:GatherMaterialDetailModel(catalog:GatherResourceRows('Copper Vein','mining')[1],nil,false)==nil,
+local copperNode
+for _,candidate in ipairs(catalog:GatherResourceRows('Copper Vein','mining')) do
+    if candidate.name=='Copper Vein' then copperNode=candidate;break end
+end
+assert(copperNode and catalog:GatherMaterialDetailModel(copperNode,nil,false)==nil,
     'node records continue to use the existing detail UI')
 
 assert(catalog:GatherResourceRows('Coarse Stone','mining')[1])
