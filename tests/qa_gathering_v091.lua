@@ -791,7 +791,7 @@ assert(winterDetail and winterDetail.itemType=='Fish','fish item receives dedica
 local winterSeason=detailsSection(winterDetail,'WATER TYPE & SEASON')
 assert(winterSeason and winterSeason:find('Ocean / coastal',1,true) and
        winterSeason:find('September 23 - March 19',1,true) and
-       winterSeason:find('unverified',1,true),'Classic winter squid seasonal/coastal guidance is qualified')
+       winterSeason:find('require separate evidence',1,true),'Classic winter squid seasonal/coastal guidance is qualified')
 assert(detailsSection(winterDetail,'Fishing Sources'):find('Open water',1,true),
        'Classic open-water catch method visible even when zone-level reference does not specify method')
 assert(detailsSection(winterDetail,'REFERENCE FISHING ZONES')~=nil,
