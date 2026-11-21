@@ -88,8 +88,9 @@ assert(noProof.weaponEligibility==nil and assessed[1].assessment=="insufficient-
     "Shortlist does not mutate candidate input or invent upgrade scores")
 assert(groups["weapon:16"].rows[1].sources[1].name=="Synthetic",
     "Original acquisition evidence stays attached")
+local recorded=r(777,16,true)
 build="changed-build"
-local changed=P:Shortlist(ch,{r(777,16,true)})
+local changed=P:Shortlist(ch,{recorded})
 assert(changed.withheldWeapons==1 and #changed.groups==0,
     "Client build changes invalidate earlier proficiency proof")
 print("PASS: 5-10 normal and 3-5 verified weapons per slot, after assessment")
