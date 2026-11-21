@@ -4,9 +4,8 @@ import json, sys, hashlib, re, tempfile
 from datetime import datetime, timezone
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from build_gather_reference import MAX_INPUT, compile_reference
-root=Path(__file__).resolve().parents[1]
 incoming,out=map(Path,sys.argv[1:])
-seed=root/'data/gathering-reference.json'
+seed=Path(__file__).with_name('gathering-reference.json')
 seed_bytes=seed.read_bytes()
 doc=json.loads(seed_bytes)
 records=doc['resources']
@@ -38,20 +37,24 @@ for kind in ('herbalism','mining','fishing'):
     if len(raw)>MAX_INPUT:raise ValueError('Reference response exceeds input budget')
     env=json.loads(raw)
     d,m=env['data'],env['meta']
-    assert d['profession']==kind and d['url'].startswith('https://foreverdb.net/profession/')
+    if d['profession']!=kind or not d['url'].startswith('https://foreverdb.net/profession/'):
+        raise ValueError('Unexpected provider response source')
     if not re.fullmatch(r'[0-9]+(?:\.[0-9]+){2,3}',m['build']) or 'ForeverDB' not in m['attribution']:
         raise ValueError('Unrecognized provider build or attribution')
     if build is not None and build!=m['build']:raise ValueError('Mixed provider builds')
     build=m['build']
-    assert not any(m.get(k) or d.get(k) for k in ('next','nextPage','nextOffset','hasMore'))
+    if any(m.get(k) or d.get(k) for k in ('next','nextPage','nextOffset','hasMore')):
+        raise ValueError('Incomplete provider response')
     source='foreverdb-'+kind
     doc['sources'].append(dict(id=source,name='ForeverDB.net '+kind,url=d['url'],
         permission='Documented API reference with attribution',version=m['build'],status='imported_reference'))
     zones=d['zones']
+    if not isinstance(zones,list) or not zones:raise ValueError('Empty provider zone data')
     assert len({z['mapId'] for z in zones})==len(zones)
     stats[kind]=dict(zones=len(zones),sha256=hashlib.sha256(raw).hexdigest(),conflicts=[])
     if kind!='fishing':
         nodes={n['name']:n for n in d['nodes']}
+        if not nodes:raise ValueError('Empty provider node data')
         assert len(nodes)==len(d['nodes'])
         ids={}
         stats[kind]['nodes']=len(nodes)
@@ -78,6 +81,7 @@ for kind in ('herbalism','mining','fishing'):
         stats[kind]['zoneOnlyNames']=sorted(unknown)
     else:
         poolNames=set(d['pools'])
+        if not poolNames:raise ValueError('Empty provider fishing pool data')
         assert len(poolNames)==len(d['pools'])
         stats[kind]['poolNames']=len(poolNames)
         for name in sorted(poolNames):

@@ -1323,15 +1323,15 @@ function UI:Create()
         end
         self:Refresh()
     end)
-    self.gatherWorldButton:SetPoint("LEFT",self.gatherSizeButton,"RIGHT",8,0)
+    self.gatherWorldButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-138)
     self.gatherWorldButton:Hide()
     self.gatherCategoryButton=button(panel,"Resources: All",155,25,function()
         local entries={}
         for _,entry in ipairs({{"All"},{"Herbalism","herbalism"},{"Mining","mining"},
-            {"Fishing","fishing"},{"Treasure","treasure"}}) do
+            {"Fishing","fishing"},{"Fishing: Oil Spill","fishing","oil_spill"},{"Fishing: Wreckage","fishing","wreckage"},{"Fishing: School","fishing","school"},{"Fishing: Pool","fishing","pool"},{"Treasure","treasure"}}) do
             entries[#entries+1]={label=entry[1],run=function()
-                self.gatherCategory=entry[2]
-                self.gatherCategoryButton:SetText("Resources: "..entry[1])
+                self.gatherCategory=entry[2];self.gatherPoolType=entry[3]
+                self.gatherCategoryButton:SetText(entry[3] and entry[1] or "Resources: "..entry[1])
                 self:Refresh()
             end}
         end
@@ -2426,8 +2426,8 @@ local function buildRows(ui)
         if #rows==0 or (#rows==1 and rows[1].id=='scoring-source') then add("no-upgrades","No actionable upgrades found","A matching numerical model and recorded equipment are required.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
     elseif tab=="Gathering" then
-        for _,resource in ipairs(FCM:GatherResourceRows(ui.search and ui.search:GetText(),
-                ui.gatherCategory,ch)) do
+        for _,resource in ipairs(FCM:GatherResourceRows(ui.appliedSearch,
+                ui.gatherCategory,ch,ui.gatherPoolType)) do
             add(resource.id,resource.name,resource.summary,resource.detail)
             rows[#rows].gatherIcon=resource.icon
         end
@@ -3725,7 +3725,7 @@ function UI:Refresh()
     local q=string.lower(self.appliedSearch or "")
     local entries={}
     for _,r in ipairs(all) do
-        if tab=="Global Search" or q=="" or FCM:SearchMatches(r.title,q) or
+        if tab=="Global Search" or tab=="Gathering" or q=="" or FCM:SearchMatches(r.title,q) or
                 FCM:SearchMatches(r.summary,q) or
                 (tab=="Item Explorer" and FCM:SearchMatches(r.id,q)) then
             local filter=FCM.db.settings.advisorFilter or "all"
@@ -3939,11 +3939,11 @@ function UI:Refresh()
         -- A second toolbar (including Gold settings) needs its own row below the common filters.
         local hasSecondToolbar=browsing or crafting or gathering or requests or tab=="Gold"
         self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,hasSecondToolbar and -143 or -107)
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,gathering and -170 or hasSecondToolbar and -143 or -107)
         self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
         self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,hasSecondToolbar and -143 or -107)
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,gathering and -170 or hasSecondToolbar and -143 or -107)
         self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
             tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")

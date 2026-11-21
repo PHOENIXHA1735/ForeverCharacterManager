@@ -272,10 +272,11 @@ eq(FCM:FishingStatus():find('Oily Blackmouth School',1,true)~=nil,true,
 GameTooltip.IsShown=function()return false end
 GetNumLootItems=function()return 1 end
 GetLootSourceInfo=function()return 'GameObject-0-0-0-0-99999-00001',1 end
-GetLootSlotLink=function(slot)return "|Hitem:"..(slot==1 and 6358 or 6359)..":|h" end
+GetLootSlotLink=function(slot)return "|Hitem:"..(slot==1 and 6289 or 6291)..":|h" end
 GetLootSlotInfo=function()return nil,nil,2 end
 local priorFish=FCM:GatherCounts().fishing
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish1',7620)
+FCM:RememberFishingHover('Oily Blackmouth School')
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','fish1',7620)
 eq(FCM:GatherCounts().fishing,priorFish,'fishing cast alone does not save a pool')
 FCM:GatherEvent('LOOT_READY')
@@ -305,6 +306,7 @@ tooltipTitle='Oily Blackmouth School'
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish3',7620)
+FCM:RememberFishingHover('Oily Blackmouth School')
 GetLootSourceInfo=function()return 'Creature-0-0-0-0-111-00001',1 end
 FCM:GatherEvent('LOOT_READY')
 FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
@@ -318,7 +320,8 @@ GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish4',7620)
-eq(FCM:FishingStatus():find('Cast: Oily Blackmouth School',1,true)~=nil,true,
+FCM:RememberFishingHover('Oily Blackmouth School')
+eq(FCM:FishingStatus():find('awaiting named object',1,true)~=nil,true,
     'tooltip-derived pool is armed for the repeat cast')
 FCM:GatherEvent('LOOT_READY')
 FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
@@ -335,6 +338,7 @@ GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish5',999999)
+FCM:RememberFishingHover('Oily Blackmouth School')
 FCM:GatherEvent('LOOT_OPENED')
 FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:FishingStatus():find('Last spell ID: 999999',1,true)~=nil,true,
@@ -349,6 +353,7 @@ GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish6',7620)
+FCM:RememberFishingHover('Oily Blackmouth School')
 FCM:GatherEvent('UNIT_SPELLCAST_INTERRUPTED','player','fish6',7620)
 FCM:GatherEvent('LOOT_READY')
 FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
@@ -584,20 +589,41 @@ eq(#grouped.locations>=2,true,'resource groups saved locations')
 eq(grouped.count>=2,true,'resource totals preserve all personal counts')
 assert(grouped.detail():find('Required skill:',1,true))
 GetNumLootItems=function() return 2 end
+GetLootSlotLink=function(slot)return "|Hitem:"..(slot==1 and 6358 or 6359)..":|h" end
 GetLootSourceInfo=function() return 'GameObject-0-0-0-0-99999-00001',1 end
 GetItemIcon=function(id)return id+100000 end
 for _,name in ipairs({'Oil Spill','Floating Wreckage'}) do
     FCM:RememberFishingHover(name)
     FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish-'..name,7620)
+    FCM:RememberFishingHover(name)
+    local getLink=GetLootSlotLink
+    GetLootSlotLink=function() return nil end
+    FCM:GatherEvent('LOOT_READY')
+    eq(FCM._fishingCast~=nil,true,'early loot preserves cast')
+    GetLootSlotLink=getLink
     FCM:GatherEvent('LOOT_OPENED')
     FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+    FCM:GatherEvent('LOOT_OPENED')
     FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
     FCM:GatherEvent('LOOT_SLOT_CLEARED',2)
     FCM:GatherEvent('LOOT_CLOSED')
-    local row=FCM:GatherResourceRows(name,'fishing')[1]
-    eq(row.count,1,'one gather per loot session')
-    eq(row.locations[1].catches[6358],2,'first item quantity counted once')
-    eq(row.locations[1].catches[6359],2,'second species preserved independently')
-    eq(row.icon,106358,'representative confirmed catch icon')
+    local rows=FCM:GatherResourceRows(name,'fishing')
+    eq(#rows,2,'pool search finds two species')
+    eq(rows[1].itemID,6358,'stable species identifier')
+    eq(rows[1].locations[#rows[1].locations].quantity,2,'duplicate ready and cleared do not inflate first species')
+    eq(rows[2].locations[#rows[2].locations].quantity,2,'second species preserved independently')
+    eq(rows[1].icon,106358,'icon belongs to actual species')
+    assert(rows[1].detail():find(name,1,true),'real source pool is visible')
 end
+local species=FCM:GatherResourceRows('6359','fishing')[1]
+eq(species.count,4,'same species aggregates across two source types')
+eq(#species.locations,2,'both confirmed source types retained')
+eq(FCM:GatherResourceRows('6359','fishing',nil,'wreckage')[1].count,2,'wreckage filter')
+local before=#FCM:GatherNodes('fishing')
+FCM:RememberFishingHover('Oil Spill')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'open-water',7620)
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+eq(#FCM:GatherNodes('fishing'),before,'pre-cast tooltip cannot identify generic loot')
 eq(FCM:GatherDistance(1438,0/0,0),nil,'invalid distance refused')

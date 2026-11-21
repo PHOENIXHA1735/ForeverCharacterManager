@@ -26,6 +26,14 @@
       "permission": "Limited single-object factual review; no bulk copying",
       "version": null,
       "status": "reference_reviewed"
+    },
+    {
+      "id": "wowhead-mining-guide",
+      "name": "Wowhead Forever Mining guide",
+      "url": "https://www.wowhead.com/forever/guide/professions/mining/overview-leveling",
+      "permission": "Reviewed skill thresholds only",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
     }
   ],
   "resources": [
@@ -425,11 +433,147 @@
       "itemIDStatus": "unknown",
       "objectType": "chest",
       "itemIconStrategy": "profession-fallback"
+    },
+    {
+      "id": "herbalism:peacebloom",
+      "name": "Peacebloom",
+      "category": "herbalism",
+      "itemID": 2447,
+      "minimumSkill": 1,
+      "orange": 1,
+      "yellow": 25,
+      "green": 65,
+      "gray": 100,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide"
+      ]
+    },
+    {
+      "id": "herbalism:earthroot",
+      "name": "Earthroot",
+      "category": "herbalism",
+      "itemID": 2449,
+      "minimumSkill": 15,
+      "orange": 15,
+      "yellow": 40,
+      "green": 80,
+      "gray": 115,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide"
+      ]
+    },
+    {
+      "id": "herbalism:mageroyal",
+      "name": "Mageroyal",
+      "category": "herbalism",
+      "itemID": 785,
+      "minimumSkill": 50,
+      "orange": 50,
+      "yellow": 75,
+      "green": 115,
+      "gray": 150,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide"
+      ]
+    },
+    {
+      "id": "herbalism:briarthorn",
+      "name": "Briarthorn",
+      "category": "herbalism",
+      "itemID": 2450,
+      "minimumSkill": 70,
+      "orange": 70,
+      "yellow": 95,
+      "green": 135,
+      "gray": 170,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide"
+      ]
+    },
+    {
+      "id": "mining:copper-vein",
+      "name": "Copper Vein",
+      "category": "mining",
+      "itemID": 2770,
+      "minimumSkill": 1,
+      "orange": 1,
+      "yellow": 25,
+      "green": 65,
+      "gray": 100,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide"
+      ]
+    },
+    {
+      "id": "mining:tin-vein",
+      "name": "Tin Vein",
+      "category": "mining",
+      "itemID": 2771,
+      "minimumSkill": 65,
+      "orange": 65,
+      "yellow": 90,
+      "green": 130,
+      "gray": 165,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide"
+      ]
+    },
+    {
+      "id": "mining:silver-vein",
+      "name": "Silver Vein",
+      "category": "mining",
+      "itemID": 2775,
+      "minimumSkill": 75,
+      "orange": 75,
+      "yellow": 100,
+      "green": 140,
+      "gray": 175,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide"
+      ]
+    },
+    {
+      "id": "mining:iron-deposit",
+      "name": "Iron Deposit",
+      "category": "mining",
+      "itemID": 2772,
+      "minimumSkill": 125,
+      "orange": 125,
+      "yellow": 150,
+      "green": 190,
+      "gray": 225,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide"
+      ]
     }
   ],
   "coverage": {
     "complete": false,
-    "scope": "Small curated seed",
+    "scope": "Curated WoW Forever object and skill references",
     "gaps": [
       "Other resources require local reference acquisition"
     ]

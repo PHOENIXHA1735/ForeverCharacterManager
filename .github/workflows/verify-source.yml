@@ -91,3 +91,10 @@ jobs:
       - name: Validate companion quota ledger (PowerShell 5.1)
         shell: powershell
         run: .\ForeverCharacterManager\FCM-Companion\Test-FCMQuotaLedger.ps1
+      - name: Set up Python for offline Gathering importer
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Gathering reference refresh (PowerShell 5.1)
+        shell: powershell
+        run: .\tests\qa_gather_sync.ps1

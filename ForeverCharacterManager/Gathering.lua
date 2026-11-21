@@ -932,7 +932,7 @@ function FCM:RememberFishingHover(value)
         end
     end
     if not known[lower] then return end
-    self._fishingHover={name=name,at=self:Now()}
+    self._fishingHover={name=name,at=self:Now(),cast=self._fishingCast}
 end
 
 function FCM:FishingStatus()
@@ -942,7 +942,7 @@ function FCM:FishingStatus()
     else
         lines[#lines+1]="Tooltip: no verified named school"
     end
-    if self._fishingCast then
+    if self._fishingCast and self._fishingCast.name then
         lines[#lines+1]="Cast: "..self._fishingCast.name
     end
     if self._fishingLastSpellID then
@@ -978,9 +978,9 @@ end
 function FCM:RecordFishingSchoolLoot()
     local cast=self._fishingCast
     if not cast then return end
-    -- A single loot event can be raised twice: consume this cast immediately.
-    self._fishingCast=nil
     if self:Now()-(cast.at or 0)>120 then
+        self._fishingCast=nil
+        self._fishingLoot=nil
         self._fishingLastResult="Fishing cast expired; no school recorded"
         return
     end
@@ -993,7 +993,17 @@ function FCM:RecordFishingSchoolLoot()
         self._fishingLastResult="Fishing map position unavailable; no marker recorded"
         return
     end
-    local slotsByID={}
+    local loot=self._fishingLoot
+    if not loot then
+        local hover=self._fishingHover
+        local age=hover and self:Now()-hover.at
+        -- A pre-cast tooltip alone cannot identify the source of open-water loot.
+        if not hover or hover.cast~=cast or not age or age<0 or age>8 or
+           (cast.name and hover.name:lower()~=cast.name:lower()) then return end
+        cast.name=hover.name
+        loot={cast=cast,slots={},cleared={}}
+        self._fishingLoot=loot
+    end
     if type(GetLootSlotLink)=="function" and type(GetLootSlotInfo)=="function" and type(GetNumLootItems)=="function" then
         local slots=number(self:Try(GetNumLootItems),1,1000) or 0
         for slot=1,slots do
@@ -1001,11 +1011,13 @@ function FCM:RecordFishingSchoolLoot()
             local _,_,qty=self:Try(GetLootSlotInfo,slot)
             local id=type(link)=="string" and number(link:match("|Hitem:(%d+)"),1,10000000)
             qty=number(qty,1,1000000)
-            if id and qty then slotsByID[slot]={item=id,count=qty} end
+            local source=self:Try(GetLootSourceInfo,slot)
+            if id and qty and type(source)=="string" and
+               (type(issecretvalue)~="function" or not issecretvalue(source)) and
+               source:find("GameObject-",1,true)==1 and not loot.cleared[slot] then
+                loot.slots[slot]={item=id,count=qty}
+            end
         end
-    end
-    if next(slotsByID) then
-        self._fishingLoot={cast=cast,slots=slotsByID}
     end
 end
 
@@ -1015,6 +1027,7 @@ function FCM:ConfirmFishingLootSlot(slot)
     if not catch then return end
     if self:Now()-loot.cast.at>120 then self._fishingLoot=nil;return end
     loot.slots[slot]=nil
+    loot.cleared[slot]=true
     local cast=loot.cast
     local catches={[catch.item]=catch.count}
     if not loot.node then
@@ -1183,16 +1196,10 @@ function FCM:GatherEvent(event,...)
             self._fishingLastSpellID=spellID
             self._fishingCast=nil
             self._fishingLoot=nil
-            local hover=self._fishingHover
-            if hover and self:Now()-(hover.at or 0)<=8 then
-                local mapID,x,y=playerGatherPosition()
-                self._fishingHover=nil
-                self._fishingCast={name=hover.name,at=self:Now(),guid=castGUID,
-                    spellID=spellID,mapID=mapID,x=x,y=y}
-                self._fishingLastResult="Cast: "..hover.name.." (awaiting bobber loot)"
-            else
-                self._fishingLastResult="Fishing cast without a recent named school tooltip"
-            end
+            self._fishingHover=nil
+            local mapID,x,y=playerGatherPosition()
+            self._fishingCast={at=self:Now(),guid=castGUID,spellID=spellID,mapID=mapID,x=x,y=y}
+            self._fishingLastResult="Fishing cast; awaiting named object and loot"
             return
         end
         if not kind then return end
@@ -1204,17 +1211,24 @@ function FCM:GatherEvent(event,...)
         if unit=="player" and event=="UNIT_SPELLCAST_FAILED" and
             self._fishingCast and self._fishingCast.guid==castGUID then
             self._fishingCast=nil
+            self._fishingLoot=nil
             self._fishingLastResult="Fishing cast failed; no school recorded"
         end
     elseif event=="LOOT_SLOT_CLEARED" then
         self:ConfirmFishingLootSlot(...)
     elseif event=="LOOT_CLOSED" then
         self._fishingLoot=nil
+        self._fishingCast=nil
+        self._fishingHover=nil
     elseif event=="LOOT_READY" or event=="LOOT_OPENED" then
         self:RecordTreasureLoot()
         self:RecordFishingSchoolLoot()
     elseif event=="UNIT_SPELLCAST_SUCCEEDED" then
         local unit,castGUID,spellID=...
+        if unit=="player" and self._fishingCast and self._fishingCast.guid==castGUID and isFishingSpell(spellID) then
+            self._fishingLastSpellID=spellID
+            return
+        end
         if unit~="player" or not pending or pending.spellID~=spellID or
            pending.guid~=castGUID then return end
         local found=pending

@@ -272,7 +272,7 @@ function Install-Addon {
     if (-not (Test-Path -LiteralPath $dest)) { New-Item -Path $dest -ItemType Directory | Out-Null }
     foreach ($src in @(Get-ChildItem -LiteralPath $script:SourceAddon -File)) {
         # Never overwrite reference data created by an earlier successful update.
-        if ($src.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua','CommunityGathering.generated.lua') -and
+        if ($src.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua','CommunityGathering.generated.lua','GatheringReferenceData.lua') -and
                 (Test-Path -LiteralPath (Join-Path $dest $src.Name))) { continue }
         Copy-Item -LiteralPath $src.FullName -Destination (Join-Path $dest $src.Name) -Force
     }
@@ -290,7 +290,7 @@ function Install-Addon {
     $destCompanion = Join-Path $dest 'FCM-Companion'
     if (-not (Test-Path -LiteralPath $destCompanion)) { New-Item -Path $destCompanion -ItemType Directory | Out-Null }
     # Only copy static scripts and documentation; NEVER copy credentials, settings or caches.
-    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ForeverDB.Quota.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','GatheringSync.ps1','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt','Enable-FCM-OvernightCatalog.ps1','Disable-FCM-OvernightCatalog.ps1','ENABLE-FCM-OVERNIGHT.cmd','OVERNIGHT_CATALOG_SETUP.txt')) {
+    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ForeverDB.Quota.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','GatheringSync.ps1','build_gather_reference.py','import_foreverdb_gathering.py','gathering-reference.json','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt','Enable-FCM-OvernightCatalog.ps1','Disable-FCM-OvernightCatalog.ps1','ENABLE-FCM-OVERNIGHT.cmd','OVERNIGHT_CATALOG_SETUP.txt')) {
         $companionSource = Join-Path $script:Base $filename
         if (Test-Path -LiteralPath $companionSource) {
             Copy-Item -LiteralPath $companionSource -Destination (Join-Path $destCompanion $filename) -Force
@@ -861,7 +861,7 @@ function Action($operation,[bool]$isScan=$false) {
     $script:syncButton.Enabled = $false
     $script:installButton.Enabled = $false
     $script:stopButton.Enabled = $isScan
-    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox,$script:auditButton,$script:gatherSyncButton,$script:gatherExportButton)) {
+    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox,$script:auditButton,$script:gatherSyncButton,$script:gatherExportButton,$script:gatherReferenceButton)) {
         if ($null -ne $ctrl) {$ctrl.Enabled=$false}
     }
     $script:stopButton.Text = 'Stop Scan'
@@ -1055,6 +1055,12 @@ $script:gatherExportButton.Location=New-Object System.Drawing.Point(267,446)
 $script:gatherExportButton.Size=New-Object System.Drawing.Size(263,29)
 $script:gatherExportButton.Add_Click({Action {Export-FCMGatheringContributions}})
 $form.Controls.Add($script:gatherExportButton)
+$script:gatherReferenceButton=New-Object System.Windows.Forms.Button
+$script:gatherReferenceButton.Text='Refresh ForeverDB Gathering'
+$script:gatherReferenceButton.Location=New-Object System.Drawing.Point(548,446)
+$script:gatherReferenceButton.Size=New-Object System.Drawing.Size(220,29)
+$script:gatherReferenceButton.Add_Click({Action {Sync-FCMGatheringReference}})
+$form.Controls.Add($script:gatherReferenceButton)
 $null=New-Label 'Sync activity and data sources' 20 478 470 20
 $script:statusLabel=New-Label 'Idle' 650 478 118 20
 $script:logBox=New-Object System.Windows.Forms.TextBox

@@ -41,12 +41,21 @@ function FCM:GatherZoneLabel(mapID)
     return type(info)=="table" and type(info.name)=="string" and info.name or "Map "..tostring(mapID or "unknown")
 end
 
-function FCM:GatherResourceRows(search, kind, ch)
-    local entries,byKey={},{}
+local function poolType(name,ref)
+    if ref then return ref.fishingSourceType end
+    local lower=name:lower()
+    if lower=="oil spill" then return "oil_spill" end
+    if lower=="floating wreckage" then return "wreckage" end
+    if lower=="oily blackmouth school" or lower=="firefin snapper school" then return "school" end
+    return "unknown"
+end
+
+function FCM:GatherResourceRows(search, kind, ch, sourceType)
+    local entries,byKey,refs={},{},{}
     local q=(search or ""):lower()
-    local function add(category,name)
-        if not labels[category] or (kind and kind~=category) or not name:lower():find(q,1,true) then return end
-        local key=category..":"..name:lower()
+    local function add(category,name,identity)
+        if not labels[category] or (kind and kind~=category) then return end
+        local key=category..":"..(identity or name:lower())
         local row=byKey[key]
         if not row then
             row={id="gather:"..key,name=name,kind=category,locations={},count=0}
@@ -55,12 +64,33 @@ function FCM:GatherResourceRows(search, kind, ch)
         return row
     end
     for _,ref in ipairs(self.gatheringReference and self.gatheringReference.resources or {}) do
-        local row=add(ref.category,ref.name)
-        if row then row.reference=ref end
+        if ref.category=="fishing" then refs[ref.name:lower()]=ref end
+        if not sourceType or poolType(ref.name,ref)==sourceType then
+            local row=add(ref.category,ref.name)
+            if row then row.reference=ref end
+        end
     end
     for _,point in ipairs(self:GatherNodes(kind)) do
-        local row=add(point.kind,point.name)
+        local typ=point.kind=="fishing" and poolType(point.name,refs[point.name:lower()])
+        local row=(not sourceType or typ==sourceType) and add(point.kind,point.name)
+        if row and point.kind=="fishing" and point.personal and type(point.catches)=="table" then
+            local recorded=false
+            for id,qty in pairs(point.catches) do
+                id,qty=tonumber(id),tonumber(qty)
+                if id and id>=1 and id<=10000000 and id==math.floor(id) and qty and qty>=1 and qty<=1000000000 and qty==math.floor(qty) then
+                    local name=(type(GetItemInfo)=="function" and self:Try(GetItemInfo,id)) or ("Item "..id)
+                    local species=add("fishing",name,"item:"..id)
+                    species.itemID=id
+                    species.count=species.count+qty
+                    species.locations[#species.locations+1]={name=point.name,mapID=point.mapID,x=point.x,y=point.y,quantity=qty,sourceType=typ}
+                    recorded=true
+                end
+            end
+            if recorded and row and not row.reference and #row.locations==0 then row.hidden=true end
+            if recorded then row=nil end
+        end
         if row then
+            row.hidden=false
             row.locations[#row.locations+1]=point
             if point.personal then
                 row.count=row.count+(tonumber(point.gatherCount) or 1)
@@ -68,7 +98,19 @@ function FCM:GatherResourceRows(search, kind, ch)
             end
         end
     end
-    table.sort(entries,function(a,b) return a.id<b.id end)
+    local filtered={}
+    for _,row in ipairs(entries) do
+        local matches=row.name:lower():find(q,1,true) or (row.itemID and tostring(row.itemID)==q)
+        for _,point in ipairs(row.locations) do
+            if point.name:lower():find(q,1,true) or (point.sourceType or ""):gsub("_"," "):find(q,1,true) then matches=true;break end
+        end
+        if (matches or (row.reference and (row.reference.fishingSourceType or ""):gsub("_"," "):find(q,1,true))) and not row.hidden then filtered[#filtered+1]=row end
+    end
+    entries=filtered
+    table.sort(entries,function(a,b)
+        if a.kind==b.kind and a.name~=b.name then return a.name<b.name end
+        return a.id<b.id
+    end)
     for _,row in ipairs(entries) do
         local ref=row.reference
         local catches={}
@@ -80,8 +122,8 @@ function FCM:GatherResourceRows(search, kind, ch)
                 end
             end
         end
-        row.icon=self:GatherNodeIcon(row.kind,row.name,catches,ref and ref.itemID)
-        row.summary=labels[row.kind].." | "..(row.minimum and "At least " or "")..row.count.." personal gathers"
+        row.icon=self:GatherNodeIcon(row.kind,row.name,row.itemID and {[row.itemID]=row.count} or catches,ref and ref.itemID)
+        row.summary=row.itemID and ("Fishing | "..row.count.." confirmed caught") or labels[row.kind].." | "..(row.minimum and "At least " or "")..row.count.." personal gathers"
         row.detail=function()
             local lines={(row.icon and ("|T"..tostring(row.icon)..":20:20|t ") or "")..row.name,row.summary}
             for _,line in ipairs(self:GatherResourceSkill(row.kind,row.name,ch)) do lines[#lines+1]=line end
@@ -98,9 +140,14 @@ function FCM:GatherResourceRows(search, kind, ch)
                 end
             end
             for _,point in ipairs(row.locations) do
+                if row.itemID then
+                    lines[#lines+1]=string.format("%s %.2f, %.2f | %s (%s) | x%d",
+                        self:GatherZoneLabel(point.mapID),point.x/100,point.y/100,point.name,(point.sourceType or "unknown"):gsub("_"," "),point.quantity)
+                else
                 lines[#lines+1]=string.format("%s %.2f, %.2f | %s | %s",
                     self:GatherZoneLabel(point.mapID),point.x/100,point.y/100,point.source or "Unknown source",self:GatherCountLabel(point))
                 for _,line in ipairs(self:GatherCatchLines(point.catches)) do lines[#lines+1]=line end
+                end
             end
             if row.kind=="fishing" then lines[#lines+1]="Saved coordinates are the player's standing location." end
             return table.concat(lines,"\n")
