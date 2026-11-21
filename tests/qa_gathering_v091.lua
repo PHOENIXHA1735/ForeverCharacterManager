@@ -932,7 +932,7 @@ local treasureRow=exactRow('treasure','Battered Chest')
 local skilled={professions={Mining={skill=121,maxSkill=150,scan=catalog:Now()}}}
 local model2=catalog:GatherDetailModel(mined,skilled,false)
 eq(model2.metrics[2][2],'121/150','character metric is printable')
-eq(model2.metrics[3][2],'Unverified','skill cannot verify the drop')
+eq(model2.metrics[3][2],'ForeverDB listed','provider item listing is not personal verification')
 eq(model2.sources[1].eligibility,'Yes','candidate skill met independently')
 local cases={{mined,'Possible Source Deposits'},{herbMaterial,'Possible Source Herbs'},
     {herbNode,'Possible Source Herbs'},{copperNode,'Possible Source Deposits'},
