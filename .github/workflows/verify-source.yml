@@ -98,3 +98,6 @@ jobs:
       - name: Verify Gathering reference refresh (PowerShell 5.1)
         shell: powershell
         run: .\tests\qa_gather_sync.ps1
+      - name: Verify transactional reference publication (PowerShell 5.1)
+        shell: powershell
+        run: .\tests\qa_reference_publication.ps1

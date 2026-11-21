@@ -217,7 +217,7 @@ function Copy-FCMReleaseCode([string]$source,[string]$destination) {
     }
     $fromComp=Join-Path $source 'FCM-Companion';$toComp=Join-Path $destination 'FCM-Companion'
     if (-not (Test-Path -LiteralPath $toComp)) {New-Item -ItemType Directory -Path $toComp -Force | Out-Null}
-    foreach ($name in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','GitHubUpdates.ps1','GatheringSync.ps1','build_gather_reference.py','import_foreverdb_gathering.py','gathering-reference.json','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua')) {
+    foreach ($name in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','GitHubUpdates.ps1','GatheringSync.ps1','ReferencePublication.ps1','build_gather_reference.py','import_foreverdb_gathering.py','gathering-reference.json','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua')) {
         $file=Join-Path $fromComp $name
         if (Test-Path -LiteralPath $file) {Copy-Item -LiteralPath $file -Destination (Join-Path $toComp $name) -Force}
     }

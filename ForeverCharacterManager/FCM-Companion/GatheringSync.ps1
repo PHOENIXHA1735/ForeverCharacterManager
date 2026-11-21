@@ -20,7 +20,6 @@ function Test-FCMGatherNode($node, [string]$expectedKind) {
 }
 
 function Sync-FCMGatheringCommunity {
-    if (Game-Is-Running) { throw 'Close WoW before syncing community gathering data.' }
     $dest=Target-Addon
     if (-not (Test-Path -LiteralPath (Join-Path $dest 'Gathering.lua'))) {
         throw 'Install the FCM gathering update before downloading community nodes.'
@@ -34,7 +33,7 @@ function Sync-FCMGatheringCommunity {
     $lines=New-Object 'System.Collections.Generic.List[string]'
     [void]$lines.Add('-- FCM community gathering: data only, no account or character information.')
     [void]$lines.Add('local _, FCM = ...')
-    [void]$lines.Add("FCM.communityGathering = {schema=1,version=$([int]$manifest.version),nodes={")
+    [void]$lines.Add("FCM.communityGathering = {schema=1,generatedUtc=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()),version=$([int]$manifest.version),nodes={")
     $seen=@{}; $count=0
     foreach ($kind in $kinds) {
         $filename="$kind.json"
@@ -55,13 +54,11 @@ function Sync-FCMGatheringCommunity {
         }
     }
     [void]$lines.Add('}}')
-    $path=Join-Path $dest 'CommunityGathering.generated.lua'
-    $temp="$path.tmp"
-    try {
-        [IO.File]::WriteAllLines($temp,$lines,(New-Object System.Text.UTF8Encoding($false)))
-        Move-Item -LiteralPath $temp -Destination $path -Force
-    } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
-    Log "Community gathering database v$($manifest.version) installed: $count locations. Launch WoW to merge them."
+    $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($lines -join "`n")+"`n")
+    $result=Publish-FCMReferenceData -Addon $dest -Name 'CommunityGathering.generated.lua' -Bytes $bytes
+    if(!$result.Published){Log "Community reference staged. Pending: $($result.Pending)";return}
+    Log "Community gathering database v$($manifest.version) published: $count locations. Reload the UI to load it."
+
 }
 
 function Export-FCMGatheringContributions {
@@ -98,7 +95,6 @@ function Export-FCMGatheringContributions {
 # Manual reference refresh. Use the same credentialed request path, pacing,
 # quota ledger, and Retry-After handling as the rest of the companion.
 function Sync-FCMGatheringReference {
-    if (Game-Is-Running) { throw 'Close WoW before refreshing Gathering reference files.' }
     $addon=Target-Addon
     $target=Join-Path $addon 'GatheringReferenceData.lua'
     if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw 'Install the Gathering browser before its reference refresh.' }
@@ -147,10 +143,14 @@ function Sync-FCMGatheringReference {
             }
             $null=& $python -B (Join-Path $script:Base 'import_foreverdb_gathering.py') $work $generation 2>&1
             if($LASTEXITCODE -ne 0){throw 'Gathering provider response could not be validated. Previous reference retained.'}
-            if(Game-Is-Running){throw 'WoW opened during refresh. Previous reference retained.'}
-            $null=& $python -B (Join-Path $script:Base 'build_gather_reference.py') (Join-Path $generation 'gathering-reference.json') $target 2>&1
-            if($LASTEXITCODE -ne 0){throw 'Gathering publication failed. Previous reference retained.'}
-            $hash=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+            $payload=[IO.File]::ReadAllBytes((Join-Path $generation 'GatheringReferenceData.lua'))
+            $audit=Get-Content -LiteralPath (Join-Path $generation 'audit.json') -Raw | ConvertFrom-Json
+            if((Get-FileHash -LiteralPath (Join-Path $generation 'GatheringReferenceData.lua')).Hash -ne $audit.outputs.'GatheringReferenceData.lua'){
+                throw 'Gathering generation hash mismatch.'
+            }
+            $result=Publish-FCMReferenceData -Addon $addon -Name 'GatheringReferenceData.lua' -Bytes $payload
+            if(!$result.Published){Log "Gathering reference staged. Pending: $($result.Pending)";return}
+            $hash=$result.Sha256
             $checkpoint=@{build=$build;sha256=$hash;verifiedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
             [IO.File]::WriteAllText($receiptTemp,($checkpoint | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
             if(Test-Path -LiteralPath $receiptPath){[IO.File]::Replace($receiptTemp,$receiptPath,[NullString]::Value)}

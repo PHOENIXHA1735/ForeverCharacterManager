@@ -44,6 +44,9 @@ FCM.dungeonDirectorySource = source
 FCM.dungeonDirectory = directory
 local aliases = {
     ["thedeadmines"]="deadmines",
+    ["thetempleofatalhakkar"]="sunkentemple",
+    ["templeofatalhakkar"]="sunkentemple",
+    ["theblackfathomdeeps"]="blackfathomdeeps",
     ["thehallofthanes"]="hallofthanes",
     ["thestockade"]="stormwindstockades",
     ["thestockades"]="stormwindstockades",
@@ -69,6 +72,21 @@ local raids = {
 local function normalized(name)
     local key=string.lower(tostring(name or "")):gsub("[^%w]", "")
     return aliases[key] or key
+end
+
+function FCM:DungeonReferenceCounts(row)
+    local named, linked = 0, 0
+    for _, boss in ipairs(row.bosses or {}) do
+        local name = (boss.name or ""):lower()
+        if name ~= "" and not name:find("name not supplied",1,true) and
+            not name:find("name unavailable",1,true) then named=named+1 end
+        local seen={}
+        for _, drop in ipairs(boss.loot or {}) do
+            local id=tonumber(drop.id)
+            if id and id>0 and not seen[id] then seen[id]=true; linked=linked+1 end
+        end
+    end
+    return named, linked, #self:DungeonAssociatedDrops(row)
 end
 local function recordKind(rec, normalizedName)
     local declared=string.lower(tostring(rec.kind or rec.type or rec.instanceType or ""))
@@ -105,6 +123,8 @@ function FCM:BrowseDungeons(view,levelFilter,playerLevel)
             lines=entry and entry.lines or nil,lootIDs=entry and entry.lootIDs or nil,
             bosses=entry and entry.bosses or nil,
             dungeonLoot=entry and entry.dungeonLoot or nil,
+            sourceProvider=entry and entry.sourceProvider or nil,
+            referenceCheckedAt=entry and entry.referenceCheckedAt or nil,
             imported=entry~=nil,referenceOnly=entry==nil}
         if (view=="dungeons" or view=="all") and
             (levelFilter~="current" or (playerLevel and playerLevel>=ref.low and playerLevel<=ref.high)) then
@@ -124,7 +144,8 @@ function FCM:BrowseDungeons(view,levelFilter,playerLevel)
                     low=low,high=high,levels=rec.levels or "Not supplied",
                     bossCount=tonumber(rec.bossCount),lines=rec.lines,lootIDs=rec.lootIDs,
                     bosses=rec.bosses,dungeonLoot=rec.dungeonLoot,
-                    imported=true,source="https://foreverdb.net",referenceOnly=false}
+                    imported=true,source="https://foreverdb.net",sourceProvider=rec.sourceProvider,
+                    referenceCheckedAt=rec.referenceCheckedAt,referenceOnly=false}
             end
         end
     end

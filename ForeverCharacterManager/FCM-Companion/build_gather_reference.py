@@ -105,6 +105,7 @@ def validate(document):
     d['resources'].sort(key=lambda r:r['id'])
     d['sources'].sort(key=lambda s:s['id'])
     d['contentSHA256']=hashlib.sha256(json.dumps(d['resources'],sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    d['generatedUtc']=int(at.timestamp())
     d['recordCount']=len(d['resources'])
     d['categoryCounts']={kind:sum(r['category']==kind for r in d['resources']) for kind in sorted(CATEGORIES)}
     return d

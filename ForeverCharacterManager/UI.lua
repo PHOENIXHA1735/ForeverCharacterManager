@@ -521,6 +521,7 @@ function UI:RenderItemPreview(row)
     return 112
 end
 function UI:ResetDungeonWidgets()
+    self.dungeonDetailRecord,self.dungeonDetailCharacter=nil,nil
     self.dungeonWidgetCounts={label=0,row=0,texture=0}
     for _,pool in pairs(self.dungeonWidgetPool or {}) do
         for _,widget in ipairs(pool) do widget:Hide() end
@@ -562,22 +563,32 @@ function UI:RenderDungeonDetail(r,ch)
     if not r then return end
     self.detailText:Hide()
     self:ResetDungeonWidgets()
-    local width=math.max(245,self.detailChild:GetWidth()-12)
+    self.dungeonDetailRecord,self.dungeonDetailCharacter=r,ch
+    local width=math.max(100,self.detailChild:GetWidth()-12)
     local y=5
     local function line(content,height,hex,indent)
         local label=self:AcquireDungeonWidget("label")
         label:ClearAllPoints()
         label:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",indent or 6,-y)
         label:SetWidth(width-(indent or 6)-6)
-        label:SetHeight(height or 19)
         label:SetText(hex and color(content,hex) or content)
+        height=math.max(height or 19,math.ceil(tonumber(label:GetStringHeight()) or 0)+4)
+        label:SetHeight(height)
         label:Show()
         y=y+(height or 19)
     end
     local function gap(n)y=y+(n or 7) end
     local kind=(r.kind=="raid" and "Raid" or (r.kind=="unclassified" and "Unclassified instance" or "Dungeon"))
+    local named,linked,associated=FCM:DungeonReferenceCounts(r)
+    line("Dungeon Overview",21,"d4b466")
     line(r.name,24,"ffd76d")
     line(kind.."  |  Guide levels "..tostring(r.levels or "unknown"),20,"c2cad7")
+    if r.imported then
+        line(("%d named bosses  |  %d boss-linked items  |  %d dungeon-associated items"):format(named,linked,associated),24,"c2cad7")
+        line((r.sourceProvider or "External reference").." reference; live drops unverified.",22,"aeb9ca")
+    else
+        line("Guide directory only. Boss and loot references are unavailable.",26,"aeb9ca")
+    end
     if r.newToForever then line("New to WoW Forever",17,"93ddb9") end
     gap(9)
     local scope=FCM.db.settings.dungeonLootScope or "class"
@@ -767,24 +778,7 @@ function UI:RenderDungeonDetail(r,ch)
         line("Left-click for stats and comparison; right-click for tooltip.",34,"aab8c9",8)
         gap(7)
     end
-    local bossNames={}
-    local bossRows={}
-    for _,boss in ipairs(r.bosses or {}) do
-        local name=tostring(boss.name or "")
-        if name~="" and not name:find("name not supplied",1,true) and
-            not name:find("name unavailable",1,true) then bossNames[#bossNames+1]=name end
-        bossRows[#bossRows+1]=boss
-    end
-    line("BOSSES  ("..#bossNames.." named in reference)",26,"ffd76d")
-    if #bossNames==0 then
-        line("Boss names not available in imported data.",35,"aeb9ca")
-    else
-        for i=1,#bossNames,2 do
-            local a=short(bossNames[i],21)
-            local b=bossNames[i+1] and short(bossNames[i+1],19) or ""
-            line("  "..a..(b~="" and "     |     "..b or ""),19,"d8e4f1")
-        end
-    end
+    local bossRows=r.bosses or {}
     gap(11)
     local function itemRow(drop, bossName, bossIndex)
         local id=tonumber(drop.id)
@@ -808,9 +802,9 @@ function UI:RenderDungeonDetail(r,ch)
         local label=meta.slot or meta.typeName or "Item type unknown"
         local verdict="Stats unknown"
         if eligibility=="other" then verdict="Not for this class"
+        elseif eligibility=="future" then verdict="Requires a higher level"
         elseif upgrade and upgrade.state=="upgrade" then verdict="Potential upgrade"
         elseif upgrade and upgrade.state=="not-upgrade" then verdict="Not an upgrade"
-        elseif eligibility=="future" then verdict="Requires a higher level"
         elseif eligibility=="candidate" then verdict="Potential class item" end
         local fitLabel=fit=="match" and "spec fit?" or (fit=="offspec" and "off-spec?" or "")
         row.sub:SetText(short(label.."  |  "..verdict..(fitLabel~="" and (" | "..fitLabel) or ""),51))
@@ -836,27 +830,30 @@ function UI:RenderDungeonDetail(r,ch)
         row:Show()
         y=y+54
     end
-    line("FOREVERDB BOSS-LINKED LOOT (reference, not confirmed)",38,"ffd76d")
-    local bossDropCount=0
+    line("Boss Information",24,"ffd76d")
+    if #bossRows==0 then line("Boss details unavailable.",22,"aeb9ca") end
     for index,boss in ipairs(bossRows) do
         if not focusedIndex or focusedIndex==index then
             local drops=boss.loot or {}
-            if #drops>0 then
-                bossDropCount=bossDropCount+#drops
-                local bossName=tostring(boss.name or "Boss name unavailable")
-                line(short(bossName,38),20,"c7d6e9")
-                for _,drop in ipairs(orderedDrops(drops)) do itemRow(drop,bossName,index) end
-            end
+            gap(7)
+            local portrait=self:AcquireDungeonWidget("texture")
+            portrait:ClearAllPoints()
+            portrait:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",8,-y)
+            portrait:SetSize(26,26)
+            portrait:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+            portrait:Show()
+            local bossName=tostring(boss.name or "Boss name unavailable")
+            line(bossName,31,"c7d6e9",42)
+            line("Boss Loot",20,"d4b466",12)
+            local before=shown
+            for _,drop in ipairs(orderedDrops(drops)) do itemRow(drop,bossName,index) end
+            if #drops==0 then line("Boss-linked loot unavailable.",22,"aeb9ca",12)
+            elseif shown==before then line("No boss-linked items match this filter.",22,"aeb9ca",12) end
         end
-    end
-    if bossDropCount==0 then
-        line("No boss-linked loot records for this selection.",35,"aeb9ca")
-    else
-        line("Source-linked, not confirmed in the live game.",31,"aeb9ca")
     end
     gap(9)
     if not focusedIndex then
-        line("DUNGEON-ASSOCIATED (BOSS UNKNOWN)",23,"ffd76d")
+        line("Dungeon-Associated Loot",23,"ffd76d")
         line("No boss inferred; these are not confirmed drops.",33,"aeb9ca")
         local unassigned=unassignedDrops()
         local before=shown
@@ -875,8 +872,11 @@ function UI:RenderDungeonDetail(r,ch)
             " hidden by current loot filter.",19,"abb9c9")
     end
     gap(11)
-    line("Reference: "..tostring(r.sourceProvider or "ForeverDB").."  |  Imported "..tostring(r.referenceCheckedAt or "date unknown"),34,"96a3b3")
-    line("Reported sources are not confirmed live drops.",25,"96a3b3")
+    if r.imported then
+        line("Reference: "..tostring(r.sourceProvider or "Provider unrecorded").."  |  Checked "..tostring(r.referenceCheckedAt or "date unknown"),34,"96a3b3")
+    else
+        line("Level ranges: Icy Veins WoW Forever dungeon guide.",25,"96a3b3")
+    end
     self.detailChild:SetHeight(math.max(340,y+12))
 end
 
@@ -1113,6 +1113,31 @@ function UI:RefreshProfessionTabs(ch)
     self:ScrollNavigation(0)
 end
 
+function UI:ReloadPublishedData()
+    if type(ReloadUI)=="function" then ReloadUI() end
+end
+
+local function updateLabel(label,stamp)
+    stamp=tonumber(stamp)
+    if not stamp or stamp<=0 then return label..": update time unavailable" end
+    return label..": "..FCM:TimestampLabel(stamp).." ("..FCM:Age(stamp)..")"
+end
+
+function UI:PublishedDataStatus(tab)
+    local external=FCM.externalData or {}
+    if tab=="Gold" then
+        return updateLabel("History loaded",FCM_AHHistory and FCM_AHHistory.generatedUtc)
+    elseif tab=="Auction" then
+        return updateLabel("Price fetch loaded",external.ahFetchedUtc)
+    elseif tab=="Gathering" then
+        local reference=FCM.gatheringReference or {}
+        if not reference.generatedUtc and reference.generatedAt then
+            return "Bundled reference: "..reference.generatedAt.." | age unavailable"
+        end
+        return updateLabel("Reference loaded",reference.generatedUtc)
+    end
+end
+
 function UI:BuildNavigation(window)
     local sidebar=CreateFrame("Frame",nil,window)
     sidebar:SetPoint("TOPLEFT",window,"TOPLEFT",16,-70)
@@ -1263,6 +1288,8 @@ function UI:Create()
     local close = button(f, "X", 30, 25, function() f:Hide() end)
     close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -13)
 
+    local reload=button(f,"Update & Reload",145,25,function() self:ReloadPublishedData() end)
+    reload:SetPoint("RIGHT",close,"LEFT",-8,0)
     self:BuildNavigation(f)
 
     local panel = CreateFrame("Frame",nil,f)
@@ -1727,9 +1754,14 @@ function UI:Reflow()
     if self.sidebarScroll then self:ScrollNavigation(0) end
     local listWidth=math.max(250,self.listPanel:GetWidth()-40)
     self.scrollChild:SetWidth(listWidth)
+    local oldDetailWidth=self.detailChild:GetWidth()
     self.detailChild:SetWidth(math.max(190,self.detailPanel:GetWidth()-42))
     self.detailText:SetWidth(math.max(180,self.detailChild:GetWidth()-8))
-    if self.gatherMaterialActive and self.gatherMaterialRow and self.RenderGatherMaterialPanel then
+    if self.dungeonDetailRecord then
+        if oldDetailWidth~=self.detailChild:GetWidth() then
+            self:RenderDungeonDetail(self.dungeonDetailRecord,self.dungeonDetailCharacter)
+        end
+    elseif self.gatherMaterialActive and self.gatherMaterialRow and self.RenderGatherMaterialPanel then
         self:RenderGatherMaterialPanel(self.gatherMaterialRow,self.gatherMaterialCharacter,self.gatherMaterialExpanded)
     elseif self.detailCardSource then
         self:RenderDetailCards(self.detailCardSource,self.detailCardTab,self.detailCardOffset)
@@ -3803,11 +3835,11 @@ function UI:Refresh()
         self.activityButton:SetText(FCM.gearActivityLabels[FCM:GearActivity(nil)])
         self.modeButton:SetText(FCM.modeLabels[FCM:Mode(nil)])
     end
-    self.subtitle:SetText(ch and
+    self.subtitle:SetText(self:PublishedDataStatus(tab) or (ch and
         ((ch.key==FCM.currentKey and "[LOGGED IN] " or "[OFFLINE SNAPSHOT] ")..
         FCM:DisplayCharacter(ch).." | "..(FCM:NormalizeFaction(ch.faction) or "Unknown faction")..
         " | last seen "..FCM:Age(ch.lastSeen)) or
-        "No character in selected faction; log into one to scan")
+        "No character in selected faction; log into one to scan"))
     self:RefreshProfessionTabs(ch)
     tab=self.tab or "Overview"
     if tab=="Crafting" and ch and FCM.db.settings.craftProfession and
