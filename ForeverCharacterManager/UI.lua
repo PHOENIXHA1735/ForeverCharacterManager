@@ -1325,6 +1325,20 @@ function UI:Create()
     end)
     self.gatherWorldButton:SetPoint("LEFT",self.gatherSizeButton,"RIGHT",8,0)
     self.gatherWorldButton:Hide()
+    self.gatherCategoryButton=button(panel,"Resources: All",155,25,function()
+        local entries={}
+        for _,entry in ipairs({{"All"},{"Herbalism","herbalism"},{"Mining","mining"},
+            {"Fishing","fishing"},{"Treasure","treasure"}}) do
+            entries[#entries+1]={label=entry[1],run=function()
+                self.gatherCategory=entry[2]
+                self.gatherCategoryButton:SetText("Resources: "..entry[1])
+                self:Refresh()
+            end}
+        end
+        self:MakeMenu(self.gatherCategoryButton,entries,155,true)
+    end)
+    self.gatherCategoryButton:SetPoint("LEFT",self.gatherWorldButton,"RIGHT",8,0)
+    self.gatherCategoryButton:Hide()
 
     self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
     self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
@@ -2412,51 +2426,10 @@ local function buildRows(ui)
         if #rows==0 or (#rows==1 and rows[1].id=='scoring-source') then add("no-upgrades","No actionable upgrades found","A matching numerical model and recorded equipment are required.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
     elseif tab=="Gathering" then
-        local count=FCM:GatherCounts()
-        local total=count.herbalism+count.mining+count.fishing+count.treasure
-        add("gather-guide","Gathering database (account-wide)",
-            total.." locations | "..count.personal.." personally confirmed",
-            "SAVED LOCATIONS\n"..
-            count.herbalism.." herbalism | "..count.mining.." mining\n"..
-            count.fishing.." fishing | "..count.treasure.." treasure\n"..
-            "Sources: personal "..count.personal..", GatherMate2 "..count.gathermate..
-                ", community "..count.community..".\n\n"..
-            "AUTOMATIC RECORDING\n"..
-            "FCM records named herbs or ore when the client confirms a successful gathering cast. "..
-            "Fishing requires a named school/pool. Unnamed targets are skipped to avoid false locations.\n\n"..
-            "COMMUNITY AND IMPORTS\n"..
-            "Click Import GatherMate2 below, or use /fcm gather import. "..
-            "The Windows companion can merge published GitHub locations locally. "..
-            "Character data is not uploaded; contributions are manual.\n\n"..
-            "WORLD MAP AND MINIMAP\n"..
-            "World Map: On/Off controls the full-map overlay, including distant saved nodes. "..
-            "Pins: On/Off controls the nearby minimap markers. Hover a pin to see FCM's recorded gather count.\n\n"..
-            "DISTANCE AND SIZE\n"..
-            "Hide within: 15 yd avoids covering live tracking dots. Rim beyond: 45 yd groups distant "..
-            "markers by direction with counts. Size: 16 px, adjustable 8-32. "..
-            "Set either distance to 0 to disable that behavior.\n\n"..
-            "COMMANDS\n"..
-            "/fcm gatherpins near <0-50>\n"..
-            "/fcm gatherpins rim <0-100>\n"..
-            "/fcm gatherpins size <8-32>\n"..
-            "/fcm gatherpins on|off\n"..
-            "/fcm gatherpins world on|off\n\n"..
-            "IMPORTANT: Saved pins show reported locations, not live spawn indicators.")
-        local categories={"herbalism","mining","fishing","treasure"}
-        for _,kind in ipairs(categories) do
-            -- Show all nodes up to the global list limit instead of hiding
-            -- five herbs at the old 70-per-category cap.
-            local nodes=FCM:GatherNodes(kind,nil,200)
-            for _,point in ipairs(nodes) do
-                local place=string.format("Map %d at %.2f, %.2f",point.mapID or 0,point.x/100,point.y/100)
-                add("gather:"..kind..":"..point.mapID..":"..point.x..":"..point.y..":"..point.name,
-                    point.name,kind.." | "..place,
-                    "|cffffd983"..point.name.."|r\n\n"..place.."\n"..
-                    "Gathering: "..kind.."\nSource: "..(point.personal and "Personally gathered" or
-                        (point.source=="gathermate" and "Imported from GatherMate2" or "Community database"))..
-                    "\n"..FCM:GatherCountLabel(point)..
-                    "\n\nThis is a previously reported location, not a live spawn indicator.")
-            end
+        for _,resource in ipairs(FCM:GatherResourceRows(ui.search and ui.search:GetText(),
+                ui.gatherCategory,ch)) do
+            add(resource.id,resource.name,resource.summary,resource.detail)
+            rows[#rows].gatherIcon=resource.icon
         end
     elseif tab=="Shopping" then
         local list,unresolved=FCM:ShoppingList(FCM:FactionView())
@@ -3818,7 +3791,8 @@ function UI:Refresh()
         end
         widget:ClearAllPoints()
         widget:SetPoint("TOPLEFT",self.scrollChild,"TOPLEFT",2,-((i-1)*47))
-        widget.label:SetText(short(row.title,63))
+        local icon=row.gatherIcon and ("|T"..tostring(row.gatherIcon)..":16:16|t ") or ""
+        widget.label:SetText(icon..short(row.title,63))
         widget.desc:SetText(short(row.summary,80))
         local shade=row.id==self.selectedRow and palette.selected or palette.row
         widget.bg:SetColorTexture(shade[1],shade[2],shade[3],0.9)
@@ -3914,6 +3888,7 @@ function UI:Refresh()
         self.gatherRimButton:SetShown(gathering)
         self.gatherSizeButton:SetShown(gathering)
         self.gatherWorldButton:SetShown(gathering)
+        self.gatherCategoryButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or

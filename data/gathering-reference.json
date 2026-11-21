@@ -1,0 +1,437 @@
+{
+  "schema": 1,
+  "game": "WoW Forever",
+  "generatedAt": "2026-11-20T22:37:21+00:00",
+  "sources": [
+    {
+      "id": "wowhead-silverleaf",
+      "name": "Wowhead Forever Silverleaf",
+      "url": "https://www.wowhead.com/forever/object=1617/silverleaf",
+      "permission": "Limited manual factual reference review; no bulk-copy permission asserted",
+      "version": null,
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "wowhead-herbalism-guide",
+      "name": "Wowhead Forever Herbalism guide",
+      "url": "https://www.wowhead.com/forever/guide/professions/herbalism/overview-leveling",
+      "permission": "Limited Silverleaf validation facts only; no bulk import",
+      "version": "2026-11-09 / patch 1.60.1",
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "wowhead-chest",
+      "name": "Wowhead Forever Battered Chest",
+      "url": "https://www.wowhead.com/forever/object=2843/battered-chest",
+      "permission": "Limited single-object factual review; no bulk copying",
+      "version": null,
+      "status": "reference_reviewed"
+    }
+  ],
+  "resources": [
+    {
+      "id": "object:1617",
+      "name": "Silverleaf",
+      "category": "herbalism",
+      "objectID": 1617,
+      "itemID": 765,
+      "iconID": null,
+      "profession": "Herbalism",
+      "minimumSkill": 1,
+      "orange": 1,
+      "yellow": 25,
+      "green": 65,
+      "gray": 100,
+      "locations": [
+        {
+          "zone": "Zephras Isle",
+          "continent": null,
+          "continentCandidate": null,
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Mulgore",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Tirisfal Glades",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Elwynn Forest",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Teldrassil",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Dun Morogh",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Durotar",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Silverpine Forest",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Loch Modan",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Westfall",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Darkshore",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "The Barrens",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Orgrimmar",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Stormwind City",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Ironforge",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Thunder Bluff",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-silverleaf",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Darkshore",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Dun Morogh",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Durotar",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Elwynn Forest",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Loch Modan",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Mulgore",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Redridge Mountains",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Silverpine Forest",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Teldrassil",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "The Barrens",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Tirisfal Glades",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Westfall",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Zephras Isle",
+          "continent": null,
+          "continentCandidate": null,
+          "sourceID": "wowhead-herbalism-guide",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        }
+      ],
+      "environment": "Near trees",
+      "loot": [
+        {
+          "name": "Silverleaf",
+          "itemID": 765,
+          "sourceID": "wowhead-herbalism-guide"
+        },
+        {
+          "name": "Commonplace Herb Seeds",
+          "itemID": 268415,
+          "sourceID": "wowhead-herbalism-guide"
+        }
+      ],
+      "fishingSourceType": null,
+      "fishingMinimum": null,
+      "fishingNoGetAways": null,
+      "sourceIDs": [
+        "wowhead-silverleaf",
+        "wowhead-herbalism-guide"
+      ],
+      "verificationStatus": "reference_reviewed",
+      "lastReferenceUpdate": "2026-11-20",
+      "itemIDStatus": "reference_reviewed",
+      "itemIconStrategy": "native-item-api"
+    },
+    {
+      "id": "object:2843",
+      "name": "Battered Chest",
+      "category": "treasure",
+      "objectID": 2843,
+      "itemID": null,
+      "iconID": null,
+      "profession": null,
+      "minimumSkill": null,
+      "orange": null,
+      "yellow": null,
+      "green": null,
+      "gray": null,
+      "locations": [
+        {
+          "zone": "Silverpine Forest",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Westfall",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Darkshore",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "The Barrens",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Redridge Mountains",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Mulgore",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Loch Modan",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Durotar",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Elwynn Forest",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Dun Morogh",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Tirisfal Glades",
+          "continent": null,
+          "continentCandidate": "Eastern Kingdoms",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        },
+        {
+          "zone": "Teldrassil",
+          "continent": null,
+          "continentCandidate": "Kalimdor",
+          "sourceID": "wowhead-chest",
+          "verificationStatus": "reported_reference",
+          "continentVerification": "not independently confirmed for Forever"
+        }
+      ],
+      "environment": null,
+      "loot": [],
+      "fishingSourceType": null,
+      "fishingMinimum": null,
+      "fishingNoGetAways": null,
+      "sourceIDs": [
+        "wowhead-chest"
+      ],
+      "verificationStatus": "reference_reviewed",
+      "lastReferenceUpdate": "2026-11-20",
+      "itemIDStatus": "unknown",
+      "objectType": "chest",
+      "itemIconStrategy": "profession-fallback"
+    }
+  ],
+  "coverage": {
+    "complete": false,
+    "scope": "Small curated seed",
+    "gaps": [
+      "Other resources require local reference acquisition"
+    ]
+  }
+}

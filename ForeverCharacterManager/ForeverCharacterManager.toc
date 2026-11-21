@@ -10,6 +10,8 @@
 Core.lua
 QATracker.lua
 Gathering.lua
+GatheringReferenceData.lua
+GatherBrowser.lua
 CommunityGathering.generated.lua
 Scan.lua
 Crafting.lua

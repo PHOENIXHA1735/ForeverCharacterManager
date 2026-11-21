@@ -45,6 +45,9 @@ jobs:
           python3 tests/check_private_paths.py
           python3 tests/qa_ah_history.py
           lua5.1 tests/qa_gold_advisor.lua
+      - name: Validate offline Gathering reference staging
+        if: success() || failure()
+        run: python3 tests/qa_gather_reference_import.py
       - name: Validate public gathering snapshot schema
         if: success() || failure()
         shell: python

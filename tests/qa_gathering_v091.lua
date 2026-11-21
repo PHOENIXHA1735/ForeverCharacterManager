@@ -272,13 +272,17 @@ eq(FCM:FishingStatus():find('Oily Blackmouth School',1,true)~=nil,true,
 GameTooltip.IsShown=function()return false end
 GetNumLootItems=function()return 1 end
 GetLootSourceInfo=function()return 'GameObject-0-0-0-0-99999-00001',1 end
+GetLootSlotLink=function(slot)return "|Hitem:"..(slot==1 and 6358 or 6359)..":|h" end
+GetLootSlotInfo=function()return nil,nil,2 end
 local priorFish=FCM:GatherCounts().fishing
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish1',7620)
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','fish1',7620)
 eq(FCM:GatherCounts().fishing,priorFish,'fishing cast alone does not save a pool')
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,'pool named via tooltip saved after real loot')
 FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,'loot ready and opened not duplicated')
 local savedSchool
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
@@ -293,6 +297,7 @@ eq(FCM_GatherExport['FCMG1|fishing|1438|5440|4640|Oily Blackmouth School']~=nil,
 fishNow=fishNow+10
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Fishing','fish2',7620)
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,
     'stale tooltip plus open-water loot cannot create a false school')
 GameTooltip.IsShown=function()return true end
@@ -302,12 +307,13 @@ GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish3',7620)
 GetLootSourceInfo=function()return 'Creature-0-0-0-0-111-00001',1 end
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
 end
 eq(savedSchool.gatherCount,1,'creature loot cannot count as fishing pool')
 fishNow=fishNow+1
-GetLootSourceInfo=nil -- Forever older client fallback: tooltip + cast + loot.
+GetLootSourceInfo=function()return 'GameObject-0-0-0-0-99999-00001',1 end
 GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
@@ -315,6 +321,7 @@ FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish4',7620)
 eq(FCM:FishingStatus():find('Cast: Oily Blackmouth School',1,true)~=nil,true,
     'tooltip-derived pool is armed for the repeat cast')
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,'repeat school stays a single saved node')
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
@@ -329,6 +336,7 @@ GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish5',999999)
 FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:FishingStatus():find('Last spell ID: 999999',1,true)~=nil,true,
     'Forever fishing override ID is recognized by the Fishing spell name')
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
@@ -343,6 +351,7 @@ GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish6',7620)
 FCM:GatherEvent('UNIT_SPELLCAST_INTERRUPTED','player','fish6',7620)
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
 end
@@ -354,6 +363,7 @@ GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish7',7620)
 FCM:GatherEvent('UNIT_SPELLCAST_FAILED','player','fish7',7620)
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
 end
@@ -552,3 +562,42 @@ FCM.db.settings.gatherWorldMapPins=false
 FCM:UpdateGatherWorldMap()
 eq(FCM._gatherWorldPins[1]:IsShown(),false,'independent world-map setting hides only full-map pins')
 print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure, rim and world-map overlay')
+
+-- Resource-level grouping and actual item quantities stay separate from reference loot.
+assert(loadfile('ForeverCharacterManager/GatherBrowser.lua'))('FCM',FCM)
+FCM.gatheringReference={resources={{category='herbalism', name='Silverleaf',
+    verificationStatus='reference_reviewed', orange=1,yellow=25,green=65,gray=100}}}
+for _,example in ipairs({{0,'RED'},{1,'ORANGE'},{25,'YELLOW'},{65,'GREEN'},{100,'GRAY'}}) do
+    local _,state=FCM:GatherResourceSkill('herbalism','Silverleaf',
+        {professions={Herbalism={skill=example[1],scan=FCM:Now()}}})
+    eq(state,example[2],'verified skill boundary')
+end
+local _,unknown=FCM:GatherResourceSkill('herbalism','Silverleaf',{professions={Herbalism={skill=100}}})
+eq(unknown,'UNKNOWN','undated profession data remains unknown')
+FCM:AddGatherNode('herbalism',37,2345,3456,'Silverleaf','personal')
+FCM:AddGatherNode('herbalism',1438,3456,4567,'Silverleaf','personal')
+local grouped
+for _,row in ipairs(FCM:GatherResourceRows('silverleaf','herbalism')) do
+    if row.name=='Silverleaf' then assert(not grouped);grouped=row end
+end
+eq(#grouped.locations>=2,true,'resource groups saved locations')
+eq(grouped.count>=2,true,'resource totals preserve all personal counts')
+assert(grouped.detail():find('Required skill:',1,true))
+GetNumLootItems=function() return 2 end
+GetLootSourceInfo=function() return 'GameObject-0-0-0-0-99999-00001',1 end
+GetItemIcon=function(id)return id+100000 end
+for _,name in ipairs({'Oil Spill','Floating Wreckage'}) do
+    FCM:RememberFishingHover(name)
+    FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish-'..name,7620)
+    FCM:GatherEvent('LOOT_OPENED')
+    FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+    FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+    FCM:GatherEvent('LOOT_SLOT_CLEARED',2)
+    FCM:GatherEvent('LOOT_CLOSED')
+    local row=FCM:GatherResourceRows(name,'fishing')[1]
+    eq(row.count,1,'one gather per loot session')
+    eq(row.locations[1].catches[6358],2,'first item quantity counted once')
+    eq(row.locations[1].catches[6359],2,'second species preserved independently')
+    eq(row.icon,106358,'representative confirmed catch icon')
+end
+eq(FCM:GatherDistance(1438,0/0,0),nil,'invalid distance refused')
