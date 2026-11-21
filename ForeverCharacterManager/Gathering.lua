@@ -1,10 +1,16 @@
--- FCM Gathering v1: all data lives in FCM_DB, never in GatherMate2's files.
--- GatherMate2 is an optional, read-only, one-time import source.
+-- FCM Gathering v1: personal and community records live in FCM_DB.
+-- Older GatherMate2-only records remain archived in SavedVariables but are
+-- hidden from the browser and maps; no addon integration or import is active.
 local _, FCM = ...
 
 local kinds = {herbalism=true, mining=true, fishing=true, treasure=true}
-local gmKinds = {herbalism="Herb Gathering", mining="Mining", fishing="Fishing", treasure="Treasure"}
 local spellKinds = {[2366]="herbalism", [2575]="mining", [7620]="fishing", [131476]="fishing"}
+-- Suppress passive legacy-only imports without deleting the user's records.
+-- A personally confirmed legacy point must remain usable even if its original
+-- import source label was never overwritten by AddGatherNode.
+local function visibleGatherNode(node)
+    return type(node)=="table" and (node.source~="gathermate" or node.personal==true)
+end
 local pending
 
 local function number(v, min, max)
@@ -37,7 +43,7 @@ local function exportName(name)
 end
 
 local function rememberPersonal(kind,mapID,x,y,name)
-    -- A prior community/GatherMate2 observation may later be verified in game.
+    -- A previously sourced location may later be verified in game.
     -- This independent confirmation should still be available for contribution.
     if type(FCM_GatherExport)~="table" then FCM_GatherExport={} end
     local token="FCMG1|"..kind.."|"..mapID.."|"..x.."|"..y.."|"..exportName(name)
@@ -65,6 +71,8 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID, catches)
     x,y=number(x,0,10000),number(y,0,10000)
     name=safeName(name)
     if not g or not kinds[kind] or not mapID or not x or not y or not name then return false end
+    -- Preserve the legacy source value for old SavedVariables compatibility.
+    -- No active code imports or creates GatherMate2 observations.
     source=source=="personal" and "personal" or (source=="gathermate" and "gathermate" or "community")
     local byKind=g.nodes[kind] or {}
     g.nodes[kind]=byKind
@@ -167,7 +175,7 @@ function FCM:GatherNodes(kind, search, maxRows)
         if (not kind or category==kind) and type(maps)=="table" then
             for zone,nodes in pairs(maps) do
                 for _,n in pairs(nodes) do
-                    if type(n)=="table" and (q=="" or (n.name or ""):lower():find(q,1,true)) then
+                    if visibleGatherNode(n) and (q=="" or (n.name or ""):lower():find(q,1,true)) then
                         rows[#rows+1]={kind=category,mapID=tonumber(zone),name=n.name,
                             x=n.x,y=n.y,source=n.source,personal=n.personal,gmID=n.gmID,
                             gatherCount=n.gatherCount,gatherCountMinimum=n.gatherCountMinimum,catches=n.catches}
@@ -195,9 +203,11 @@ function FCM:GatherCounts()
     for category,maps in pairs(g.nodes) do
         for _,nodes in pairs(maps) do
             for _,n in pairs(nodes) do
-                count[category]=(count[category] or 0)+1
-                count[n.source]=(count[n.source] or 0)+1
-                if n.personal and n.source~="personal" then count.personal=count.personal+1 end
+                if visibleGatherNode(n) then
+                    count[category]=(count[category] or 0)+1
+                    count[n.source]=(count[n.source] or 0)+1
+                    if n.personal and n.source~="personal" then count.personal=count.personal+1 end
+                end
             end
         end
     end
@@ -491,7 +501,7 @@ function FCM:UpdateGatherMinimap()
         local nodes=type(maps)=="table" and (maps[mapID] or maps[tostring(mapID)])
         if type(nodes)=="table" then
             for _,node in pairs(nodes) do
-                if type(node)=="table" and type(node.x)=="number" and
+                if visibleGatherNode(node) and type(node.x)=="number" and
                    type(node.y)=="number" and type(node.name)=="string" then
                     local nx,ny=node.x/10000,node.y/10000
                     -- Coarse check avoids world-position API calls for the
@@ -665,9 +675,13 @@ local function gatherMapIDs(g)
     local ids={}
     for _,maps in pairs(g.nodes or {}) do
         if type(maps)=="table" then
-            for mapID in pairs(maps) do
+            for mapID,zone in pairs(maps) do
                 local id=tonumber(mapID)
-                if id and id>0 then ids[id]=true end
+                if id and id>0 and type(zone)=="table" then
+                    for _,node in pairs(zone) do
+                        if visibleGatherNode(node) then ids[id]=true;break end
+                    end
+                end
             end
         end
     end
@@ -785,7 +799,7 @@ function FCM:UpdateGatherWorldMap()
     for kind,maps in pairs(g.nodes) do
         for _,zone in ipairs(gatherZoneMaps(maps,mapID)) do
             for _,node in pairs(zone) do
-                if type(node)=="table" and type(node.name)=="string" and
+                if visibleGatherNode(node) and type(node.name)=="string" and
                    type(node.x)=="number" and type(node.y)=="number" and
                    node.x>=0 and node.x<=10000 and node.y>=0 and node.y<=10000 then
                     allMatches=allMatches+1
@@ -1127,49 +1141,6 @@ function FCM:RecordTreasureLoot()
         self:Say("Saved treasure location: "..candidate.name..". The marker follows your nearby-pin distance setting.")
     end
     if added and self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
-end
-
--- GatherMate2 exposes these read-only methods; no source code or database is
--- redistributed with FCM. Import is explicit so it cannot flood login time.
-function FCM:ImportGatherMate()
-    local gm=_G.GatherMate2
-    if type(gm)~="table" or type(gm.GetNodesForZone)~="function" or
-       type(gm.GetNameForNode)~="function" or type(gm.gmdbs)~="table" then
-        return nil,"GatherMate2 is not loaded. Install it, import its data, and relog before trying again."
-    end
-    local added,inspected=0,0
-    for kind,gmKind in pairs(gmKinds) do
-        local meta=gm.gmdbs[gmKind]
-        if type(meta)=="table" then
-            local zones={}
-            local function addZones(storage)
-                if type(storage)~="table" then return end
-                for zone,nodes in pairs(storage) do
-                    if number(zone,1,200000) and type(nodes)=="table" then zones[zone]=true end
-                end
-            end
-            addZones(meta.__gm2_base_storage or meta)
-            for _,storage in pairs(meta.__gm2_storage_map or {}) do addZones(storage) end
-            for zone in pairs(zones) do
-                local ok,iter,state,start=pcall(gm.GetNodesForZone,gm,zone,gmKind,true)
-                if ok and type(iter)=="function" then
-                    for coord,id in iter,state,start do
-                        local n=number(coord,0,100000000000)
-                        if n then
-                            local x=math.floor(n/1000000)
-                            local y=math.floor(n%1000000/100)
-                            local name=FCM:Try(gm.GetNameForNode,gm,gmKind,id)
-                            inspected=inspected+1
-                            if self:AddGatherNode(kind,zone,x,y,name,"gathermate",id) then added=added+1 end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    local g=self:GatherDB()
-    g.lastGatherMateImport=self:Now()
-    return added,"Imported "..added.." new nodes ("..inspected.." examined)."
 end
 
 function FCM:MergeCommunityGathering()

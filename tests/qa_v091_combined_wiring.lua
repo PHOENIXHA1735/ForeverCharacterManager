@@ -32,7 +32,11 @@ includes(ui,'FCM:BrowseCraftRecipes(profession,query,ch)','recipient-aware recip
 includes(ui,'self.craftProfessionButton:SetShown(crafting)','Crafting profession selector')
 includes(ui,'self.craftModeButton:SetShown(crafting)','Reach Total versus Craft Additional selector')
 includes(ui,'FCM:CraftRequestRuns(','bank-aware remaining quantity display')
-includes(ui,'"Import GatherMate2"','read-only import button')
+assert(not ui:find("Import GatherMate2",1,true),"GatherMate2 button must be removed")
+includes(ui,'self.gatherMoreButton','standalone Gathering detail control')
+local gather=file(addon.."Gathering.lua")
+assert(not gather:find('function FCM:ImportGatherMate()',1,true),
+    "GatherMate2 import implementation must be removed")
 includes(ui,'self.legacyPriorityButton:Show()','tree-specific Legacy UI')
 includes(crafting,'requestedQuantity','finished-item quantity support')
 includes(companion,'GatheringSync.ps1','Windows gathering synchronization')

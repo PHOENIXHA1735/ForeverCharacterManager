@@ -72,10 +72,13 @@ local function fishingLabel(name,itemID)
        n:find("crate",1,true) or n:find("footlocker",1,true) or
        n:find("flotsam",1,true) or n:find("chest",1,true) or
        n:find("scroll",1,true) then return "Fishing loot" end
-    if n:match("^raw ") or n:match("^oily blackmouth") or
+    if n:match("^raw ") or n:match("^bloated ") or n:match("^oily blackmouth") or
        n:match("^firefin snapper") or n:match("^stonescale eel") or
        n:match("^deviate fish") or n:match("^whimsyfin") or
-       n:match("^sagefish") or n:match("catfish$") then return "Fish" end
+       n:match("^sagefish") or n:match("catfish$") or
+       n:match("^%d+ pound mud snapper$") or
+       n=="lightning eel" or n=="darkshore grouper" or
+       n=="spotted sunfish" or n=="sickly looking fish" then return "Fish" end
     return "Fishing item"
 end
 
@@ -100,7 +103,9 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
     local entries,byKey,refs={},{},{}
     local q=(search or ""):lower()
     local function sourceAllowed(typ)
-        if not sourceType then return true end
+        -- The Fish filter is an item-only view across every water/source type.
+        -- Construct all known item rows first, then exclude non-fish below.
+        if not sourceType or sourceType=='fish' then return true end
         if sourceType=='school_pool' then return typ=='school' or typ=='pool' end
         if sourceType=='spill_wreckage' then return typ=='oil_spill' or typ=='wreckage' end
         return typ==sourceType
@@ -137,7 +142,11 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                     if item.itemID then
                         local species=addFishingItem(item.itemID,item.name)
                         species.referenceWaters=species.referenceWaters or {}
-                        species.referenceWaters[#species.referenceWaters+1]={water=ref,sourceID=item.sourceID,type=typ}
+                        -- Retain the item-level evidence so display updates when the
+                        -- normalized ForeverDB snapshot gains explicit water/season facts.
+                        -- A zone-level catch still does not establish an exact pool.
+                        species.referenceWaters[#species.referenceWaters+1]={
+                            water=ref,sourceID=item.sourceID,type=typ,itemEvidence=item}
                     end
                 end
             else
@@ -173,7 +182,8 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             end
         end
     end
-    local db=(not sourceType or sourceType=='unknown') and (not kind or kind=="fishing") and self:GatherDB()
+    local db=(not sourceType or sourceType=='unknown' or sourceType=='fish') and
+        (not kind or kind=="fishing") and self:GatherDB()
     local unattributed=db and db.unattributedFishing
     for id,qty in pairs(type(unattributed)=="table" and unattributed or {}) do
         id,qty=tonumber(id),tonumber(qty)
@@ -214,7 +224,9 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
         for _,point in ipairs(row.locations) do
             matches=matches or has(point.name) or has(point.sourceType) or has(self:GatherZoneLabel(point.mapID))
         end
-        if matches and skillMatch and not row.hidden then filtered[#filtered+1]=row end
+        local fishOnly=sourceType~='fish' or
+            (row.kind=='fishing' and row.itemID and fishingLabel(row.name,row.itemID)=='Fish')
+        if matches and skillMatch and fishOnly and not row.hidden then filtered[#filtered+1]=row end
     end
     entries=filtered
     table.sort(entries,function(a,b)
@@ -249,10 +261,13 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
         if row.referenceWaters and #row.referenceWaters>6 then row.hasExtraDetails=true end
         if ref and #(ref.sourceIDs or {})>0 then row.hasExtraDetails=true end
         if row.referenceWaters and #row.referenceWaters>0 then row.hasExtraDetails=true end
-        row.detail=function(expanded)
-            local blocks={}
+        row.detail=function(expanded,structured)
+            local blocks,sections={},{}
             local function block(title,lines)
-                if #lines>0 then blocks[#blocks+1]=title.."\n"..table.concat(lines,"\n") end
+                if #lines>0 then
+                    if structured then sections[#sections+1]={title=title,lines=lines}
+                    else blocks[#blocks+1]=title.."\n"..table.concat(lines,"\n") end
+                end
             end
             local main={(row.icon and ("|T"..tostring(row.icon)..":24:24|t ") or "")..row.name,
                 row.summary}
@@ -271,7 +286,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                 skillLines[#skillLines+1]="RED: below minimum | YELLOW: escapes possible"
                 skillLines[#skillLines+1]="GREEN: no escapes expected | UNKNOWN: unverified"
                 skillLines[#skillLines+1]="Fishing skill-up chance is separate from escape risk."
-            else
+            elseif row.kind~="treasure" then
                 local _,state,info=self:GatherResourceSkill(row.kind,row.name,ch)
                 info=info or {}
                 skillLines[#skillLines+1]="Required skill: "..tostring(info.required or "Unknown")
@@ -302,7 +317,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                         local required=source and (source.minimumSkill or source.orange) or nil
                         local eligibility=info and info.can or "Unknown"
                         sources[#sources+1]=name.." - required "..tostring(required or "Unknown")..
-                            " - Can gather: "..eligibility
+                            " - Meets reference node skill: "..eligibility
                     end
                 end
                 if #sources==0 then sources[1]="Verified source nodes not yet documented" end
@@ -420,7 +435,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             if #observations==0 then observations[1]="No personal discoveries recorded" end
             block("YOUR GATHERING HISTORY",observations)
             if row.kind=="fishing" and #row.locations>0 then
-                blocks[#blocks+1]="Map coordinates show the player's standing position, not the pool."
+                block("LOCATION NOTES",{"Map coordinates show the player's standing position, not the pool."})
             end
             local refsOut,seenRef={},{}
             local function addRef(id)
@@ -433,6 +448,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                 table.sort(refsOut)
                 block("REFERENCE SOURCES",refsOut)
             end
+            if structured then return sections end
             return table.concat(blocks,"\n\n")
         end
     end

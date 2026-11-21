@@ -22,22 +22,23 @@ eq(type(FCM_GatherExport),'table','companion export markers')
 local token=next(FCM_GatherExport)
 eq(token,'FCMG1|mining|37|4590|6780|Copper Vein','export contains only node fields')
 
--- GM2's public GetNodesForZone returns packed map coordinates, node ID.
-local gm={gmdbs={['Herb Gathering']={__gm2_base_storage={[41]={}}}}}
-function gm:GetNodesForZone(zone,kind,all)
-    eq(zone,41);eq(kind,'Herb Gathering');eq(all,true)
-    return pairs({[2314000000+452100]='257'})
-end
-function gm:GetNameForNode(kind,id) return kind=='Herb Gathering' and id=='257' and 'Silverleaf' or nil end
-_G.GatherMate2=gm
-local count=FCM:ImportGatherMate()
-eq(count,1,'gm import')
-eq(FCM:ImportGatherMate(),0,'idempotent import')
-eq(FCM:GatherCounts().herbalism,1,'GM2 herb count')
-eq(FCM:GatherCountLabel(FCM:GatherNodes('herbalism')[1]),
-    'No personal gathers recorded','imported locations have no invented personal count')
+-- No GatherMate2 integration, even when that addon is loaded globally.
+-- Saved old GM2-only nodes are kept in FCM_DB but deliberately absent from
+-- resource lists, counts, minimap and world-map overlays.
+_G.GatherMate2={GetNodesForZone=function()error("must never call GatherMate2")end}
+eq(FCM.ImportGatherMate,nil,'GatherMate2 importer removed')
+eq(FCM:AddGatherNode('herbalism',41,2314,4521,'Silverleaf','community'),true,
+    'community herb remains visible on legacy zone map')
+local legacyGM={name='Unused GM2-Only Herb',x=4444,y=5555,source='gathermate',
+    personal=false,gmID=257}
+FCM.db.gathering.nodes.herbalism[41]['4444:5555:unused gm2-only herb']=legacyGM
+FCM._gatherCounts=nil
+eq(FCM:GatherCounts().herbalism,1,'legacy GM2-only node excluded from active counts')
+eq(#FCM:GatherNodes('herbalism','Unused GM2-Only Herb'),0,
+    'legacy GM2-only node not presented as live finding')
+eq(FCM.db.gathering.nodes.herbalism[41]['4444:5555:unused gm2-only herb'],legacyGM,
+    'old GM2 record retained without destructive SavedVariables cleanup')
 _G.GatherMate2=nil
-eq(FCM:GatherCounts().herbalism,1,'import persists without GM2')
 
 FCM.communityGathering.nodes={{kind='mining',mapID=37,x=4590,y=6780,name='Copper Vein'},
   {kind='fishing',mapID=37,x=1234,y=5678,name='School of Fish'},
@@ -472,7 +473,11 @@ for _,pin in ipairs(FCM._gatherWorldPins) do
         importedTeldrassil=true
     end
 end
-eq(importedTeldrassil,true,'legacy Teldrassil map 41 imports appear on modern map 1438')
+eq(importedTeldrassil,true,'community Teldrassil map 41 records appear on modern map 1438')
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    eq(pin.nodeName~='Unused GM2-Only Herb' or not pin:IsShown(),true,
+        'GM2-only legacy records cannot leak onto world map')
+end
 eq(FCM._gatherWorldDiagnostic:find('Map 1438',1,true)~=nil,true,
     'world-map diagnostic records selected client map ID')
 -- Real Forever draws the scroll canvas at a different scale than the map
@@ -669,7 +674,7 @@ eq(FCM:GatherResourceRows('6358','fishing')[1].unattributed,2,'stale hover and u
 -- without an importer, a discovered location or any live API calls.
 local function freshCatalog(db)
     local addon={db=db,Now=function() return 1800000000 end,Try=function(_,fn,...) if fn then return fn(...) end end}
-    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatheringExtras.lua','GatherBrowser.lua'}) do
+    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatheringExtras.lua','GatherBrowser.lua','GatherDetailModel.lua'}) do
         assert(loadfile('ForeverCharacterManager/'..file))('FCM',addon)
     end
     return addon
@@ -678,8 +683,44 @@ local catalogDB={gathering={schema=1,nodes={},stats={}}}
 local catalog=freshCatalog(catalogDB)
 local herb=catalog:GatherResourceRows('Black Lotus','herbalism')[1]
 assert(herb and herb.count==0 and herb.detail():find('Required skill: 300',1,true))
-local ore=catalog:GatherResourceRows('Rough Stone','mining')[1]
+local ore
+for _,candidate in ipairs(catalog:GatherResourceRows('Rough Stone','mining')) do
+    if candidate.name=='Rough Stone' then ore=candidate;break end
+end
 assert(ore and ore.count==0 and ore.detail():find('Copper Vein',1,true))
+local model=catalog:GatherMaterialDetailModel(ore,{professions={}},false)
+assert(model and model.itemID==2835 and model.name=='Rough Stone','read-only material panel header')
+eq(model.required,'1','identical candidate node requirements are summarized')
+eq(model.current,'Unknown','missing character profession never gets an invented skill')
+eq(model.canGather,'Unknown','candidate source must not imply a verified Forever drop')
+assert(model.dropStatus and model.dropStatus~='Verified',
+    'source listings must never be upgraded to independently Verified by implication')
+local copperReference
+for _,r in ipairs(catalog.gatheringReference.resources) do
+    if r.category=='mining' and r.name=='Copper Vein' then copperReference=r;break end
+end
+assert(copperReference)
+local simulatedMiningEvidence={name='Rough Stone',itemID=2835,
+    sourceID='foreverdb-mining',verificationStatus='forever_observed'}
+copperReference.loot[#copperReference.loot+1]=simulatedMiningEvidence
+local observedModel=catalog:GatherMaterialDetailModel(ore,{professions={}},false)
+eq(observedModel.dropStatus,'ForeverDB observed','item-specific provider observation updates material status')
+eq(observedModel.canGather,'Unknown','item evidence does not establish player gathering eligibility')
+copperReference.loot[#copperReference.loot]=nil
+eq(#model.sources,2,'Rough Stone retains both candidate deposits')
+eq(model.sources[1].name,'Copper Vein','ordered candidate source')
+eq(model.sources[2].name,'Poor Copper Vein','ordered second candidate source')
+assert(model.zoneGroups[1].remaining>0,'default view limits long zone lists')
+local expandedModel=catalog:GatherMaterialDetailModel(ore,{professions={}},true)
+eq(expandedModel.zoneGroups[1].remaining,0,'expanded model exposes full reference zone list')
+assert(#expandedModel.zoneGroups[1].locations>4,'expanded list contains the hidden zones')
+local copperNode
+for _,candidate in ipairs(catalog:GatherResourceRows('Copper Vein','mining')) do
+    if candidate.name=='Copper Vein' then copperNode=candidate;break end
+end
+assert(copperNode and catalog:GatherMaterialDetailModel(copperNode,nil,false)==nil,
+    'node records continue to use the existing detail UI')
+
 assert(catalog:GatherResourceRows('Coarse Stone','mining')[1])
 assert(catalog:GatherResourceRows('Heavy Stone','mining')[1])
 assert(catalog:GatherResourceRows('Solid Stone','mining')[1])
@@ -705,6 +746,126 @@ assert(seeds.detail(true):find('REFERENCE SOURCES',1,true))
 assert(not seeds.detail():find('Sources: ForeverDB',1,true))
 local commonFish=findNamedCatalogItem('Raw Brilliant Smallfish','fishing')
 assert(commonFish and commonFish.summary:find('Fish |',1,true))
+
+-- Fish-only is item-based, across all source types. It must never show
+-- fishing locations, pools, schools, containers, or recipes in the list.
+local fishOnly=catalog:GatherResourceRows('','fishing',nil,'fish')
+local fishNames={}
+for _,entry in ipairs(fishOnly) do
+    assert(entry.itemID and entry.summary:find('^Fish |'),
+        'Fish-only shows actual fish items, not source nodes or general loot: '..entry.name)
+    assert(not entry.name:find('School',1,true) and
+           not entry.name:find('Oil Spill',1,true) and
+           not entry.name:find('Wreckage',1,true),
+        'Fishing location excluded from Fish-only')
+    fishNames[entry.name]=true
+end
+for _,name in ipairs({'Raw Brilliant Smallfish','Oily Blackmouth','Firefin Snapper',
+                      'Bloated Mud Snapper','Bloated Whitescale Salmon',
+                      'Lightning Eel','Darkshore Grouper','19 Pound Catfish',
+                      '15 Pound Mud Snapper'}) do
+    assert(fishNames[name], 'Fish-only includes '..name)
+end
+for _,name in ipairs({'Oily Blackmouth School','Firefin Snapper School',
+                      'Oil Spill','Floating Wreckage','Iron Bound Trunk',
+                      'Pattern: Red Woolen Boots'}) do
+    assert(not fishNames[name], 'Fish-only excludes '..name)
+end
+local fishSearch=catalog:GatherResourceRows('Firefin','fishing',nil,'fish')
+eq(#fishSearch,1,'Fish-only search finds species without matching school')
+eq(fishSearch[1].name,'Firefin Snapper','Fish-only search resolves item')
+-- Fish detail panel uses documented methods, habitat and Classic seasonality
+-- without creating an invented WoW Forever catch or location.
+local function detailsSection(model,title)
+    for _,section in ipairs(model and model.sections or {}) do
+        if section.title==title then return table.concat(section.lines,"\n") end
+    end
+end
+local winter
+for _,entry in ipairs(catalog:GatherResourceRows('Winter Squid','fishing',nil,'fish')) do
+    if entry.name=='Raw Winter Squid' then winter=entry;break end
+end
+assert(winter and winter.itemID==13755,'Winter Squid is a fish-only item')
+local winterDetail=catalog:GatherDetailModel(winter,nil,false)
+assert(winterDetail and winterDetail.itemType=='Fish','fish item receives dedicated panel')
+local winterSeason=detailsSection(winterDetail,'WATER TYPE & SEASON')
+assert(winterSeason and winterSeason:find('Ocean / coastal',1,true) and
+       winterSeason:find('September 23 - March 19',1,true) and
+       winterSeason:find('require separate evidence',1,true),'Classic winter squid seasonal/coastal guidance is qualified')
+assert(detailsSection(winterDetail,'Fishing Sources'):find('Open water',1,true),
+       'Classic open-water catch method visible even when zone-level reference does not specify method')
+assert(detailsSection(winterDetail,'REFERENCE FISHING ZONES')~=nil,
+       'source-specific zone references remain accessible')
+assert(not detailsSection(winterDetail,'FISHING SOURCES'),
+       'compact fish panel no longer repeats dense fishing thresholds')
+local winterExpanded=catalog:GatherDetailModel(winter,nil,true)
+assert(detailsSection(winterExpanded,'CLASSIC REFERENCE'):find('WoW Forever',1,true),
+       'expanded view retains Classic attribution and Forever uncertainty')
+
+-- An explicit provider update changes exactly the facts it supplies.
+-- A Forever zone catch alone must not infer a specific pool or season.
+local winterReference
+for _,entry in ipairs(catalog.gatheringReference.resources) do
+    if entry.category=='fishing' and entry.name=='Zone fishing reference: Azshara' then
+        winterReference=entry;break
+    end
+end
+assert(winterReference and type(winterReference.loot)=='table')
+local observedWinter={itemID=13755,name='Raw Winter Squid',
+    sourceID='foreverdb-fishing-observed',verificationStatus='forever_observed',
+    waterType='ocean',seasonWindow={start='09-23',['end']='03-19'}}
+winterReference.loot[#winterReference.loot+1]=observedWinter
+local updatedWinter
+for _,entry in ipairs(catalog:GatherResourceRows('Winter Squid','fishing',nil,'fish')) do
+    if entry.itemID==13755 then updatedWinter=entry;break end
+end
+assert(updatedWinter,'imported item remains searchable')
+local updatedModel=catalog:GatherDetailModel(updatedWinter,nil,false)
+local updatedWater=detailsSection(updatedModel,'WATER TYPE & SEASON')
+assert(updatedWater:find('Water (ForeverDB reported): Ocean',1,true),
+    'new explicit ForeverDB water type supersedes Classic water note')
+assert(updatedWater:find('Season (ForeverDB reference; not verified): September 23 - March 19',1,true),
+    'an observed catch does not independently verify a seasonal restriction')
+assert(updatedWater:find('ForeverDB reports a WoW Forever catch (zone-level only).',1,true),
+    'Forever catch evidence and exact water-source attribution are separate')
+assert(not detailsSection(updatedModel,'Fishing Sources'):find('Azshara School',1,true),
+    'zone-level observed catch does not fabricate a named fish school')
+-- Evidence reverts on a future snapshot that no longer contains the field;
+-- never persist or invent a sticky "verified" flag in SavedVariables.
+winterReference.loot[#winterReference.loot]=nil
+local revertedWinter
+for _,entry in ipairs(catalog:GatherResourceRows('Winter Squid','fishing',nil,'fish')) do
+    if entry.itemID==13755 then revertedWinter=entry;break end
+end
+assert(detailsSection(catalog:GatherDetailModel(revertedWinter,nil,false),'WATER TYPE & SEASON'):
+    find('Water (Classic):',1,true),'removed provider water fact falls back to Classic')
+assert(detailsSection(winterExpanded,'YOUR GATHERING HISTORY'),
+       'personal catch history remains visible in expanded fish details')
+
+local firefinDetail=catalog:GatherDetailModel(fishSearch[1],nil,false)
+local firefinSources=detailsSection(firefinDetail,'Fishing Sources')
+assert(firefinSources and firefinSources:find('Firefin Snapper School',1,true) and
+       firefinSources:find('Oil Spill',1,true) and
+       firefinSources:find('Open water',1,true),
+       'Classic fish school, spill and open-water candidates are all labeled')
+assert(detailsSection(firefinDetail,'WATER TYPE & SEASON'):find('Coastal and some inland',1,true),
+       'habitat distinguishes ocean/coastal from known inland opportunities')
+local blackmouth=catalog:GatherResourceRows('Oily Blackmouth','fishing',nil,'fish')[1]
+assert(blackmouth and blackmouth.name=='Oily Blackmouth')
+assert(detailsSection(catalog:GatherDetailModel(blackmouth,nil,false),'Fishing Sources'):
+    find('Oily Blackmouth School',1,true),'Blackmouth school listed on fish detail')
+local bloated=catalog:GatherResourceRows('Bloated Whitescale Salmon','fishing',nil,'fish')[1]
+assert(bloated and bloated.itemID==13891 and
+       detailsSection(catalog:GatherDetailModel(bloated,nil,false),'WATER TYPE & SEASON'):
+           find('not established',1,true),
+       'unknown water type is not guessed for bloated fish')
+
+assert(#catalog:GatherResourceRows('','fishing',nil,'school_pool')>0,
+    'existing Schools & Pools filter still works')
+assert(#catalog:GatherResourceRows('','fishing',nil,'open_water')>0,
+    'existing Open Water filter still works')
+assert(#catalog:GatherResourceRows('','fishing',nil,'spill_wreckage')>0,
+    'existing spill and wreckage filter still works')
 local footwearPattern=findNamedCatalogItem('Pattern: Red Woolen Boots','fishing')
 assert(footwearPattern and footwearPattern.summary:find('Fishing loot',1,true))
 local waterSource=findNamedCatalogItem('Patch of Elemental Water','fishing')
@@ -730,3 +891,78 @@ local caught=catalog:GatherResourceRows('251524','fishing')[1]
 eq(caught.count,2,'fish count only includes personal observations after restart')
 eq(#caught.locations,1,'reference zone does not increase personal fishing locations')
 eq(#catalog:GatherNodes(),3,'only personal observations are saved')
+
+-- Render all professions using synthetic frames with wrapped line metrics.
+local function mockFrame(w)
+    local f={width=w or 340}
+    function f:SetWidth(value) self.width=value end
+    function f:GetWidth() return self.width end
+    function f:SetHeight(value) self.height=value end
+    function f:SetSize(width,height) self.width,self.height=width,height end
+    function f:SetText(value) self.text=value end
+    function f:SetPoint(_,_,_,x,y) self.x,self.y=x,y end
+    function f:GetStringHeight()
+        local rows=0
+        local text=(self.text or ""):gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+        for line in (text.."\n"):gmatch("(.-)\n") do
+            rows=rows+math.max(1,math.ceil(#line/math.max(1,math.floor(self.width/7))))
+        end
+        return rows*15
+    end
+    function f:Hide() self.visible=false end
+    function f:Show() self.visible=true end
+    f.CreateTexture=mockFrame
+    f.CreateFontString=mockFrame
+    return setmetatable(f,{__index=function() return function() end end})
+end
+local originalCreate=CreateFrame
+CreateFrame=function() return mockFrame() end
+catalog.UI={detailText=mockFrame()}
+assert(loadfile('ForeverCharacterManager/GatherDetailUI.lua'))('FCM',catalog)
+local function exactRow(kind,name)
+    for _,r in ipairs(catalog:GatherResourceRows(name,kind)) do
+        if r.name==name then return r end
+    end
+end
+local mined=exactRow('mining','Rough Stone')
+local herbMaterial=exactRow('herbalism','Swiftthistle')
+local herbNode=exactRow('herbalism',"Arthas' Tears")
+local fishRow=exactRow('fishing','Firefin Snapper')
+local treasureRow=exactRow('treasure','Battered Chest')
+local skilled={professions={Mining={skill=121,maxSkill=150,scan=catalog:Now()}}}
+local model2=catalog:GatherDetailModel(mined,skilled,false)
+eq(model2.metrics[2][2],'121/150','character metric is printable')
+eq(model2.metrics[3][2],'ForeverDB listed','provider item listing is not personal verification')
+eq(model2.sources[1].eligibility,'Yes','candidate skill met independently')
+local cases={{mined,'Possible Source Deposits'},{herbMaterial,'Possible Source Herbs'},
+    {herbNode,'Possible Source Herbs'},{copperNode,'Possible Source Deposits'},
+    {fishRow,'Fishing Sources'},{treasureRow,'Treasure Sources'}}
+for _,case in ipairs(cases) do
+    for _,width in ipairs({220,300,405,500}) do
+        catalog.UI.detailChild=mockFrame(width)
+        catalog.UI.gatherMaterialFrames=nil
+        for _,expanded in ipairs({false,true}) do
+            assert(catalog.UI:RenderGatherMaterialPanel(case[1],skilled,expanded))
+            local heading=false
+            for _,card in ipairs(catalog.UI.gatherMaterialFrames) do
+                if card.visible then
+                    assert(card.x+card.width<=width,'framed section fits the pane')
+                    assert(-card.y+card.height<=catalog.UI.detailChild.height,'scroll extent covers the card')
+                    if card.title.text:find(case[2],1,true) then heading=true end
+                    if case[1]==treasureRow then
+                        assert(not card.title.text:lower():find('skill',1,true))
+                    end
+                end
+            end
+            assert(heading,case[2])
+        end
+    end
+end
+catalog.UI.detailChild=mockFrame(405)
+catalog.UI.gatherMaterialFrames=nil
+assert(catalog.UI:RenderGatherMaterialPanel(mined,skilled,false))
+eq(catalog.UI.gatherMaterialFrames[2].title.text,'|cffddb27a1|r','exact WoW skill color bytes')
+eq(catalog.UI.gatherMaterialFrames[3].title.text,'|cffb7e4c4121/150|r','exact WoW character color bytes')
+eq(catalog.UI.gatherMaterialFrames[4].title.text,
+    '|cffffc77b'..model2.dropStatus..'|r','exact WoW drop color bytes with provenance')
+CreateFrame=originalCreate

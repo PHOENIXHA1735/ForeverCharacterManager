@@ -1336,6 +1336,7 @@ function UI:Create()
             {"Herbalism","herbalism"},
             {"Mining","mining"},
             {"Fishing - All","fishing"},
+            {"Fishing - Fish","fishing","fish"},
             {"Fishing - Schools & Pools","fishing","school_pool"},
             {"Fishing - Oil Spills & Wreckage","fishing","spill_wreckage"},
             {"Fishing - Open Water","fishing","open_water"},
@@ -1438,12 +1439,6 @@ function UI:Create()
 
     -- Footer is OUTSIDE the scrolling detail panel, so it never covers recipe text.
     self.action = button(panel,"Request craft",264,29,function()
-        if self.tab=="Gathering" then
-            local added,message=FCM:ImportGatherMate()
-            FCM:Say(message or "Unable to import GatherMate2 data.")
-            if added then self:Refresh() end
-            return
-        end
         if self.tab == "Requests" and self.activeRequest then
             local req = self.activeRequest
             local recipe = FCM:RecipeByID(req.recipeID)
@@ -1492,7 +1487,9 @@ function UI:Create()
         end
         self:Refresh()
     end)
-    self.gatherMoreButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
+    -- Gathering no longer has a second GatherMate import action. Place the
+    -- one remaining detail control at the panel's bottom-right.
+    self.gatherMoreButton:SetPoint("TOPRIGHT",detailPanel,"BOTTOMRIGHT",-8,-8)
     self.gatherMoreButton:Hide()
     self.status = text(panel,"", "GameFontHighlightSmall",14,-501,285,20)
     self.status:ClearAllPoints()
@@ -1644,7 +1641,9 @@ function UI:Reflow()
     self.scrollChild:SetWidth(listWidth)
     self.detailChild:SetWidth(math.max(190,self.detailPanel:GetWidth()-42))
     self.detailText:SetWidth(math.max(180,self.detailChild:GetWidth()-8))
-    if self.detailCardSource then
+    if self.gatherMaterialActive and self.gatherMaterialRow and self.RenderGatherMaterialPanel then
+        self:RenderGatherMaterialPanel(self.gatherMaterialRow,self.gatherMaterialCharacter,self.gatherMaterialExpanded)
+    elseif self.detailCardSource then
         self:RenderDetailCards(self.detailCardSource,self.detailCardTab,self.detailCardOffset)
     end
     for _,w in ipairs(self.rows or {}) do
@@ -2460,6 +2459,7 @@ local function buildRows(ui)
             add(resource.id,resource.name,resource.summary,resource.detail)
             rows[#rows].gatherIcon=resource.icon
             rows[#rows].gatherHasExtraDetails=resource.hasExtraDetails
+            rows[#rows].gatherResource=resource
         end
     elseif tab=="Shopping" then
         local list,unresolved=FCM:ShoppingList(FCM:FactionView())
@@ -4076,12 +4076,20 @@ function UI:Refresh()
         self.talentSourceButton:Show()
     end
     if tab=="Dungeons" and selected and selected.dungeonRecord then
+        if self.HideGatherMaterialPanel then self:HideGatherMaterialPanel() end
         self:ResetItemPreview()
         self:RenderDungeonDetail(selected.dungeonRecord,ch)
     elseif selected then
         self:ResetDungeonWidgets()
-        self.detailText:Show()
-        local previewHeight=self:RenderItemPreview(selected)
+        local visualMaterial=tab=="Gathering" and selected.gatherResource and self.RenderGatherMaterialPanel
+        if visualMaterial then
+            self:ResetItemPreview()
+            self:HideDetailCards()
+            self:RenderGatherMaterialPanel(selected.gatherResource,ch,self.gatherShowAllDetails)
+        else
+            if self.HideGatherMaterialPanel then self:HideGatherMaterialPanel() end
+            self.detailText:Show()
+            local previewHeight=self:RenderItemPreview(selected)
         local content=type(selected.detail)=="function" and
             (tab=="Gathering" and selected.detail(self.gatherShowAllDetails) or selected.detail()) or selected.detail or ""
         -- The same quick red/green comparison appears wherever a real item is
@@ -4094,8 +4102,9 @@ function UI:Refresh()
                 content=table.concat(comparisonLines,"\n").."\n\n"..tostring(content)
             end
         end
-        self.detailText:SetText(self:DecorateDetail(content,tab))
-        self:RenderDetailCards(content,tab,previewHeight)
+            self.detailText:SetText(self:DecorateDetail(content,tab))
+            self:RenderDetailCards(content,tab,previewHeight)
+        end
         if self.gatherMoreButton then
             self.gatherMoreButton:SetShown(tab=="Gathering" and selected.gatherHasExtraDetails==true)
             self.gatherMoreButton:SetText(self.gatherShowAllDetails and "Show Less Details" or "Show All Details")
@@ -4110,10 +4119,6 @@ function UI:Refresh()
             end
             self.cancelRequestButton:SetText("Status / Qty")
             self.cancelRequestButton:Show()
-        elseif tab=="Gathering" then
-            self.action:SetWidth(190)
-            self.action:SetText("Import GatherMate2")
-            self.action:Show()
         elseif selected.recipe and ch then
             self.activeRecipe=selected.recipe
             self.activeCrafters=selected.crafters
@@ -4132,6 +4137,7 @@ function UI:Refresh()
             self.action:Show()
         end
     else
+        if self.HideGatherMaterialPanel then self:HideGatherMaterialPanel() end
         if self.gatherMoreButton then self.gatherMoreButton:Hide() end
         self:ResetDungeonWidgets()
         self:ResetItemPreview()
