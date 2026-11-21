@@ -31,3 +31,16 @@ separately from the unverified Forever drop. Fishing shows effective Fishing whe
 known, and treasure has no profession tile or difficulty ladder. Narrow panes
 stack the skill tiles, and wrapped headers and section text contribute to scroll height.
 The actual game font metrics and resizing still require manual in-game QA.
+
+## Phase 3 navigation
+
+The 145-pixel sidebar groups the 25 existing destinations under Character,
+Progression, Craft & Gather, Explore & Trade, and Tools & Help. Recipe profession
+entries still appear beneath Professions for the selected character. Dark rows,
+gold trim, client icons and a gold active marker match the Gathering detail panel.
+Mouse wheel and fixed scroll controls keep all sections accessible. The center
+pane anchors and Gathering controls are unchanged.
+
+The mock navigation test covers construction, click destinations, active row,
+dynamic professions, row and heading bounds, and scroll limits. Confirm actual
+fonts, icons and pointer behavior during the next manual client test.

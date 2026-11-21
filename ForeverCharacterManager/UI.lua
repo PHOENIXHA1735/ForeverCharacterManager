@@ -994,46 +994,166 @@ function UI:QueueCraftQuantityPreview()
     end
 end
 
+local navigationSections={
+    {"Character",{"Overview","Characters","Gear","Inventory"}},
+    {"Progression",{"Upgrade Plan","Upgrades","Talents","Legacy","Leveling","Reputation"}},
+    {"Craft & Gather",{"Crafting","Professions","Gathering","Planner","Requests","Shopping"}},
+    {"Explore & Trade",{"Catalog","Item Explorer","Dungeons","Auction","Gold"}},
+    {"Tools & Help",{"Settings","QA Tests","Diagnostics","Help"}},
+}
+local navigationIcons={
+    Overview="INV_Misc_Book_09",Characters="INV_Misc_GroupLooking",Gear="INV_Chest_Plate01",
+    Inventory="INV_Misc_Bag_08",["Upgrade Plan"]="INV_Misc_Map_01",Upgrades="INV_Sword_04",
+    Talents="Spell_Holy_MagicalSentry",Legacy="INV_Misc_Book_07",Leveling="INV_Misc_Map_01",
+    Reputation="INV_Misc_Note_01",Crafting="INV_Hammer_20",Professions="Trade_Engineering",
+    Gathering="INV_Misc_Herb_03",Planner="INV_Scroll_03",Requests="INV_Letter_15",
+    Shopping="INV_Misc_Bag_10",Catalog="INV_Misc_Book_11",["Item Explorer"]="INV_Misc_Spyglass_03",
+    Dungeons="INV_Misc_Key_03",Auction="INV_Misc_Coin_02",Gold="INV_Misc_Coin_01",
+    Settings="INV_Gizmo_02",["QA Tests"]="INV_Misc_Note_01",
+    Diagnostics="INV_Misc_Spyglass_03",Help="INV_Misc_QuestionMark",
+}
+local function navigationButton(parent,label,width,icon,onClick)
+    local b=CreateFrame("Button",nil,parent)
+    b:SetSize(width,24)
+    b.bg=background(b,.065,.105,.095,.93)
+    local hover=b:CreateTexture(nil,"HIGHLIGHT")
+    hover:SetAllPoints()
+    hover:SetColorTexture(.72,.50,.22,.20)
+    b.accent=b:CreateTexture(nil,"ARTWORK")
+    b.accent:SetPoint("TOPLEFT",b,"TOPLEFT",0,-2)
+    b.accent:SetPoint("BOTTOMLEFT",b,"BOTTOMLEFT",0,2)
+    b.accent:SetWidth(2)
+    b.accent:SetColorTexture(.94,.71,.34,1)
+    b.accent:Hide()
+    if icon then
+        local texture=b:CreateTexture(nil,"ARTWORK")
+        texture:SetPoint("LEFT",b,"LEFT",6,0)
+        texture:SetSize(14,14)
+        texture:SetTexture("Interface\\Icons\\"..icon)
+    end
+    b.label=b:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
+    b.label:SetPoint("LEFT",b,"LEFT",icon and 25 or 6,0)
+    b.label:SetPoint("RIGHT",b,"RIGHT",-5,0)
+    b.label:SetJustifyH(icon and "LEFT" or "CENTER")
+    b.label:SetWordWrap(false)
+    b.label:SetText(label)
+    b:SetScript("OnClick",onClick)
+    return b
+end
+
+local function paintNavigation(b,selected)
+    if selected then
+        b.bg:SetColorTexture(.29,.21,.105,1)
+        b.label:SetTextColor(1,.86,.55)
+        b.accent:Show()
+    else
+        b.bg:SetColorTexture(.065,.105,.095,.93)
+        b.label:SetTextColor(.90,.92,.84)
+        b.accent:Hide()
+    end
+    b:SetEnabled(not selected)
+end
+
+function UI:ScrollNavigation(delta)
+    local scroll=self.sidebarScroll
+    local maximum=math.max(0,self.sidebarContent:GetHeight()-scroll:GetHeight())
+    scroll:SetVerticalScroll(math.max(0,math.min(maximum,scroll:GetVerticalScroll()+delta)))
+end
+
 function UI:RefreshProfessionTabs(ch)
-    if not self.sidebar or not self.sidebarTabs then return end
+    if not self.sidebar then return end
     local names=self:CharacterRecipeProfessions(ch)
     local supported={}
     for _,name in ipairs(names) do supported["Profession:"..string.lower(name)]=true end
     if self.tab and self.tab:sub(1,11)=="Profession:" and not supported[self.tab] then
         self.tab="Professions"; self.selectedRow=nil
     end
-    for _,b in ipairs(self.professionButtons or {}) do b:Hide() end
-    local position=0
-    local inserted=false
-    for _,tab in ipairs(self.sidebarTabs) do
-        position=position+1
-        local widget=self.tabButtons[tab]
+    for _,b in ipairs(self.professionButtons) do b:Hide() end
+    local y,top=6
+    local function place(widget,x,selected)
         widget:ClearAllPoints()
-        widget:SetPoint("TOPLEFT",self.sidebarContent,"TOPLEFT",7,-7-(position-1)*24)
-        if tab=="Professions" and not inserted then
-            inserted=true
-            for i,name in ipairs(names) do
-                local b=self.professionButtons[i]
-                local destination="Profession:"..string.lower(name)
-                if not b then
-                    b=button(self.sidebarContent,name,131,23,function() self:Navigate(b.destination) end)
-                    self.professionButtons[i]=b
+        widget:SetPoint("TOPLEFT",self.sidebarContent,"TOPLEFT",x,-y)
+        paintNavigation(widget,selected)
+        if selected then top=y end
+        y=y+26
+    end
+    for index,section in ipairs(navigationSections) do
+        local heading=self.sidebarHeadings[index]
+        heading:ClearAllPoints()
+        heading:SetPoint("TOPLEFT",self.sidebarContent,"TOPLEFT",8,-y)
+        y=y+19
+        for _,tab in ipairs(section[2]) do
+            place(self.tabButtons[tab],7,self.tab==tab)
+            if tab=="Professions" then
+                for i,name in ipairs(names) do
+                    local b=self.professionButtons[i]
+                    if not b then
+                        b=navigationButton(self.sidebarContent,name,123,"Trade_Engineering",
+                            function() self:Navigate(b.destination) end)
+                        self.professionButtons[i]=b
+                    end
+                    b.destination="Profession:"..string.lower(name)
+                    b.label:SetText(name)
+                    place(b,15,self.tab==b.destination)
+                    b:Show()
                 end
-                b.destination=destination
-                b:SetText(name)
-                b:SetEnabled(self.tab~=destination)
-                b:ClearAllPoints()
-                position=position+1
-                b:SetPoint("TOPLEFT",self.sidebarContent,"TOPLEFT",7,-7-(position-1)*24)
-                b:Show()
             end
         end
+        y=y+6
     end
-    if self.sidebarContent then self.sidebarContent:SetHeight(math.max(400,position*24+14)) end
-    if self.sidebarScroll then
-        local maxScroll=math.max(0,(self.sidebarContent:GetHeight() or 0)-(self.sidebarScroll:GetHeight() or 1))
-        if (self.sidebarScroll:GetVerticalScroll() or 0)>maxScroll then
-            self.sidebarScroll:SetVerticalScroll(maxScroll)
+    self.sidebarContent:SetHeight(y)
+    if top and self.sidebarSelection~=self.tab then
+        local scroll=self.sidebarScroll
+        local offset=scroll:GetVerticalScroll()
+        local height=scroll:GetHeight()
+        if top<offset then self:ScrollNavigation(top-offset)
+        elseif top+24>offset+height then self:ScrollNavigation(top+24-offset-height) end
+    end
+    self.sidebarSelection=self.tab
+    self:ScrollNavigation(0)
+end
+
+function UI:BuildNavigation(window)
+    local sidebar=CreateFrame("Frame",nil,window)
+    sidebar:SetPoint("TOPLEFT",window,"TOPLEFT",16,-70)
+    sidebar:SetWidth(145)
+    sidebar:SetPoint("BOTTOMLEFT",window,"BOTTOMLEFT",16,24)
+    background(sidebar,.045,.075,.070,.99)
+    for _,side in ipairs({"TOP","BOTTOM","LEFT","RIGHT"}) do
+        local edge=sidebar:CreateTexture(nil,"BORDER")
+        if side=="TOP" or side=="BOTTOM" then
+            edge:SetPoint(side.."LEFT",sidebar,side.."LEFT")
+            edge:SetPoint(side.."RIGHT",sidebar,side.."RIGHT")
+            edge:SetHeight(1)
+        else
+            edge:SetPoint("TOP"..side,sidebar,"TOP"..side)
+            edge:SetPoint("BOTTOM"..side,sidebar,"BOTTOM"..side)
+            edge:SetWidth(1)
+        end
+        edge:SetColorTexture(.56,.39,.19,.95)
+    end
+    local scroll=CreateFrame("ScrollFrame",nil,sidebar)
+    scroll:SetPoint("TOPLEFT",sidebar,"TOPLEFT",0,-4)
+    scroll:SetPoint("BOTTOMRIGHT",sidebar,"BOTTOMRIGHT",0,32)
+    local content=CreateFrame("Frame",nil,scroll)
+    content:SetSize(145,1)
+    scroll:SetScrollChild(content)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel",function(_,delta) self:ScrollNavigation(-delta*78) end)
+    local up=navigationButton(sidebar,"Scroll up",62,nil,function() self:ScrollNavigation(-78) end)
+    up:SetPoint("BOTTOMLEFT",sidebar,"BOTTOMLEFT",7,5)
+    local down=navigationButton(sidebar,"Scroll down",62,nil,function() self:ScrollNavigation(78) end)
+    down:SetPoint("LEFT",up,"RIGHT",7,0)
+    self.sidebar,self.sidebarScroll,self.sidebarContent=sidebar,scroll,content
+    self.sidebarHeadings,self.tabButtons,self.professionButtons={},{},{}
+    for index,section in ipairs(navigationSections) do
+        local heading=text(content,section[1],"GameFontNormalSmall",8,0,128)
+        heading:SetTextColor(.92,.69,.37)
+        self.sidebarHeadings[index]=heading
+        for _,tab in ipairs(section[2]) do
+            local destination=tab
+            self.tabButtons[tab]=navigationButton(content,tab,131,navigationIcons[tab],
+                function() self:Navigate(destination) end)
         end
     end
 end
@@ -1143,40 +1263,7 @@ function UI:Create()
     local close = button(f, "X", 30, 25, function() f:Hide() end)
     close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -13)
 
-    local sidebar = CreateFrame("Frame", nil, f)
-    sidebar:SetPoint("TOPLEFT",f,"TOPLEFT",16,-70)
-    sidebar:SetWidth(145)
-    sidebar:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",16,24)
-    background(sidebar, 0.085, 0.11, 0.14, 0.8)
-    local tabs = {"Overview", "Upgrade Plan", "Upgrades", "Characters", "Gear", "Crafting", "Planner", "Requests", "Shopping", "Professions", "Gathering", "Catalog", "Item Explorer", "Dungeons", "Auction", "Gold", "Reputation", "Talents", "Leveling", "Inventory", "Legacy", "QA Tests", "Settings", "Diagnostics", "Help"}
-    -- Sidebar can exceed the window height when a character has multiple
-    -- profession tabs. Keep every destination reachable with wheel or arrows.
-    local sidebarScroll=CreateFrame("ScrollFrame",nil,sidebar)
-    sidebarScroll:SetPoint("TOPLEFT",sidebar,"TOPLEFT",0,-4)
-    sidebarScroll:SetPoint("BOTTOMRIGHT",sidebar,"BOTTOMRIGHT",0,30)
-    local sidebarContent=CreateFrame("Frame",nil,sidebarScroll)
-    sidebarContent:SetSize(145,540)
-    sidebarScroll:SetScrollChild(sidebarContent)
-    local function sidebarStep(delta)
-        local maxScroll=math.max(0,(sidebarContent:GetHeight() or 0)-(sidebarScroll:GetHeight() or 1))
-        sidebarScroll:SetVerticalScroll(math.max(0,math.min(maxScroll,(sidebarScroll:GetVerticalScroll() or 0)+delta)))
-    end
-    sidebarScroll:EnableMouseWheel(true)
-    sidebarScroll:SetScript("OnMouseWheel",function(_,delta) sidebarStep(-delta*72) end)
-    local up=button(sidebar,"Up",61,22,function() sidebarStep(-72) end)
-    up:SetPoint("BOTTOMLEFT",sidebar,"BOTTOMLEFT",7,5)
-    local down=button(sidebar,"Down",61,22,function() sidebarStep(72) end)
-    down:SetPoint("LEFT",up,"RIGHT",7,0)
-    self.sidebar=sidebar
-    self.sidebarScroll=sidebarScroll
-    self.sidebarContent=sidebarContent
-    self.sidebarTabs=tabs
-    self.tabButtons={}
-    self.professionButtons={}
-    for _,tab in ipairs(tabs) do
-        local selectedTab=tab
-        self.tabButtons[tab]=button(sidebarContent,tab,131,23,function() self:Navigate(selectedTab) end)
-    end
+    self:BuildNavigation(f)
 
     local panel = CreateFrame("Frame",nil,f)
     panel:SetPoint("TOPLEFT", f,"TOPLEFT",171,-70)
@@ -1637,6 +1724,7 @@ function UI:ResetWindow()
 end
 function UI:Reflow()
     if not self.panel or not self.listPanel then return end
+    if self.sidebarScroll then self:ScrollNavigation(0) end
     local listWidth=math.max(250,self.listPanel:GetWidth()-40)
     self.scrollChild:SetWidth(listWidth)
     self.detailChild:SetWidth(math.max(190,self.detailPanel:GetWidth()-42))
@@ -3749,9 +3837,8 @@ function UI:Refresh()
             tonumber(palette.accent:sub(3,4),16)/255,
             tonumber(palette.accent:sub(5,6),16)/255)
     end
-    for t,b in pairs(self.tabButtons) do b:SetEnabled(t~=tab) end
     local myRequests=FCM:CountAssignedRequests(FCM.currentKey)
-    self.tabButtons.Requests:SetText(myRequests>0 and ("Requests ("..myRequests..")") or "Requests")
+    self.tabButtons.Requests.label:SetText(myRequests>0 and ("Requests ("..myRequests..")") or "Requests")
     local all=buildRows(self)
     local q=string.lower(self.appliedSearch or "")
     local entries={}

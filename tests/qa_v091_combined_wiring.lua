@@ -25,7 +25,7 @@ end
 includes(core,'cmd == "gather" or cmd == "gathering"','gathering slash commands')
 includes(core,'cmd == "legacypriority"','Legacy tree priority command')
 includes(core,'cmd == "pawnimport"','Zygor/Pawn stat weight import')
-includes(ui,'"Professions", "Gathering", "Catalog"','Gathering tab')
+includes(ui,'"Professions","Gathering"','Gathering tab')
 includes(ui,'elseif tab=="Gathering"','Gathering list and action')
 includes(ui,'self:PromptCraftQuantity(','craft quantity popup')
 includes(ui,'FCM:BrowseCraftRecipes(profession,query,ch)','recipient-aware recipe-only Crafting search')
