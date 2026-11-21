@@ -1336,6 +1336,7 @@ function UI:Create()
             {"Herbalism","herbalism"},
             {"Mining","mining"},
             {"Fishing - All","fishing"},
+            {"Fishing - Fish","fishing","fish"},
             {"Fishing - Schools & Pools","fishing","school_pool"},
             {"Fishing - Oil Spills & Wreckage","fishing","spill_wreckage"},
             {"Fishing - Open Water","fishing","open_water"},

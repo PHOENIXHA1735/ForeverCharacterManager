@@ -72,7 +72,7 @@ local function fishingLabel(name,itemID)
        n:find("crate",1,true) or n:find("footlocker",1,true) or
        n:find("flotsam",1,true) or n:find("chest",1,true) or
        n:find("scroll",1,true) then return "Fishing loot" end
-    if n:match("^raw ") or n:match("^oily blackmouth") or
+    if n:match("^raw ") or n:match("^bloated ") or n:match("^oily blackmouth") or
        n:match("^firefin snapper") or n:match("^stonescale eel") or
        n:match("^deviate fish") or n:match("^whimsyfin") or
        n:match("^sagefish") or n:match("catfish$") then return "Fish" end
@@ -100,7 +100,9 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
     local entries,byKey,refs={},{},{}
     local q=(search or ""):lower()
     local function sourceAllowed(typ)
-        if not sourceType then return true end
+        -- The Fish filter is an item-only view across every water/source type.
+        -- Construct all known item rows first, then exclude non-fish below.
+        if not sourceType or sourceType=='fish' then return true end
         if sourceType=='school_pool' then return typ=='school' or typ=='pool' end
         if sourceType=='spill_wreckage' then return typ=='oil_spill' or typ=='wreckage' end
         return typ==sourceType
@@ -173,7 +175,8 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             end
         end
     end
-    local db=(not sourceType or sourceType=='unknown') and (not kind or kind=="fishing") and self:GatherDB()
+    local db=(not sourceType or sourceType=='unknown' or sourceType=='fish') and
+        (not kind or kind=="fishing") and self:GatherDB()
     local unattributed=db and db.unattributedFishing
     for id,qty in pairs(type(unattributed)=="table" and unattributed or {}) do
         id,qty=tonumber(id),tonumber(qty)
@@ -214,7 +217,9 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
         for _,point in ipairs(row.locations) do
             matches=matches or has(point.name) or has(point.sourceType) or has(self:GatherZoneLabel(point.mapID))
         end
-        if matches and skillMatch and not row.hidden then filtered[#filtered+1]=row end
+        local fishOnly=sourceType~='fish' or
+            (row.kind=='fishing' and row.itemID and fishingLabel(row.name,row.itemID)=='Fish')
+        if matches and skillMatch and fishOnly and not row.hidden then filtered[#filtered+1]=row end
     end
     entries=filtered
     table.sort(entries,function(a,b)

@@ -732,6 +732,38 @@ assert(seeds.detail(true):find('REFERENCE SOURCES',1,true))
 assert(not seeds.detail():find('Sources: ForeverDB',1,true))
 local commonFish=findNamedCatalogItem('Raw Brilliant Smallfish','fishing')
 assert(commonFish and commonFish.summary:find('Fish |',1,true))
+
+-- Fish-only is item-based, across all source types. It must never show
+-- fishing locations, pools, schools, containers, or recipes in the list.
+local fishOnly=catalog:GatherResourceRows('','fishing',nil,'fish')
+local fishNames={}
+for _,entry in ipairs(fishOnly) do
+    assert(entry.itemID and entry.summary:find('^Fish |'),
+        'Fish-only shows actual fish items, not source nodes or general loot: '..entry.name)
+    assert(not entry.name:find('School',1,true) and
+           not entry.name:find('Oil Spill',1,true) and
+           not entry.name:find('Wreckage',1,true),
+        'Fishing location excluded from Fish-only')
+    fishNames[entry.name]=true
+end
+for _,name in ipairs({'Raw Brilliant Smallfish','Oily Blackmouth','Firefin Snapper',
+                      'Bloated Mud Snapper','Bloated Whitescale Salmon'}) do
+    assert(fishNames[name], 'Fish-only includes '..name)
+end
+for _,name in ipairs({'Oily Blackmouth School','Firefin Snapper School',
+                      'Oil Spill','Floating Wreckage','Iron Bound Trunk',
+                      'Pattern: Red Woolen Boots'}) do
+    assert(not fishNames[name], 'Fish-only excludes '..name)
+end
+local fishSearch=catalog:GatherResourceRows('Firefin','fishing',nil,'fish')
+eq(#fishSearch,1,'Fish-only search finds species without matching school')
+eq(fishSearch[1].name,'Firefin Snapper','Fish-only search resolves item')
+assert(#catalog:GatherResourceRows('','fishing',nil,'school_pool')>0,
+    'existing Schools & Pools filter still works')
+assert(#catalog:GatherResourceRows('','fishing',nil,'open_water')>0,
+    'existing Open Water filter still works')
+assert(#catalog:GatherResourceRows('','fishing',nil,'spill_wreckage')>0,
+    'existing spill and wreckage filter still works')
 local footwearPattern=findNamedCatalogItem('Pattern: Red Woolen Boots','fishing')
 assert(footwearPattern and footwearPattern.summary:find('Fishing loot',1,true))
 local waterSource=findNamedCatalogItem('Patch of Elemental Water','fishing')
