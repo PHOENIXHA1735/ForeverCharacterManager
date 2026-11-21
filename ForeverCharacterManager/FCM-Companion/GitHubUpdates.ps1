@@ -3,7 +3,7 @@
 $script:FCMRepo='PHOENIXHA1735/ForeverCharacterManager'
 $script:FCMRepoUrl='https://github.com/PHOENIXHA1735/ForeverCharacterManager'
 $script:FCMGitHubApi='https://api.github.com/repos/PHOENIXHA1735/ForeverCharacterManager/releases/latest'
-$script:FCMInstalledVersion=[version]'0.9.1'
+$script:FCMInstalledVersion=[version]'0.0.0'
 $script:LatestFCMRelease=$null
 $script:LatestFCMAsset=$null
 
@@ -41,7 +41,7 @@ function Get-FCMLatestGitHubRelease {
     $script:LatestFCMRelease=$null
     $script:LatestFCMAsset=$null
     if ($script:githubUpdateButton) {$script:githubUpdateButton.Enabled=$false}
-    $headers=@{'Accept'='application/vnd.github+json';'User-Agent'='ForeverCharacterManagerCompanion/0.9.0'}
+    $headers=@{'Accept'='application/vnd.github+json';'User-Agent'='ForeverCharacterManagerCompanion/0.9.4'}
     try { $release=Invoke-FcmHttpJson $script:FCMGitHubApi $headers }
     catch {
         $status=Get-FcmHttpStatus $_
@@ -109,7 +109,7 @@ function Get-FCMTrustedAssetBytes([string]$url,[int]$maximumBytes) {
         throw 'Release asset URL is not from the approved FCM repository.'
     }
     $req=[System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get,[Uri]$url)
-    [void]$req.Headers.TryAddWithoutValidation('User-Agent','ForeverCharacterManagerCompanion/0.9.0')
+    [void]$req.Headers.TryAddWithoutValidation('User-Agent','ForeverCharacterManagerCompanion/0.9.4')
     $cts=[System.Threading.CancellationTokenSource]::new()
     $cts.CancelAfter(28000)
     $res=$null

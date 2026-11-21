@@ -3,8 +3,8 @@
 local addonName, addon = ...
 local FCM = addon or {}
 _G.ForeverCharacterManager = FCM
-FCM.version = "0.9.3"
-FCM.build = "R6.2-20261116-Gold-Toolbar-Spacing-Verified"
+FCM.version = "0.9.4"
+FCM.build = "v0.9.4"
 FCM.name = addonName or "ForeverCharacterManager"
 FCM.currentKey = nil
 FCM.events = {}

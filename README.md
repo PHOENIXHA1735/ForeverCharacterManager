@@ -4,6 +4,8 @@ Account-wide character, crafting, gathering, inventory, progression, and market-
 
 **Current release:** v0.9.3, including the Gold quote freshness correction ([PR #5](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/5)) and the in-game-verified Gold toolbar spacing fix ([PR #3](https://github.com/PHOENIXHA1735/ForeverCharacterManager/pull/3)) · [GitHub Releases](https://github.com/PHOENIXHA1735/ForeverCharacterManager/releases). Install the intended version and preserve your personal data.
 
+**Release candidate:** v0.9.4 is in qualification. Existing installations should use the reviewed selective overlay after deployment approval.
+
 ## Start here
 
 1. [Full installation and usage instructions](docs/INSTALL_AND_USE.md) — exact Windows folder, first login, all 27 tabs, crafting, gathering, troubleshooting and privacy.
