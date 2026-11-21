@@ -128,6 +128,36 @@ assert(imported[203].bindType==nil and imported[203].eligibility=='verify',
 assert(imported[204].eligibility=='verify', 'Named two-hand weapon cannot bypass proficiency')
 assert(imported[205].availabilityStatus=='historical-beta-event',
  'Historical beta items must be visibly flagged as uncertain')
+-- Actual uploaded Nov 19 reference: 23,678 records use string slotID,
+-- and no item emits an equipLoc field. No live WoW client is available here.
+F.Gear.slots.INVTYPE_WEAPON={16,17}
+F.Gear.slots.INVTYPE_WEAPONMAINHAND={16}
+F.Gear.slots.INVTYPE_WEAPONOFFHAND={17}
+F.Gear.slots.INVTYPE_HOLDABLE={17}
+F.Gear.slots.INVTYPE_RANGED={18}
+F.externalData.recipes[906]={name='Text-only one hand',resultID=206}
+F.externalData.recipes[907]={name='Text-only main hand',resultID=207}
+F.externalData.recipes[908]={name='Text-only off hand',resultID=208}
+F.externalData.recipes[909]={name='Text-only held offhand',resultID=209}
+F.externalData.recipes[910]={name='Text-only chest',resultID=210}
+F.externalData.recipes[911]={name='Text-only non-equipment',resultID=211}
+F.externalData.recipes[912]={name='Text-only contradiction',resultID=212}
+items[206]={requiredLevel='29',classID='2',subclass='Sword',slotID='One-Hand'}
+items[207]={requiredLevel='29',classID='2',subclass='Sword',slotID='Main Hand'}
+items[208]={requiredLevel='29',classID='2',subclass='Sword',slotID='Off Hand'}
+items[209]={requiredLevel='29',classID='4',subclass='Miscellaneous',slotID='Held In Off-hand'}
+items[210]={requiredLevel='29',classID='4',subclass='Cloth',slotID='Chest'}
+items[211]={requiredLevel='29',classID='0',subclass='Potions',slotID='Non-equippable'}
+items[212]={requiredLevel='29',classID='4',subclass='Cloth',slotID='Off Hand',equipLoc='Chest'}
+local textFields=indexed(P:Candidates(mine,10,{source='crafting'}))
+assert(textFields[206] and textFields[206].equip=='INVTYPE_WEAPON' and
+    textFields[206].eligibility=='verify','One-Hand mapped without training assumption')
+assert(textFields[207] and textFields[207].equip=='INVTYPE_WEAPONMAINHAND','Main Hand maps')
+assert(textFields[208] and textFields[208].equip=='INVTYPE_WEAPONOFFHAND','Off Hand maps')
+assert(textFields[209] and textFields[209].equip=='INVTYPE_HOLDABLE','Held In Off-hand maps')
+assert(textFields[210] and textFields[210].equip=='INVTYPE_CHEST','Text-only Chest maps')
+assert(not textFields[211] and not textFields[212],
+    'Non-equippable items and contradictory text locations excluded')
 F.externalData.recipes=originalRecipe
 F.externalData.dungeons=originalDungeons
 print('PASS: future candidate aggregation, levels, filters, restrictions, provenance and read-only handling')
