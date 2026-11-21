@@ -88,6 +88,8 @@ class ImportTests(unittest.TestCase):
         self.assertIn('Fishing - Oil Spills & Wreckage',ui)
         self.assertIn('Gathering Filters',ui)
         self.assertIn('self:MakeMenu(self.gatherCategoryButton,entries,270,false)',ui)
+        # Gathering has exactly nine categories and no page navigation is needed.
+        self.assertIn('local perPage=(anchor==self.gatherCategoryButton) and 9 or 8',ui)
         self.assertIn('self.gatherMoreButton=button',ui)
         self.assertNotIn('Import GatherMate2',ui)
         self.assertNotIn('ImportGatherMate(',ui)
