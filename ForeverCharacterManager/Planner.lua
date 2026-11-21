@@ -151,14 +151,20 @@ function FCM:UpgradeDashboard()
             rows[#rows+1]={kind="talent",ch=ch,title=ch.name..": next talent point",
                 summary=talent.next,score=0}
         end
-        for _,p in pairs(ch.professions or {}) do
-            if p.skill and p.maxSkill and p.maxSkill>0 and p.skill<p.maxSkill then
-                local milestone= p.skill<150 and 150 or (p.skill<225 and 225 or (p.skill<300 and 300 or nil))
-                if milestone and p.maxSkill>=milestone then
-                    rows[#rows+1]={kind="profession",ch=ch,
-                        title=ch.name..": "..p.name.." milestone "..milestone,
-                        summary="Skill "..p.skill.." / "..milestone.." | "..(milestone-p.skill).." skill to go",
-                        score=-1}
+        local professions=type(ch.professions)=="table" and ch.professions or {}
+        for key,p in pairs(professions) do
+            if type(p)=="table" then
+                local name=type(p.name)=="string" and p.name:match("^%s*(.-)%s*$")
+                if not name or name=="" then name=type(key)=="string" and key:match("^%s*(.-)%s*$") end
+                local skill,maxSkill=tonumber(p.skill or p.skillLevel),tonumber(p.maxSkill)
+                if name and name~="" and skill and maxSkill and skill>=0 and skill<maxSkill and maxSkill<math.huge then
+                    local milestone=skill<150 and 150 or (skill<225 and 225 or (skill<300 and 300 or nil))
+                    if milestone and maxSkill>=milestone then
+                        rows[#rows+1]={kind="profession",ch=ch,
+                            title=(ch.name or "Saved character")..": "..name.." milestone "..milestone,
+                            summary="Skill "..skill.." / "..milestone.." | "..(milestone-skill).." skill to go",
+                            score=-1}
+                    end
                 end
             end
         end

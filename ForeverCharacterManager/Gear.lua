@@ -887,12 +887,22 @@ end
 
 local allowedArmor = { MAGE=1, WARLOCK=1, PRIEST=1, ROGUE=2, DRUID=2,
     HUNTER=3, SHAMAN=3, WARRIOR=4, PALADIN=4 }
+local twoHandedAxeClasses={WARRIOR=true,PALADIN=true,HUNTER=true,SHAMAN=true}
+
+function G:WeaponClassRestriction(classID,subclassID,class)
+    -- ForeverDB.net/trainers lists the four classes that can train two-handed axes.
+    if tonumber(classID)==2 and tonumber(subclassID)==1 and allowedArmor[class] and not twoHandedAxeClasses[class] then
+        return "Class cannot equip two-handed axes."
+    end
+end
 
 function G:IsPotentiallyWearable(itemInfo, ch, snapshotOwner)
     if not itemInfo or not itemInfo.equip or not slots[itemInfo.equip] then return false end
     if not tonumber(itemInfo.level) or not tonumber(ch.level) or not allowedArmor[ch.class] then
         return nil,"Equipment level or character class is unavailable."
     end
+    local restriction=self:WeaponClassRestriction(itemInfo.classID,itemInfo.subclassID,ch.class)
+    if restriction then return false,restriction end
     if tonumber(ch.level)<tonumber(itemInfo.level) then return false,"Requires a higher character level." end
     local id=itemInfo.itemID or (itemInfo.link and tonumber(itemInfo.link:match("item:(%d+)")))
     local ref=id and FCM.externalData and FCM.externalData.items and FCM.externalData.items[id]
@@ -972,7 +982,7 @@ function G:FutureCandidates(ch,lookahead)
                 end
             end
             if eligible and info and info.level and info.level>(ch.level or 1) and info.level<=target
-                    and self.slots[info.equip] and self:IsPotentiallyWearable(info,{level=target,class=ch.class}) then
+                    and self.slots[info.equip] and self:IsPotentiallyWearable(info,{level=target,class=ch.class},ch) then
                 rows[#rows+1]={recipe=r,info=info}
             end
         end

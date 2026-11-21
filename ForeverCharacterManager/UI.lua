@@ -612,8 +612,8 @@ function UI:RenderDungeonDetail(r,ch)
             cache={eligibility=eligibility,reason=reason,upgrade=upgrade,fit=fit,fitReason=fitReason}
             eligibilityCache[itemID]=cache
         end
-        local eligible=cache.eligibility~="other" and cache.eligibility~="future"
-        local ok=scope=="all" or (scope=="class" and cache.eligibility~="other") or
+        local eligible=cache.eligibility=="candidate"
+        local ok=scope=="all" or (scope=="class" and (cache.eligibility=="candidate" or cache.eligibility=="future")) or
             (scope=="spec" and eligible and cache.fit=="match") or
             (scope=="upgrades" and eligible and cache.upgrade and cache.upgrade.state=="upgrade")
         return ok,cache.eligibility,cache.reason,cache.upgrade,cache.fit,cache.fitReason
@@ -802,6 +802,7 @@ function UI:RenderDungeonDetail(r,ch)
         local label=meta.slot or meta.typeName or "Item type unknown"
         local verdict="Stats unknown"
         if eligibility=="other" then verdict="Not for this class"
+        elseif eligibility=="unknown" then verdict="Eligibility unverified"
         elseif eligibility=="future" then verdict="Requires a higher level"
         elseif upgrade and upgrade.state=="upgrade" then verdict="Potential upgrade"
         elseif upgrade and upgrade.state=="not-upgrade" then verdict="Not an upgrade"

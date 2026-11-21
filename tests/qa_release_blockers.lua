@@ -82,7 +82,9 @@ check("nine classes fail closed without weapon evidence and accept demonstrated 
     for _,class in ipairs({"WARRIOR","PALADIN","HUNTER","ROGUE","PRIEST","SHAMAN","MAGE","WARLOCK","DRUID"}) do
         local ch={class=class,level=60,gear={[16]={itemID=601}}}
         assert(gear:IsPotentiallyWearable(weapon,ch)==true,class)
-        assert(gear:IsPotentiallyWearable(axe,ch)==nil,class)
+        local mayTrain=class=="WARRIOR" or class=="PALADIN" or class=="HUNTER" or class=="SHAMAN"
+        local actual=gear:IsPotentiallyWearable(axe,ch)
+        assert((mayTrain and actual==nil) or (not mayTrain and actual==false),class)
         assert(gear:IsPotentiallyWearable({equip="INVTYPE_CHEST",classID=4,subclassID=1,level=5},ch)==true,class)
         ch.level=10
         assert(gear:IsPotentiallyWearable(weapon,ch)==false,class)

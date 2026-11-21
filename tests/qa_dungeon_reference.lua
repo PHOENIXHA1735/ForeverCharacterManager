@@ -30,6 +30,7 @@ assert(#FCM:BrowseDungeons("dungeons","current",1)==0)
 FCM.externalData.items={
     [22]={classID=4,subclass="plate",requiredLevel=20},
     [23]={classID=4,subclass="cloth",requiredLevel=20},
+    [24]={classID=4,subclass="cloth",requiredLevel=1,equipLoc="INVTYPE_WRIST"},
 }
 assert(FCM:DungeonItemEligibility(22,{class="MAGE",level=1})=="other")
 assert(FCM:DungeonItemEligibility(23,{class="MAGE",level=1})=="future")

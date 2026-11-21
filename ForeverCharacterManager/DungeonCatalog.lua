@@ -194,8 +194,12 @@ function FCM:DungeonItemEligibility(itemID, ch)
     if not id or id<=0 then return "unknown","item ID unavailable" end
     local imported=self.externalData and self.externalData.items and self.externalData.items[id] or {}
     local info=(self.Gear and self.Gear:Info(id)) or nil
-    local classID=tonumber(imported.classID) or (info and info.classID)
+    local classID=(info and tonumber(info.classID)) or tonumber(imported.classID)
     local subID=(info and tonumber(info.subclassID)) or tonumber(imported.subclassID)
+    if self.Gear and self.Gear.WeaponClassRestriction then
+        local restriction=self.Gear:WeaponClassRestriction(classID,subID,ch.class)
+        if restriction then return "other",restriction end
+    end
     if classID==4 then
         local armor=(subID and subID>=1 and subID<=4) and subID or armorNames[string.lower(tostring(imported.subclass or ""))]
         if armor and armor>(maxArmor[ch.class] or 4) then
@@ -211,14 +215,18 @@ function FCM:DungeonItemEligibility(itemID, ch)
     if classID and classID~=2 and classID~=4 then
         return "other","not equipment (reference loot)"
     end
-    local required=tonumber(imported.requiredLevel) or (info and tonumber(info.level))
-    if required and required>0 and required>(tonumber(ch.level) or 0) then
-        return "future","future: requires level "..required
-    end
+    local required=(info and tonumber(info.level)) or tonumber(imported.requiredLevel)
+    local future=required and required>0 and required>(tonumber(ch.level) or 0)
     if info and self.Gear.IsPotentiallyWearable then
-        local eligible,reason=self.Gear:IsPotentiallyWearable(info,ch)
+        local wearer=future and {class=ch.class,level=required} or ch
+        local eligible,reason=self.Gear:IsPotentiallyWearable(info,wearer,ch)
         if eligible==false then return "other",reason end
         if eligible==nil then return "unknown",reason end
+    elseif classID==2 then
+        return "unknown","Weapon proficiency is not verified."
+    end
+    if future then
+        return "future","future: requires level "..required
     end
     if not info and not imported.equipLoc and not imported.slotID then
         return "unknown","eligibility not verified"
@@ -246,7 +254,7 @@ local physicalSpecs={
 function FCM:DungeonSpecFit(itemID,ch)
     if not ch then return "unknown","select a character" end
     local eligibility=self:DungeonItemEligibility(itemID,ch)
-    if eligibility=="other" or eligibility=="future" then
+    if eligibility~="candidate" then
         return "unknown","not currently eligible equipment"
     end
     local st=self.Gear and self.Gear.StatValues and self.Gear:StatValues(tonumber(itemID))
