@@ -58,7 +58,7 @@ end
 
 -- x/y are normalized integer hundredths of a percent (0..10000).
 -- A node can be known from several sources; personal discovery is strongest.
-function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
+function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID, catches)
     local g=self:GatherDB()
     kind=type(kind)=="string" and kind:lower() or nil
     mapID=number(mapID,1,200000)
@@ -96,6 +96,13 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
             existing=closest
         end
     end
+    local function addCatches(node)
+        if not catches then return end
+        node.catches=type(node.catches)=="table" and node.catches or {}
+        for id,count in pairs(catches) do
+            node.catches[id]=math.min(1000000000,(tonumber(node.catches[id]) or 0)+count)
+        end
+    end
     if existing then
         if source=="personal" then
             -- Old releases recorded discovery but not repeat harvests. Keep
@@ -109,6 +116,7 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
             else
                 existing.gatherCount=1
             end
+            addCatches(existing)
             existing.personal=true
             existing.firstSeen=existing.firstSeen or self:Now()
             existing.lastSeen=self:Now()
@@ -117,13 +125,14 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
             self._gatherWorldMapDirty=true
             rememberPersonal(kind,mapID,existing.x,existing.y,existing.name)
         end
-        return false
+        return false,existing
     end
     byMap[key]={name=name,x=x,y=y,gmID=number(gmID,1,1000000),
         source=source,personal=(source=="personal"),
         gatherCount=source=="personal" and 1 or nil,
         firstSeen=source=="personal" and self:Now() or nil,
         lastSeen=source=="personal" and self:Now() or nil}
+    addCatches(byMap[key])
     self._gatherCounts=nil
     self._gatherMinimapDirty=true
     self._gatherWorldMapDirty=true
@@ -133,7 +142,7 @@ function FCM:AddGatherNode(kind, mapID, x, y, name, source, gmID)
         -- personally observed points, without parsing the private FCM_DB.
         rememberPersonal(kind,mapID,x,y,name)
     end
-    return true
+    return true,byMap[key]
 end
 
 function FCM:GatherCountLabel(node)
@@ -161,7 +170,7 @@ function FCM:GatherNodes(kind, search, maxRows)
                     if type(n)=="table" and (q=="" or (n.name or ""):lower():find(q,1,true)) then
                         rows[#rows+1]={kind=category,mapID=tonumber(zone),name=n.name,
                             x=n.x,y=n.y,source=n.source,personal=n.personal,gmID=n.gmID,
-                            gatherCount=n.gatherCount,gatherCountMinimum=n.gatherCountMinimum}
+                            gatherCount=n.gatherCount,gatherCountMinimum=n.gatherCountMinimum,catches=n.catches}
                     end
                 end
             end
@@ -272,7 +281,32 @@ local gatherDefaultIcons={
     treasure="Interface\\Icons\\INV_Misc_Bag_08",
 }
 
-function FCM:GatherNodeIcon(kind,name)
+function FCM:GatherCatchLines(catches)
+    local ids,lines={},{}
+    for id,count in pairs(type(catches)=="table" and catches or {}) do
+        if number(id,1,10000000) and number(count,1,1000000000) then ids[#ids+1]=tonumber(id) end
+    end
+    table.sort(ids)
+    for _,id in ipairs(ids) do
+        local name=type(GetItemInfo)=="function" and self:Try(GetItemInfo,id)
+        lines[#lines+1]=(name or ("Item "..id)).." x"..(catches[id] or catches[tostring(id)])
+    end
+    return lines
+end
+
+function FCM:GatherNodeIcon(kind,name,catches,referenceID)
+    local item=referenceID
+    if kind=="fishing" and not item then
+        for id,count in pairs(type(catches)=="table" and catches or {}) do
+            id=number(id,1,10000000)
+            if id and number(count,1,1000000000) and (not item or id<item) then item=id end
+        end
+    end
+    if item then
+        local icon=(C_Item and self:Try(C_Item.GetItemIconByID,item)) or
+            (type(GetItemIcon)=="function" and self:Try(GetItemIcon,item))
+        if icon then return icon end
+    end
     local lower=type(name)=="string" and name:lower() or ""
     if kind=="herbalism" then
         for key,info in pairs(herbItemIcons) do
@@ -288,7 +322,7 @@ function FCM:GatherNodeIcon(kind,name)
     end
     -- For other herbs and resources, WoW may know the yielded item by name.
     -- This is only a display lookup, never a source of gathering coordinates.
-    if lower~="" and type(GetItemInfo)=="function" then
+    if kind~="fishing" and lower~="" and type(GetItemInfo)=="function" then
         local _,_,_,_,_,_,_,_,_,icon=self:Try(GetItemInfo,name)
         if type(icon)=="number" or (type(icon)=="string" and icon~="") then
             return icon
@@ -299,6 +333,8 @@ end
 
 local function gatherWorldPosition(mapID,x,y)
     if not C_Map or type(C_Map.GetWorldPosFromMapPos)~="function" then return nil end
+    if not number(mapID,1,200000) or type(x)~="number" or type(y)~="number" or
+       x~=x or y~=y or x<0 or x>1 or y<0 or y>1 then return nil end
     local vec=type(CreateVector2D)=="function" and CreateVector2D(x,y) or {x=x,y=y}
     local ok,continent,pos=pcall(C_Map.GetWorldPosFromMapPos,mapID,vec)
     if not ok or not pos then return nil end
@@ -309,12 +345,23 @@ local function gatherWorldPosition(mapID,x,y)
             if got then wx,wy=a,b end
         end
     end
-    if type(wx)~="number" or type(wy)~="number" then return nil end
+    if continent==nil or type(wx)~="number" or type(wy)~="number" or
+       not (math.abs(wx)<math.huge and math.abs(wy)<math.huge) then return nil end
     return continent,wx,wy
 end
 
 function FCM:HideGatherMinimapPins()
     for _,pin in ipairs(self._gatherMiniPins or {}) do pin:Hide() end
+end
+
+function FCM:GatherDistance(mapID,x,y)
+    local current=C_Map and self:Try(C_Map.GetBestMapForUnit,"player")
+    local player=current and self:Try(C_Map.GetPlayerMapPosition,current,"player")
+    if not player or type(player.GetXY)~="function" then return end
+    local px,py=self:Try(player.GetXY,player)
+    local a,wx,wy=gatherWorldPosition(current,px,py)
+    local b,nx,ny=gatherWorldPosition(mapID,x,y)
+    if a and a==b then return math.sqrt((wx-nx)^2+(wy-ny)^2) end
 end
 
 local function gatherPin(parent)
@@ -346,7 +393,7 @@ local function gatherPin(parent)
         badge:Hide()
         pin.clusterBadge=badge
     end
-    pin:SetScript("OnEnter",function(btn)
+    local function showTooltip(btn)
         if not GameTooltip then return end
         GameTooltip:SetOwner(btn,"ANCHOR_LEFT")
         GameTooltip:AddLine(btn.nodeName or "Gathering location",1,0.88,0.35)
@@ -354,6 +401,18 @@ local function gatherPin(parent)
             string.format("%.2f, %.2f",(btn.nodeX or 0)/100,(btn.nodeY or 0)/100),0.75,0.9,1)
         GameTooltip:AddLine(btn.nodePersonal and "Personally gathered" or "Saved reference location",0.65,1,0.65)
         GameTooltip:AddLine(FCM:GatherCountLabel(btn.nodeCount),0.85,1,0.85)
+        local node=btn.nodeCount
+        if node then
+            if FCM.GatherZoneLabel then GameTooltip:AddLine(FCM:GatherZoneLabel(node.mapID)) end
+            local distance=FCM:GatherDistance(node.mapID,node.x/10000,node.y/10000)
+            GameTooltip:AddLine(distance and string.format("Distance: %.0f yd",distance) or "Distance unavailable")
+            for _,line in ipairs(FCM:GatherCatchLines(node.catches)) do GameTooltip:AddLine(line) end
+            local ch=FCM.Current and FCM:Current()
+            if FCM.GatherResourceSkill then
+                for _,line in ipairs(FCM:GatherResourceSkill(node.kind,node.name,ch)) do GameTooltip:AddLine(line) end
+            end
+            if node.kind=="fishing" then GameTooltip:AddLine("Player standing location") end
+        end
         if btn.nodeRim then
             GameTooltip:AddLine("Direction marker | Nearest saved point ~"..
                 tostring(math.floor((btn.nodeDistance or 0)+0.5)).." yd away",1,0.84,0.3)
@@ -364,8 +423,19 @@ local function gatherPin(parent)
         end
         GameTooltip:AddLine("Previously reported; spawn not guaranteed",0.9,0.85,0.7)
         GameTooltip:Show()
+    end
+    pin:SetScript("OnEnter",function(btn) btn.tooltipElapsed=0;btn.gatherHovered=true;showTooltip(btn) end)
+    pin:SetScript("OnUpdate",function(btn,elapsed)
+        if not btn.gatherHovered then return end
+        btn.tooltipElapsed=(btn.tooltipElapsed or 0)+elapsed
+        if btn.tooltipElapsed>=0.5 and GameTooltip and GameTooltip.GetOwner and GameTooltip:GetOwner()==btn then
+            btn.tooltipElapsed=0;showTooltip(btn)
+        end
     end)
-    pin:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
+    pin:SetScript("OnLeave",function(btn)
+        if btn then btn.gatherHovered=nil end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     pin:Hide()
     return pin
 end
@@ -444,7 +514,7 @@ function FCM:UpdateGatherMinimap()
                                 matches[#matches+1]={ox=ox,oy=oy,dist=dist,kind=kind,
                                     name=node.name,x=node.x,y=node.y,personal=node.personal,
                                     gatherCount=node.gatherCount,
-                                    gatherCountMinimum=node.gatherCountMinimum}
+                                    gatherCountMinimum=node.gatherCountMinimum,catches=node.catches,mapID=mapID}
                             end
                         end
                     end
@@ -481,10 +551,8 @@ function FCM:UpdateGatherMinimap()
         pin.nodeDistance=node.dist
         pin.nodeRim=node.rim
         pin.nodeCluster=node.clusterCount or 1
-        if pin.iconName~=node.name or pin.iconKind~=node.kind then
-            pin.icon:SetTexture(self:GatherNodeIcon(node.kind,node.name))
-            pin.iconName,pin.iconKind=node.name,node.kind
-        end
+        local texture=self:GatherNodeIcon(node.kind,node.name,node.catches)
+        if pin.nodeTexture~=texture then pin.icon:SetTexture(texture);pin.nodeTexture=texture end
         -- Known item icons retain their original coloration. Other resource
         -- types still remain distinct by their fallback category artwork.
         pin.icon:SetVertexColor(1,1,1,1)
@@ -725,7 +793,7 @@ function FCM:UpdateGatherWorldMap()
                        self.db.settings.gatherWorldMapKinds[kind]~=false then
                         matches[#matches+1]={kind=kind,name=node.name,x=node.x,y=node.y,
                             personal=node.personal,gatherCount=node.gatherCount,
-                            gatherCountMinimum=node.gatherCountMinimum}
+                            gatherCountMinimum=node.gatherCountMinimum,catches=node.catches,mapID=mapID}
                     end
                 end
             end
@@ -773,10 +841,8 @@ function FCM:UpdateGatherWorldMap()
         pin.nodeRim=nil
         pin.nodeDistance=nil
         pin.nodeCluster=1
-        if pin.iconName~=node.name or pin.iconKind~=node.kind then
-            pin.icon:SetTexture(self:GatherNodeIcon(node.kind,node.name))
-            pin.iconName,pin.iconKind=node.name,node.kind
-        end
+        local texture=self:GatherNodeIcon(node.kind,node.name,node.catches)
+        if pin.nodeTexture~=texture then pin.icon:SetTexture(texture);pin.nodeTexture=texture end
         pin.icon:SetVertexColor(1,1,1,1)
         if pin.clusterBadge then pin.clusterBadge:Hide() end
         pin:ClearAllPoints()
@@ -856,8 +922,16 @@ function FCM:RememberFishingHover(value)
     local name=safeName(value)
     if not name then return end
     local lower=name:lower()
-    if not lower:find("school",1,true) and not lower:find("pool",1,true) then return end
-    self._fishingHover={name=name,at=self:Now()}
+    local known={["oil spill"]=true,["floating wreckage"]=true,
+        ["oily blackmouth school"]=true,["firefin snapper school"]=true}
+    for _,row in ipairs(self.gatheringReference and self.gatheringReference.resources or {}) do
+        if row.category=="fishing" and (row.fishingSourceType=="pool" or row.fishingSourceType=="school" or
+           row.fishingSourceType=="wreckage" or row.fishingSourceType=="oil_spill") and lower==row.name:lower() then
+            known[lower]=true;break
+        end
+    end
+    if not known[lower] then return end
+    self._fishingHover={name=name,at=self:Now(),cast=self._fishingCast}
 end
 
 function FCM:FishingStatus()
@@ -866,9 +940,6 @@ function FCM:FishingStatus()
         lines[#lines+1]="Tooltip: "..self._fishingHover.name
     else
         lines[#lines+1]="Tooltip: no verified named school"
-    end
-    if self._fishingCast then
-        lines[#lines+1]="Cast: "..self._fishingCast.name
     end
     if self._fishingLastSpellID then
         lines[#lines+1]="Last spell ID: "..tostring(self._fishingLastSpellID)
@@ -903,25 +974,80 @@ end
 function FCM:RecordFishingSchoolLoot()
     local cast=self._fishingCast
     if not cast then return end
-    -- A single loot event can be raised twice: consume this cast immediately.
-    self._fishingCast=nil
     if self:Now()-(cast.at or 0)>120 then
+        self._fishingCast=nil
+        self._fishingLoot=nil
         self._fishingLastResult="Fishing cast expired; no school recorded"
         return
     end
-    -- Reject known NPC sources; accept unavailable GUID APIs only with both
-    -- a recent named tooltip and a real loot event.
-    if lootObjectEvidence and lootObjectEvidence()==false then
-        self._fishingLastResult="Creature loot; no fishing school recorded"
+    local fishingConfirmed=type(IsFishingLoot)=="function" and self:Try(IsFishingLoot)==true
+    if lootObjectEvidence()~=true or (type(IsFishingLoot)=="function" and not fishingConfirmed) then
+        self._fishingLastResult="Loot source could not be verified as fishing"
         return
     end
-    if not cast.mapID or not cast.x or not cast.y then
-        self._fishingLastResult="Fishing map position unavailable; no marker recorded"
+    local loot=self._fishingLoot
+    if not loot then
+        local hover=self._fishingHover
+        local age=hover and self:Now()-hover.at
+        local named=hover and hover.cast==cast and age>=0 and age<=8
+        if not named and not (cast.preCastPoolSeen and fishingConfirmed) then
+            self._fishingLastResult="No current pool evidence; no pool observation recorded"
+            return
+        end
+        local pool=named and cast.mapID and cast.x and cast.y and hover.name or nil
+        if not pool and not fishingConfirmed then
+            self._fishingLastResult="Pool position unavailable; no observation recorded"
+            return
+        end
+        loot={cast=cast,pool=pool,slots={},cleared={}}
+        self._fishingLoot=loot
+    end
+    if type(GetLootSlotLink)=="function" and type(GetLootSlotInfo)=="function" and type(GetNumLootItems)=="function" then
+        local slots=number(self:Try(GetNumLootItems),1,1000) or 0
+        for slot=1,slots do
+            local link=self:Try(GetLootSlotLink,slot)
+            local _,_,qty=self:Try(GetLootSlotInfo,slot)
+            local id=type(link)=="string" and number(link:match("|Hitem:(%d+)"),1,10000000)
+            qty=number(qty,1,1000000)
+            local source=self:Try(GetLootSourceInfo,slot)
+            if id and qty and type(source)=="string" and
+               (type(issecretvalue)~="function" or not issecretvalue(source)) and
+               source:find("GameObject-",1,true)==1 and not loot.cleared[slot] then
+                loot.slots[slot]={item=id,count=qty}
+            end
+        end
+    end
+end
+
+function FCM:ConfirmFishingLootSlot(slot)
+    local loot=self._fishingLoot
+    local catch=loot and loot.slots[slot]
+    if not catch then return end
+    if self:Now()-loot.cast.at>120 then self._fishingLoot=nil;return end
+    loot.slots[slot]=nil
+    loot.cleared[slot]=true
+    if not loot.pool then
+        local gathering=self:GatherDB()
+        if not gathering then return end
+        if type(gathering.unattributedFishing)~="table" then gathering.unattributedFishing={} end
+        local counts=gathering.unattributedFishing
+        counts[catch.item]=math.min(1000000000,(tonumber(counts[catch.item]) or 0)+catch.count)
+        self._fishingLastResult="Catch saved; pool attribution unavailable"
+        if self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
         return
     end
-    self:AddGatherNode("fishing",cast.mapID,cast.x,cast.y,cast.name,"personal")
-    self._fishingLastResult="Recorded "..cast.name..
-        " (standing location; pool/bobber intersection not independently confirmed)"
+    local cast=loot.cast
+    local catches={[catch.item]=catch.count}
+    if not loot.node then
+        local _,node=self:AddGatherNode("fishing",cast.mapID,cast.x,cast.y,loot.pool,"personal",nil,catches)
+        loot.node=node
+    else
+        local counts=loot.node.catches
+        counts[catch.item]=math.min(1000000000,(counts[catch.item] or 0)+catch.count)
+        self._gatherMinimapDirty=true
+        self._gatherWorldMapDirty=true
+    end
+    self._fishingLastResult="Recorded "..loot.pool.." at player standing location"
     if self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
 end
 
@@ -1077,15 +1203,14 @@ function FCM:GatherEvent(event,...)
         if isFishingSpell(spellID) then
             self._fishingLastSpellID=spellID
             self._fishingCast=nil
+            self._fishingLoot=nil
             local hover=self._fishingHover
-            if hover and self:Now()-(hover.at or 0)<=8 then
-                local mapID,x,y=playerGatherPosition()
-                self._fishingCast={name=hover.name,at=self:Now(),guid=castGUID,
-                    spellID=spellID,mapID=mapID,x=x,y=y}
-                self._fishingLastResult="Cast: "..hover.name.." (awaiting bobber loot)"
-            else
-                self._fishingLastResult="Fishing cast without a recent named school tooltip"
-            end
+            local age=hover and self:Now()-hover.at
+            local preCastPoolSeen=hover and not hover.cast and age>=0 and age<=8
+            self._fishingHover=nil
+            local mapID,x,y=playerGatherPosition()
+            self._fishingCast={at=self:Now(),guid=castGUID,spellID=spellID,mapID=mapID,x=x,y=y,preCastPoolSeen=preCastPoolSeen}
+            self._fishingLastResult="Fishing cast; awaiting named object and loot"
             return
         end
         if not kind then return end
@@ -1097,13 +1222,24 @@ function FCM:GatherEvent(event,...)
         if unit=="player" and event=="UNIT_SPELLCAST_FAILED" and
             self._fishingCast and self._fishingCast.guid==castGUID then
             self._fishingCast=nil
+            self._fishingLoot=nil
             self._fishingLastResult="Fishing cast failed; no school recorded"
         end
+    elseif event=="LOOT_SLOT_CLEARED" then
+        self:ConfirmFishingLootSlot(...)
+    elseif event=="LOOT_CLOSED" then
+        self._fishingLoot=nil
+        self._fishingCast=nil
+        self._fishingHover=nil
     elseif event=="LOOT_READY" or event=="LOOT_OPENED" then
         self:RecordTreasureLoot()
         self:RecordFishingSchoolLoot()
     elseif event=="UNIT_SPELLCAST_SUCCEEDED" then
         local unit,castGUID,spellID=...
+        if unit=="player" and self._fishingCast and self._fishingCast.guid==castGUID and isFishingSpell(spellID) then
+            self._fishingLastSpellID=spellID
+            return
+        end
         if unit~="player" or not pending or pending.spellID~=spellID or
            pending.guid~=castGUID then return end
         local found=pending

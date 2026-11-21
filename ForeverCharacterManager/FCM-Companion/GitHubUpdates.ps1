@@ -203,7 +203,7 @@ function Copy-FCMReleaseCode([string]$source,[string]$destination) {
     if (-not (Test-Path -LiteralPath $destination)) {New-Item -ItemType Directory -Path $destination -Force | Out-Null}
     foreach ($file in @(Get-ChildItem -LiteralPath $source -File)) {
         if ($file.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua')) {continue}
-        if ($file.Name -eq 'CommunityGathering.generated.lua' -and
+        if ($file.Name -in @('CommunityGathering.generated.lua','GatheringReferenceData.lua') -and
             (Test-Path -LiteralPath (Join-Path $destination $file.Name))) {continue}
         if ($file.Extension -notin @('.lua','.toc')) {continue}
         Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $destination $file.Name) -Force
@@ -217,7 +217,7 @@ function Copy-FCMReleaseCode([string]$source,[string]$destination) {
     }
     $fromComp=Join-Path $source 'FCM-Companion';$toComp=Join-Path $destination 'FCM-Companion'
     if (-not (Test-Path -LiteralPath $toComp)) {New-Item -ItemType Directory -Path $toComp -Force | Out-Null}
-    foreach ($name in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','GitHubUpdates.ps1','GatheringSync.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua')) {
+    foreach ($name in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','GitHubUpdates.ps1','GatheringSync.ps1','build_gather_reference.py','import_foreverdb_gathering.py','gathering-reference.json','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua')) {
         $file=Join-Path $fromComp $name
         if (Test-Path -LiteralPath $file) {Copy-Item -LiteralPath $file -Destination (Join-Path $toComp $name) -Force}
     }
