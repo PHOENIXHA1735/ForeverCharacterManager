@@ -766,6 +766,7 @@ function UI:RenderDungeonDetail(r,ch)
             line("Reference-linked boss: "..short(selectedBoss or "Unknown",39),22,"c7d6e9",8)
             line(provenance=="boss-direct" and "Link: boss loot payload (ForeverDB)" or
                 (provenance=="boss-explicit" and "Link: explicit boss field (ForeverDB)" or
+                provenance=="public-page" and "Link: boss loot on the credited ForeverDB page" or
                 "Link: legacy import; provenance not recorded"),32,"aeb9ca",8)
             line(FCM:DungeonDropEvidence(selectedDrop),32,"e4b27e",8)
         else
@@ -797,7 +798,6 @@ function UI:RenderDungeonDetail(r,ch)
         row:SetSize(width-15,49)
         row.bg:SetColorTexture(selected and 0.15 or 0.09,selected and 0.28 or 0.16,selected and 0.38 or 0.23,0.94)
         row.icon:SetTexture(meta.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-        row.name:SetText(color(short(meta.name,40),meta.color))
         row.name:SetWidth(width-70)
         local label=meta.slot or meta.typeName or "Item type unknown"
         local verdict="Stats unknown"
