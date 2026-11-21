@@ -647,6 +647,11 @@ SlashCmdList.FOREVERCHARACTERMANAGER = function(message)
         if FCM.Toggle then
             if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
         end
+    elseif cmd == "futuregear" or cmd == "future" then
+        if FCM.UI then FCM.UI.tab="Future Gear"; FCM.UI.selectedRow=nil end
+        if FCM.Toggle then
+            if not FCM.window or not FCM.window:IsShown() then FCM:Toggle() else FCM:Refresh() end
+        end
     elseif cmd == "upgrades" or cmd == "upgrade" then
         if FCM.UI then FCM.UI.tab="Upgrades" end
         if FCM.Toggle then

@@ -999,14 +999,14 @@ end
 
 local navigationSections={
     {"Character",{"Overview","Characters","Gear","Inventory"}},
-    {"Progression",{"Upgrade Plan","Upgrades","Talents","Legacy","Leveling","Reputation"}},
+    {"Progression",{"Upgrade Plan","Future Gear","Upgrades","Talents","Legacy","Leveling","Reputation"}},
     {"Craft & Gather",{"Crafting","Professions","Gathering","Planner","Requests","Shopping"}},
     {"Explore & Trade",{"Catalog","Item Explorer","Dungeons","Auction","Gold"}},
     {"Tools & Help",{"Settings","QA Tests","Diagnostics","Help"}},
 }
 local navigationIcons={
     Overview="INV_Misc_Book_09",Characters="INV_Misc_GroupLooking",Gear="INV_Chest_Plate01",
-    Inventory="INV_Misc_Bag_08",["Upgrade Plan"]="INV_Misc_Map_01",Upgrades="INV_Sword_04",
+    Inventory="INV_Misc_Bag_08",["Upgrade Plan"]="INV_Misc_Map_01",["Future Gear"]="INV_Sword_04",Upgrades="INV_Sword_04",
     Talents="Spell_Holy_MagicalSentry",Legacy="INV_Misc_Book_07",Leveling="INV_Misc_Map_01",
     Reputation="INV_Misc_Note_01",Crafting="INV_Hammer_20",Professions="Trade_Engineering",
     Gathering="INV_Misc_Herb_03",Planner="INV_Scroll_03",Requests="INV_Letter_15",
@@ -2472,7 +2472,50 @@ local function buildRows(ui)
         p[#p+1]="An old scan needs review; it does not mean the items were lost."
         return table.concat(p,"\n")
     end
-    if tab=="Upgrade Plan" then
+    if tab=="Future Gear" then
+        local p=FCM.FutureGearPlanner
+        local lookahead=ui.futureLookahead==10 and 10 or 5
+        local expanded=ui.futureExpanded==true
+        add("future-window","Look ahead: +"..tostring(lookahead).." levels",
+            "Click to switch to +"..tostring(lookahead==5 and 10 or 5).." levels",
+            "The range starts above the character's current level. A source match is not proof of an upgrade.")
+        rows[#rows].futureAction=function()
+            ui.futureLookahead=lookahead==5 and 10 or 5
+            ui.selectedRow=nil
+        end
+        add("future-limits",expanded and "Show fewer items per slot" or "Show more items per slot",
+            expanded and "Return to 5 equipment / 3 verified weapons per slot" or
+                "Expand to 10 equipment / 5 verified weapons per slot",
+            "Limits only affect this screen, not the candidate catalogue. Weapons without client-backed proficiency evidence are withheld.")
+        rows[#rows].futureAction=function()
+            ui.futureExpanded=not expanded
+            ui.selectedRow=nil
+        end
+        if p and type(p.ViewRows)=="function" then
+            local futureRows,errorOrMeta=p:ViewRows(ch,lookahead,expanded)
+            if futureRows then
+                ui.futureMeta=errorOrMeta
+                for _,entry in ipairs(futureRows) do
+                    add(entry.id,entry.title,entry.summary,entry.detail)
+                    if entry.futurePlan then
+                        rows[#rows].itemID=entry.itemID
+                        rows[#rows].compareSlot=entry.compareSlot
+                        rows[#rows].futurePlan=true
+                    end
+                end
+            else
+                ui.futureMeta=nil
+                add("future-error","Future Gear Planner unavailable",
+                    "Open this character in-game and check addon reference data",
+                    tostring(errorOrMeta or "Candidate view could not be built."))
+            end
+        else
+            ui.futureMeta=nil
+            add("future-module-missing","Future Gear modules not loaded",
+                "QA integration requires the complete planner module list.",
+                "No gear plans were computed; verify the addon TOC and reload.")
+        end
+    elseif tab=="Upgrade Plan" then
         local recommendations=FCM:AccountUpgradePlans(8)
         for i,entry in ipairs(recommendations) do
             local e=entry
@@ -3890,7 +3933,7 @@ function UI:Refresh()
             end
         end
     end
-    if (FCM.db.settings.advisorSort or "recommended")=="name" then
+    if tab~="Future Gear" and (FCM.db.settings.advisorSort or "recommended")=="name" then
         table.sort(entries,sortByName)
     end
     -- The box is also useful for looking up ordinary inventory items while on
@@ -3971,6 +4014,11 @@ function UI:Refresh()
                 tonumber(statusColor:sub(5,6),16)/255)
         end
         widget:SetScript("OnClick",function()
+            if self.tab=="Future Gear" and type(row.futureAction)=="function" then
+                row.futureAction()
+                self:Refresh()
+                return
+            end
             if self.tab=="Dungeons" and self.selectedRow~=row.id then self.dungeonItemSelection=nil end
             self.selectedRow=row.id
             if self.tab=="Global Search" then self.searchSelectedItem=(row.id~="search-summary") end
@@ -4008,6 +4056,11 @@ function UI:Refresh()
         self.status:SetText(tostring(self.itemExplorerTotal or 0).." matches; first "..tostring(math.max(0,matchedCount-1)).." listed (max 190) | Filter by name or ID")
     elseif tab=="Crafting" then
         self.status:SetText(tostring(self.craftRecipeCount or 0).." recipes | Qty updates the preview; Request saves it")
+    elseif tab=="Future Gear" then
+        local meta=self.futureMeta or {}
+        self.status:SetText(tostring(meta.totalShown or 0).." displayed | "..
+            tostring(meta.withheldWeapons or 0).." weapons need in-game verification | "..
+            tostring(meta.hiddenByLimit or 0).." hidden by limits")
     elseif tab=="Dungeons" then
         local dungeonMatches=0
         for _,row in ipairs(entries) do if row.id:sub(1,8)=="dungeon:" then dungeonMatches=dungeonMatches+1 end end
@@ -4219,7 +4272,7 @@ function UI:Refresh()
         -- The same quick red/green comparison appears wherever a real item is
         -- selected. Non-equipment rows simply retain their existing details.
         local itemID=previewItemID(selected)
-        if itemID and ch and FCM.Gear and FCM.Gear.CompareItem then
+        if tab~="Future Gear" and itemID and ch and FCM.Gear and FCM.Gear.CompareItem then
             local comparison=FCM.Gear:CompareItem(itemID,ch,selected.compareSlot)
             local comparisonLines=FCM.Gear:ComparisonLines(comparison)
             if #comparisonLines>0 then
