@@ -107,7 +107,7 @@ function Sync-FCMGatheringReference {
         $command=Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if($command){$command.Source}
     }
-    if(!$python -or ![IO.Path]::IsPathRooted($python) -or !(Test-Path -LiteralPath $python -PathType Leaf)){
+    if(!$python -or $python -match '[\x00-\x1f]' -or ![IO.Path]::IsPathRooted($python) -or !(Test-Path -LiteralPath $python -PathType Leaf)){
         throw 'Configure a working absolute Python path before refreshing Gathering.'
     }
     $lock=Enter-FCMCatalogLock

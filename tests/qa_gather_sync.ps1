@@ -6,7 +6,7 @@ $test=Join-Path ([IO.Path]::GetTempPath()) ('fcm-gather-sync-test-'+[guid]::NewG
 $script:Base=$test
 $script:addon=Join-Path $test 'addon'
 [void][IO.Directory]::CreateDirectory($script:addon)
-$python=if($env:FCM_TEST_PYTHON){$env:FCM_TEST_PYTHON}else{(Get-Command python.exe -CommandType Application).Source}
+$python=if($env:FCM_TEST_PYTHON){$env:FCM_TEST_PYTHON}else{(Get-Command python.exe -CommandType Application | Select-Object -First 1).Source}
 Set-Content -LiteralPath (Join-Path $test 'python-path.local.txt') -Value $python -Encoding ASCII
 foreach($name in 'build_gather_reference.py','import_foreverdb_gathering.py','gathering-reference.json'){
     Copy-Item -LiteralPath (Join-Path $source $name) -Destination $test
