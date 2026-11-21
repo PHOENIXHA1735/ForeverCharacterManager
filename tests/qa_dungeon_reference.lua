@@ -79,4 +79,14 @@ ui.dungeonItemSelection=nil
 FCM.db.settings.dungeonLootScope="all"
 ui.dungeonBossFocus=nil
 assert(#render(420)==3)
+assert(FCM:DungeonDropEvidence({evidence="forever-observed",observedCount=10,sampleKills=27})==
+    "Seen in Forever: 10 of 27 sampled kills")
+assert(FCM:DungeonDropEvidence({evidence="classic"})=="Classic reference")
+local texture={}
+function texture:SetTexture(value) self.value=value end
+UnitGUID=function(unit) if unit=="boss2" then return "Creature-0-12-36-1-644-000000001" end end
+SetPortraitTexture=function(target,unit) target.value=unit end
+assert(FCM:SetDungeonBossPortrait(texture,{npcId=644}) and texture.value=="boss2")
+assert(not FCM:SetDungeonBossPortrait(texture,{id=644}) and texture.value:find("QuestionMark",1,true))
+assert(not FCM:SetDungeonBossPortrait(texture,{npcId=645}))
 print("PASS: dungeon aliases, missing references, level-independent browse, boss order and separate loot")

@@ -585,7 +585,7 @@ function UI:RenderDungeonDetail(r,ch)
     line(kind.."  |  Guide levels "..tostring(r.levels or "unknown"),20,"c2cad7")
     if r.imported then
         line(("%d named bosses  |  %d boss-linked items  |  %d dungeon-associated items"):format(named,linked,associated),24,"c2cad7")
-        line((r.sourceProvider or "External reference").." reference; live drops unverified.",22,"aeb9ca")
+        line((r.sourceProvider or "External reference").." reference; check each item's evidence.",22,"aeb9ca")
     else
         line("Guide directory only. Boss and loot references are unavailable.",26,"aeb9ca")
     end
@@ -767,7 +767,7 @@ function UI:RenderDungeonDetail(r,ch)
             line(provenance=="boss-direct" and "Link: boss loot payload (ForeverDB)" or
                 (provenance=="boss-explicit" and "Link: explicit boss field (ForeverDB)" or
                 "Link: legacy import; provenance not recorded"),32,"aeb9ca",8)
-            line("Boss/drop not confirmed by live game observation.",32,"e4b27e",8)
+            line(FCM:DungeonDropEvidence(selectedDrop),32,"e4b27e",8)
         else
             line("Dungeon-associated; boss not verified.",32,"e4b27e",8)
         end
@@ -807,7 +807,10 @@ function UI:RenderDungeonDetail(r,ch)
         elseif upgrade and upgrade.state=="not-upgrade" then verdict="Not an upgrade"
         elseif eligibility=="candidate" then verdict="Potential class item" end
         local fitLabel=fit=="match" and "spec fit?" or (fit=="offspec" and "off-spec?" or "")
-        row.sub:SetText(short(label.."  |  "..verdict..(fitLabel~="" and (" | "..fitLabel) or ""),51))
+        local evidence=drop.evidence=="forever-observed" and "Forever observed" or
+            (drop.evidence=="classic" and "Classic reference" or "Evidence unknown")
+        row.sub:SetText(short(label.." | "..verdict..(fitLabel~="" and (" | "..fitLabel) or ""),51))
+        row.name:SetText(color(short(meta.name.." | "..evidence,60),meta.color))
         row.sub:SetWidth(width-70)
         -- Left click opens a readable in-panel detail area at the top.
         -- Only right click opens the game's large (and addon-extended) tooltip.
@@ -840,7 +843,7 @@ function UI:RenderDungeonDetail(r,ch)
             portrait:ClearAllPoints()
             portrait:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",8,-y)
             portrait:SetSize(26,26)
-            portrait:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+            FCM:SetDungeonBossPortrait(portrait,boss)
             portrait:Show()
             local bossName=tostring(boss.name or "Boss name unavailable")
             line(bossName,31,"c7d6e9",42)

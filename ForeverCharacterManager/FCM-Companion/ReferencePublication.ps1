@@ -107,6 +107,11 @@ function ConvertTo-FCMLuaLiteral($value) {
     $s = $s.Replace('\','\\').Replace('"','\"').Replace("`r",'').Replace("`n",'\n').Replace("`t",'\t')
     return '"' + $s + '"'
 }
+function Add-FCMDungeonDropLua($builder,$drop) {
+    [void]$builder.Append('{id=' + [int]$drop.id + ',name='+(ConvertTo-FCMLuaLiteral $drop.name)+
+        ',sourceType='+(ConvertTo-FCMLuaLiteral $drop.sourceType)+',evidence='+(ConvertTo-FCMLuaLiteral $drop.evidence)+
+        ',observedCount='+[int]$drop.observedCount+',sampleKills='+[int]$drop.sampleKills+'},')
+}
 function Add-FCMDungeonReferenceLua {
     param([Text.StringBuilder]$Builder, $DungeonCache)
     $sb=$Builder
@@ -117,17 +122,17 @@ function Add-FCMDungeonReferenceLua {
         [void]$sb.Append('},bosses={')
         foreach ($boss in @($d.bosses | Select-Object -First 90)) {
             if (-not $boss) {continue}
-            [void]$sb.Append('{id=' + [int]$boss.id + ',name='+(ConvertTo-FCMLuaLiteral $boss.name)+',loot={')
+            [void]$sb.Append('{id=' + [int]$boss.id + ',npcId=' + [int]$boss.npcId + ',name='+(ConvertTo-FCMLuaLiteral $boss.name)+',loot={')
             foreach ($drop in @($boss.loot | Select-Object -First 65)) {
                 if (-not $drop -or [int]$drop.id -le 0) {continue}
-                [void]$sb.Append('{id=' + [int]$drop.id + ',name='+(ConvertTo-FCMLuaLiteral $drop.name)+',sourceType='+(ConvertTo-FCMLuaLiteral $drop.sourceType)+'},')
+                Add-FCMDungeonDropLua $sb $drop
             }
             [void]$sb.Append('}},')
         }
         [void]$sb.Append('},dungeonLoot={')
         foreach ($drop in @($d.dungeonLoot | Select-Object -First 100)) {
             if (-not $drop -or [int]$drop.id -le 0) {continue}
-            [void]$sb.Append('{id=' + [int]$drop.id + ',name='+(ConvertTo-FCMLuaLiteral $drop.name)+',sourceType='+(ConvertTo-FCMLuaLiteral $drop.sourceType)+'},')
+            Add-FCMDungeonDropLua $sb $drop
         }
         [void]$sb.Append('},lines={')
         foreach ($line in @($d.lines | Select-Object -First 100)) { [void]$sb.Append((ConvertTo-FCMLuaLiteral $line) + ',') }

@@ -103,6 +103,9 @@ jobs:
       - name: Verify transactional reference publication (PowerShell 5.1)
         shell: powershell
         run: .\tests\qa_reference_publication.ps1
+      - name: Verify Dungeon source and loot mapping (PowerShell 5.1)
+        shell: powershell
+        run: .\ForeverCharacterManager\FCM-Companion\Test-FCMDungeonSourceMapping.ps1
       - name: Verify Public30 publication (PowerShell 5.1)
         shell: powershell
         run: |

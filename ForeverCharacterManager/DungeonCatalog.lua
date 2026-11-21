@@ -88,6 +88,32 @@ function FCM:DungeonReferenceCounts(row)
     end
     return named, linked, #self:DungeonAssociatedDrops(row)
 end
+
+function FCM:DungeonDropEvidence(drop)
+    if drop.evidence=="classic" then return "Classic reference" end
+    if drop.evidence~="forever-observed" then return "Source evidence unknown" end
+    local count,sample=tonumber(drop.observedCount),tonumber(drop.sampleKills)
+    if count and count>0 then
+        if sample and sample>=count then return "Seen in Forever: "..count.." of "..sample.." sampled kills" end
+        return "Seen in Forever: "..count.." observations"
+    end
+    return "Seen in Forever"
+end
+
+function FCM:SetDungeonBossPortrait(texture,boss)
+    texture:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+    local npc=tonumber(boss.npcId)
+    if not npc or npc<=0 or type(UnitGUID)~="function" or type(SetPortraitTexture)~="function" then return false end
+    for _,unit in ipairs({"boss1","boss2","boss3","boss4","boss5","target"}) do
+        local ok,guid=pcall(UnitGUID,unit)
+        local id=ok and type(guid)=="string" and guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+        if tonumber(id)==npc then
+            if pcall(SetPortraitTexture,texture,unit) then return true end
+            texture:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        end
+    end
+    return false
+end
 local function recordKind(rec, normalizedName)
     local declared=string.lower(tostring(rec.kind or rec.type or rec.instanceType or ""))
     if declared:find("raid",1,true) then return "raid" end
