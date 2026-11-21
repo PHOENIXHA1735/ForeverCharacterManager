@@ -747,7 +747,9 @@ for _,entry in ipairs(fishOnly) do
     fishNames[entry.name]=true
 end
 for _,name in ipairs({'Raw Brilliant Smallfish','Oily Blackmouth','Firefin Snapper',
-                      'Bloated Mud Snapper','Bloated Whitescale Salmon'}) do
+                      'Bloated Mud Snapper','Bloated Whitescale Salmon',
+                      'Lightning Eel','Darkshore Grouper','19 Pound Catfish',
+                      '15 Pound Mud Snapper'}) do
     assert(fishNames[name], 'Fish-only includes '..name)
 end
 for _,name in ipairs({'Oily Blackmouth School','Firefin Snapper School',
@@ -758,6 +760,54 @@ end
 local fishSearch=catalog:GatherResourceRows('Firefin','fishing',nil,'fish')
 eq(#fishSearch,1,'Fish-only search finds species without matching school')
 eq(fishSearch[1].name,'Firefin Snapper','Fish-only search resolves item')
+-- Fish detail panel uses documented methods, habitat and Classic seasonality
+-- without creating an invented WoW Forever catch or location.
+local function detailsSection(model,title)
+    for _,section in ipairs(model and model.sections or {}) do
+        if section.title==title then return table.concat(section.lines,"\n") end
+    end
+end
+local winter
+for _,entry in ipairs(catalog:GatherResourceRows('Winter Squid','fishing',nil,'fish')) do
+    if entry.name=='Raw Winter Squid' then winter=entry;break end
+end
+assert(winter and winter.itemID==13755,'Winter Squid is a fish-only item')
+local winterDetail=catalog:GatherDetailModel(winter,nil,false)
+assert(winterDetail and winterDetail.itemType=='Fish','fish item receives dedicated panel')
+local winterSeason=detailsSection(winterDetail,'WATER TYPE & SEASON')
+assert(winterSeason and winterSeason:find('Ocean / coastal',1,true) and
+       winterSeason:find('September 23 - March 19',1,true) and
+       winterSeason:find('unverified',1,true),'Classic winter squid seasonal/coastal guidance is qualified')
+assert(detailsSection(winterDetail,'CATCH METHODS'):find('Open water',1,true),
+       'Classic open-water catch method visible even when zone-level reference does not specify method')
+assert(detailsSection(winterDetail,'REFERENCE FISHING ZONES')~=nil,
+       'source-specific zone references remain accessible')
+assert(not detailsSection(winterDetail,'FISHING SOURCES'),
+       'compact fish panel no longer repeats dense fishing thresholds')
+local winterExpanded=catalog:GatherDetailModel(winter,nil,true)
+assert(detailsSection(winterExpanded,'CLASSIC REFERENCE'):find('WoW Forever',1,true),
+       'expanded view retains Classic attribution and Forever uncertainty')
+assert(detailsSection(winterExpanded,'YOUR GATHERING HISTORY'),
+       'personal catch history remains visible in expanded fish details')
+
+local firefinDetail=catalog:GatherDetailModel(fishSearch[1],nil,false)
+local firefinSources=detailsSection(firefinDetail,'CATCH METHODS')
+assert(firefinSources and firefinSources:find('Firefin Snapper School',1,true) and
+       firefinSources:find('Oil Spill',1,true) and
+       firefinSources:find('Open water',1,true),
+       'Classic fish school, spill and open-water candidates are all labeled')
+assert(detailsSection(firefinDetail,'WATER TYPE & SEASON'):find('Coastal and some inland',1,true),
+       'habitat distinguishes ocean/coastal from known inland opportunities')
+local blackmouth=catalog:GatherResourceRows('Oily Blackmouth','fishing',nil,'fish')[1]
+assert(blackmouth and blackmouth.name=='Oily Blackmouth')
+assert(detailsSection(catalog:GatherDetailModel(blackmouth,nil,false),'CATCH METHODS'):
+    find('Oily Blackmouth School',1,true),'Blackmouth school listed on fish detail')
+local bloated=catalog:GatherResourceRows('Bloated Whitescale Salmon','fishing',nil,'fish')[1]
+assert(bloated and bloated.itemID==13891 and
+       detailsSection(catalog:GatherDetailModel(bloated,nil,false),'WATER TYPE & SEASON'):
+           find('not established',1,true),
+       'unknown water type is not guessed for bloated fish')
+
 assert(#catalog:GatherResourceRows('','fishing',nil,'school_pool')>0,
     'existing Schools & Pools filter still works')
 assert(#catalog:GatherResourceRows('','fishing',nil,'open_water')>0,

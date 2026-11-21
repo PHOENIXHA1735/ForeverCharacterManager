@@ -75,7 +75,10 @@ local function fishingLabel(name,itemID)
     if n:match("^raw ") or n:match("^bloated ") or n:match("^oily blackmouth") or
        n:match("^firefin snapper") or n:match("^stonescale eel") or
        n:match("^deviate fish") or n:match("^whimsyfin") or
-       n:match("^sagefish") or n:match("catfish$") then return "Fish" end
+       n:match("^sagefish") or n:match("catfish$") or
+       n:match("^%d+ pound mud snapper$") or
+       n=="lightning eel" or n=="darkshore grouper" or
+       n=="spotted sunfish" or n=="sickly looking fish" then return "Fish" end
     return "Fishing item"
 end
 

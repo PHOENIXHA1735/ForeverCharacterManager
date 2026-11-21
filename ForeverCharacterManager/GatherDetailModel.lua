@@ -106,6 +106,137 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
     return model
 end
 
+
+-- Curated *Classic* fishing guidance, separate from the ForeverDB snapshot.
+-- Item IDs identify the fish, never the source node. No gameplay observation
+-- or WoW Forever seasonal/drop verification is implied by these notes.
+local classicFishNotes={
+    [13755]={water="Ocean / coastal open water",season="September 23 - March 19",
+        methods={"Open water (coastal / ocean; Classic reference)"},
+        reference="Warcraft Wiki: Winter Squid; Icy Veins Classic fishing guide"},
+    [13756]={water="Ocean / coastal open water",season="March 20 - September 22",
+        methods={"Open water (coastal / ocean; Classic reference)"},
+        reference="Warcraft Tavern: Classic Fishing Fish List"},
+    [6358]={water="Coastal water; other recorded waters require verification",
+        methods={"Oily Blackmouth School (Classic candidate)","Open water (Classic reference)"},
+        reference="Warcraft Wiki: Oily Blackmouth"},
+    [6359]={water="Coastal and some inland waters (Classic reference)",
+        methods={"Firefin Snapper School (Classic candidate)",
+            "Oil Spill (Classic candidate)","Open water (Classic reference)"},
+        reference="Warcraft Wiki: Firefin Snapper"}
+}
+local fishingMethodLabels={
+    open_water="Open water",school="Fish schools",pool="Fishing pools",
+    oil_spill="Oil spills",wreckage="Floating wreckage",unknown="Zone references (method unknown)"
+}
+local fishingMethodOrder={"open_water","school","pool","oil_spill","wreckage","unknown"}
+
+function FCM:GatherFishCatchSections(row,expanded)
+    if not row or row.kind~="fishing" or not row.itemID or
+        not tostring(row.summary or ""):find("^Fish |",1) then return nil end
+    local notes=classicFishNotes[tonumber(row.itemID)]
+    local details={}
+    local waterAndSeason={}
+    if notes then
+        waterAndSeason[#waterAndSeason+1]="Water (Classic): "..notes.water
+        if notes.season then
+            waterAndSeason[#waterAndSeason+1]="Season (Classic): "..notes.season
+        end
+        waterAndSeason[#waterAndSeason+1]="WoW Forever water/season rules: unverified."
+    else
+        waterAndSeason[#waterAndSeason+1]="Ocean / freshwater: not established by current references."
+        waterAndSeason[#waterAndSeason+1]="No verified seasonal restriction documented."
+    end
+    details[#details+1]={title="WATER TYPE & SEASON",lines=waterAndSeason}
+    local groups={}
+    local function addGroup(method)
+        method=fishingMethodLabels[method] and method or "unknown"
+        local group=groups[method]
+        if not group then
+            group={count=0,names={},zones={},seenName={},seenZone={}}
+            groups[method]=group
+        end
+        return group
+    end
+    for _,entry in ipairs(row.referenceWaters or {}) do
+        local group=addGroup(entry.type)
+        group.count=group.count+1
+        local name=type(entry.water.name)=="string" and entry.water.name or ""
+        if name~="" and not name:match("^Zone fishing reference:") and
+            not name:match("^Open water:") and not group.seenName[name] then
+            group.seenName[name]=true
+            group.names[#group.names+1]=name
+        end
+        for _,place in ipairs(entry.water.locations or {}) do
+            local zone=place.zone
+            if type(zone)=="string" and zone~="" and not group.seenZone[zone:lower()] then
+                group.seenZone[zone:lower()]=true
+                group.zones[#group.zones+1]=zone
+            end
+        end
+    end
+    for _,point in ipairs(row.locations or {}) do
+        local method=point.sourceType
+        if method and fishingMethodLabels[method] and method~="unknown" then
+            -- These are the user's real observations, independent of catalog sources.
+            local group=addGroup(method)
+            local observed="Personal catch source: "..tostring(point.name or method)
+            if not group.seenName[observed] then
+                group.seenName[observed]=true
+                group.names[#group.names+1]=observed
+            end
+        end
+    end
+    local methods={}
+    for _,method in ipairs(fishingMethodOrder) do
+        local group=groups[method]
+        if group then
+            table.sort(group.names)
+            table.sort(group.zones)
+            methods[#methods+1]=fishingMethodLabels[method].." — "..group.count..
+                " reference association"..(group.count==1 and "" or "s")
+            local nameCount=expanded and #group.names or math.min(2,#group.names)
+            for i=1,nameCount do methods[#methods+1]="  "..group.names[i] end
+            if #group.names>nameCount then
+                methods[#methods+1]="  +"..(#group.names-nameCount).." more named sources"
+            end
+        end
+    end
+    if notes then
+        for _,name in ipairs(notes.methods or {}) do methods[#methods+1]="Classic: "..name end
+    end
+    if #methods==0 then methods[1]="No source method documented for this fish." end
+    methods[#methods+1]="Catalog and Classic associations are not confirmed Forever drops."
+    details[#details+1]={title="CATCH METHODS",lines=methods}
+
+    local zones,seen={},{}
+    for _,method in ipairs(fishingMethodOrder) do
+        local group=groups[method]
+        if group then
+            for _,zone in ipairs(group.zones) do
+                local key=zone:lower()
+                if not seen[key] then seen[key]=true;zones[#zones+1]=zone end
+            end
+        end
+    end
+    table.sort(zones)
+    local limit=expanded and #zones or math.min(#zones,5)
+    local zoneLines={}
+    for i=1,limit do zoneLines[#zoneLines+1]=zones[i].." (reference)" end
+    if #zones>limit then
+        zoneLines[#zoneLines+1]="+"..(#zones-limit).." more zones — Show All Details below"
+    end
+    if #zoneLines==0 then zoneLines[1]="No source-specific zone references documented." end
+    details[#details+1]={title="REFERENCE FISHING ZONES",lines=zoneLines}
+    if notes and expanded then
+        details[#details+1]={title="CLASSIC REFERENCE",lines={
+            notes.reference,
+            "WoW Forever availability, locations and seasonality require in-game confirmation."
+        }}
+    end
+    return details
+end
+
 function FCM:GatherDetailModel(row,ch,expanded)
     if not row or not sourceHeadings[row.kind] or type(row.detail)~="function" then return end
     local material=self:GatherMaterialDetailModel(row,ch,expanded)
@@ -134,6 +265,21 @@ function FCM:GatherDetailModel(row,ch,expanded)
         model.metrics={{"Effective Fishing",self:GatherEffectiveFishingSkill(ch) or "Unknown"}}
     end
     if not material then
+        local fishSections=self:GatherFishCatchSections(row,expanded)
+        if fishSections then
+            model.itemType="Fish"
+            for _,section in ipairs(fishSections) do
+                model.sections[#model.sections+1]=section
+            end
+            for _,section in ipairs(sections) do
+                if section.title=="YOUR GATHERING HISTORY" or section.title=="LOCATION NOTES" or
+                    (expanded and (section.title=="PROFESSION SKILL" or
+                    section.title=="FISHING SOURCES" or section.title=="REFERENCE SOURCES")) then
+                    model.sections[#model.sections+1]=section
+                end
+            end
+            return model
+        end
         local hasFishingSources=false
         for _,section in ipairs(sections) do
             if section.title=="FISHING SOURCES" then hasFishingSources=true end
