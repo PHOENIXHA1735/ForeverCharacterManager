@@ -67,3 +67,36 @@ assert(ui.tab=='Profession:mining')
 ui:RefreshProfessionTabs({})
 assert(ui.tab=='Professions' and ui.professionButtons[2].shown==false and ui.tabButtons.Professions.accent.shown)
 print('PASS: grouped navigation retained all 25 tabs, dynamic professions, selection, scroll and bounds')
+
+-- The Planner footer shares a detail pane with Gathering. Exercise both
+-- detail states at narrow, default and wide pane widths.
+ui.detailPanel=frame()
+ui.detailPanel.GetWidth=function(self) return self.width end
+ui.action=frame()
+ui.gatherMoreButton=frame()
+ui.action:SetPoint("TOPLEFT",ui.detailPanel,"BOTTOMLEFT",9,-8)
+ui.gatherMoreButton:SetPoint("TOPRIGHT",ui.detailPanel,"BOTTOMRIGHT",-8,-8)
+ui.tab="Planner"
+local refreshes=0
+ui.Refresh=function(self)
+    refreshes=refreshes+1
+    self:LayoutFooterButtons()
+end
+for _,width in ipairs({260,340,440}) do
+    ui.detailPanel:SetWidth(width)
+    ui:LayoutFooterButtons()
+    for step,expanded in ipairs({false,true,false}) do
+        assert(not not ui.plannerExpanded==expanded)
+        local actionRight=ui.action.points[1][4]+ui.action.width
+        local detailsLeft=width+ui.gatherMoreButton.points[1][4]-ui.gatherMoreButton.width
+        assert(detailsLeft-actionRight>=9)
+        assert(ui.action.width>=110 and ui.gatherMoreButton.width>=110)
+        if step<3 then ui:TogglePlannerDetails() end
+    end
+    assert(not ui.plannerExpanded)
+end
+assert(refreshes==6)
+ui.tab="Gathering"
+ui:LayoutFooterButtons()
+assert(ui.gatherMoreButton.width==155)
+print('PASS: Planner footer separates action and details controls across widths')

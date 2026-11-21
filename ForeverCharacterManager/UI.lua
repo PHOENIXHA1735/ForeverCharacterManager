@@ -1136,6 +1136,23 @@ function UI:ReloadPublishedData()
     if type(ReloadUI)=="function" then ReloadUI() end
 end
 
+function UI:LayoutFooterButtons()
+    if not self.detailPanel or not self.action or not self.gatherMoreButton then return end
+    if self.tab=="Planner" then
+        -- Opposite anchors leave 9 px between controls after their outer insets.
+        local width=math.floor((self.detailPanel:GetWidth()-26)/2)
+        self.action:SetWidth(width)
+        self.gatherMoreButton:SetWidth(width)
+    else
+        self.gatherMoreButton:SetWidth(155)
+    end
+end
+
+function UI:TogglePlannerDetails()
+    self.plannerExpanded=not self.plannerExpanded
+    self:Refresh()
+end
+
 local function updateLabel(label,stamp)
     stamp=tonumber(stamp)
     if not stamp or stamp<=0 then return label..": update time unavailable" end
@@ -1616,8 +1633,7 @@ function UI:Create()
     self.cancelRequestButton:Hide()
     self.gatherMoreButton=button(panel,"Show All Details",155,29,function()
         if self.tab=="Planner" then
-            self.plannerExpanded=not self.plannerExpanded
-            self:Refresh()
+            self:TogglePlannerDetails()
             return
         end
         self.gatherShowAllDetails=not self.gatherShowAllDetails
@@ -1782,6 +1798,7 @@ function UI:Reflow()
     local oldDetailWidth=self.detailChild:GetWidth()
     self.detailChild:SetWidth(math.max(190,self.detailPanel:GetWidth()-42))
     self.detailText:SetWidth(math.max(180,self.detailChild:GetWidth()-8))
+    self:LayoutFooterButtons()
     if self.dungeonDetailRecord then
         if oldDetailWidth~=self.detailChild:GetWidth() then
             self:RenderDungeonDetail(self.dungeonDetailRecord,self.dungeonDetailCharacter)
@@ -4398,7 +4415,7 @@ function UI:Refresh()
             local planner=tab=="Planner"
             self.gatherMoreButton:SetShown((planner and selected.plannerDetail==true) or
                 (tab=="Gathering" and selected.gatherHasExtraDetails==true))
-            self.gatherMoreButton:SetText(planner and (self.plannerExpanded and "Hide Technical Details" or "Technical Details") or
+            self.gatherMoreButton:SetText(planner and (self.plannerExpanded and "Hide Details" or "Technical Details") or
                 (self.gatherShowAllDetails and "Show Less Details" or "Show All Details"))
         end
         if selected.request then
@@ -4415,12 +4432,14 @@ function UI:Refresh()
             self.activeRecipe=selected.recipe
             self.activeCrafters=selected.crafters
             self.activeRecipientKey=selected.recipientKey
-            self.action:SetWidth(260)
+            if tab~="Planner" then self.action:SetWidth(260) end
             local rch=(self.activeRecipientKey and FCM.db.characters[self.activeRecipientKey]) or ch
             local queued=FCM:FindQueuedCraft(selected.recipe.id,rch.key)
             if tab=="Crafting" then
                 self.action:SetText(queued and "Update Craft Request" or "Request Craft for "..short(rch.name,15))
                 self.action:SetEnabled(FCM:ValidCraftQuantity(self:CraftDraftText(selected.recipe,rch))~=nil)
+            elseif tab=="Planner" then
+                self.action:SetText(queued and "Cancel Request" or "Request Craft")
             else
                 self.action:SetText(queued and
                     ("Cancel request: "..tostring(FCM:CraftRequestQuantity(queued)).."x "..short(rch.name,11)) or
