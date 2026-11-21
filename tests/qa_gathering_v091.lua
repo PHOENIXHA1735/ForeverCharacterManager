@@ -778,7 +778,7 @@ local winterSeason=detailsSection(winterDetail,'WATER TYPE & SEASON')
 assert(winterSeason and winterSeason:find('Ocean / coastal',1,true) and
        winterSeason:find('September 23 - March 19',1,true) and
        winterSeason:find('unverified',1,true),'Classic winter squid seasonal/coastal guidance is qualified')
-assert(detailsSection(winterDetail,'CATCH METHODS'):find('Open water',1,true),
+assert(detailsSection(winterDetail,'Fishing Sources'):find('Open water',1,true),
        'Classic open-water catch method visible even when zone-level reference does not specify method')
 assert(detailsSection(winterDetail,'REFERENCE FISHING ZONES')~=nil,
        'source-specific zone references remain accessible')
@@ -791,7 +791,7 @@ assert(detailsSection(winterExpanded,'YOUR GATHERING HISTORY'),
        'personal catch history remains visible in expanded fish details')
 
 local firefinDetail=catalog:GatherDetailModel(fishSearch[1],nil,false)
-local firefinSources=detailsSection(firefinDetail,'CATCH METHODS')
+local firefinSources=detailsSection(firefinDetail,'Fishing Sources')
 assert(firefinSources and firefinSources:find('Firefin Snapper School',1,true) and
        firefinSources:find('Oil Spill',1,true) and
        firefinSources:find('Open water',1,true),
@@ -800,7 +800,7 @@ assert(detailsSection(firefinDetail,'WATER TYPE & SEASON'):find('Coastal and som
        'habitat distinguishes ocean/coastal from known inland opportunities')
 local blackmouth=catalog:GatherResourceRows('Oily Blackmouth','fishing',nil,'fish')[1]
 assert(blackmouth and blackmouth.name=='Oily Blackmouth')
-assert(detailsSection(catalog:GatherDetailModel(blackmouth,nil,false),'CATCH METHODS'):
+assert(detailsSection(catalog:GatherDetailModel(blackmouth,nil,false),'Fishing Sources'):
     find('Oily Blackmouth School',1,true),'Blackmouth school listed on fish detail')
 local bloated=catalog:GatherResourceRows('Bloated Whitescale Salmon','fishing',nil,'fish')[1]
 assert(bloated and bloated.itemID==13891 and

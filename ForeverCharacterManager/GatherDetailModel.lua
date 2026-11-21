@@ -207,7 +207,7 @@ function FCM:GatherFishCatchSections(row,expanded)
     end
     if #methods==0 then methods[1]="No source method documented for this fish." end
     methods[#methods+1]="Catalog and Classic associations are not confirmed Forever drops."
-    details[#details+1]={title="CATCH METHODS",lines=methods}
+    details[#details+1]={title="Fishing Sources",lines=methods}
 
     local zones,seen={},{}
     for _,method in ipairs(fishingMethodOrder) do
