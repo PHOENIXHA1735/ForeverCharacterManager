@@ -34,6 +34,54 @@
       "permission": "Reviewed skill thresholds only",
       "version": "Reviewed 2026-11-20",
       "status": "reference_reviewed"
+    },
+    {
+      "id": "icy-herbalism",
+      "name": "Icy Veins Forever Herbalism",
+      "url": "https://www.icy-veins.com/wow-forever/herbalism/",
+      "permission": "Limited factual source review",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "icy-mining",
+      "name": "Icy Veins Forever Mining",
+      "url": "https://www.icy-veins.com/wow-forever/mining/",
+      "permission": "Limited factual source review",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "icy-fishing",
+      "name": "Icy Veins Forever Fishing",
+      "url": "https://www.icy-veins.com/wow-forever/fishing",
+      "permission": "Limited factual source review",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "icy-fishing-leveling",
+      "name": "Icy Veins Forever Fishing leveling",
+      "url": "https://www.icy-veins.com/wow-forever/fishing-leveling-guide",
+      "permission": "Limited factual source review",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "wowhead-whimsyfin",
+      "name": "Wowhead Forever Whimsyfin item ID",
+      "url": "https://www.wowhead.com/forever/item=251524/whimsyfin",
+      "permission": "Limited factual source review",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
+    },
+    {
+      "id": "azeroth-wreckage",
+      "name": "Azeroth Wiki Forever Floating Wreckage",
+      "url": "https://azeroth.wiki/forever/map/the-barrens/floating-wreckage",
+      "permission": "Limited factual source review",
+      "version": "Reviewed 2026-11-20",
+      "status": "reference_reviewed"
     }
   ],
   "resources": [
@@ -48,7 +96,6 @@
       "minimumSkill": 1,
       "orange": 1,
       "yellow": 25,
-      "green": 65,
       "gray": 100,
       "locations": [
         {
@@ -302,7 +349,8 @@
       "fishingNoGetAways": null,
       "sourceIDs": [
         "wowhead-silverleaf",
-        "wowhead-herbalism-guide"
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
       ],
       "verificationStatus": "reference_reviewed",
       "lastReferenceUpdate": "2026-11-20",
@@ -442,13 +490,13 @@
       "minimumSkill": 1,
       "orange": 1,
       "yellow": 25,
-      "green": 65,
       "gray": 100,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-herbalism-guide"
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
       ]
     },
     {
@@ -459,13 +507,13 @@
       "minimumSkill": 15,
       "orange": 15,
       "yellow": 40,
-      "green": 80,
       "gray": 115,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-herbalism-guide"
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
       ]
     },
     {
@@ -476,13 +524,13 @@
       "minimumSkill": 50,
       "orange": 50,
       "yellow": 75,
-      "green": 115,
       "gray": 150,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-herbalism-guide"
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
       ]
     },
     {
@@ -493,13 +541,13 @@
       "minimumSkill": 70,
       "orange": 70,
       "yellow": 95,
-      "green": 135,
       "gray": 170,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-herbalism-guide"
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
       ]
     },
     {
@@ -510,13 +558,13 @@
       "minimumSkill": 1,
       "orange": 1,
       "yellow": 25,
-      "green": 65,
       "gray": 100,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-mining-guide"
+        "wowhead-mining-guide",
+        "icy-mining"
       ]
     },
     {
@@ -527,13 +575,13 @@
       "minimumSkill": 65,
       "orange": 65,
       "yellow": 90,
-      "green": 130,
       "gray": 165,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-mining-guide"
+        "wowhead-mining-guide",
+        "icy-mining"
       ]
     },
     {
@@ -544,13 +592,13 @@
       "minimumSkill": 75,
       "orange": 75,
       "yellow": 100,
-      "green": 140,
       "gray": 175,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-mining-guide"
+        "wowhead-mining-guide",
+        "icy-mining"
       ]
     },
     {
@@ -561,21 +609,875 @@
       "minimumSkill": 125,
       "orange": 125,
       "yellow": 150,
-      "green": 190,
       "gray": 225,
       "verificationStatus": "reference_reviewed",
       "locations": [],
       "loot": [],
       "sourceIDs": [
-        "wowhead-mining-guide"
+        "wowhead-mining-guide",
+        "icy-mining"
       ]
+    },
+    {
+      "id": "herbalism:stranglekelp",
+      "name": "Stranglekelp",
+      "category": "herbalism",
+      "minimumSkill": 85,
+      "orange": 85,
+      "yellow": 110,
+      "gray": 185,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:bruiseweed",
+      "name": "Bruiseweed",
+      "category": "herbalism",
+      "minimumSkill": 100,
+      "orange": 100,
+      "yellow": 125,
+      "gray": 200,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:wild-steelbloom",
+      "name": "Wild Steelbloom",
+      "category": "herbalism",
+      "minimumSkill": 115,
+      "orange": 115,
+      "yellow": 140,
+      "gray": 215,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:grave-moss",
+      "name": "Grave Moss",
+      "category": "herbalism",
+      "minimumSkill": 120,
+      "orange": 120,
+      "yellow": 145,
+      "gray": 220,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:kingsblood",
+      "name": "Kingsblood",
+      "category": "herbalism",
+      "minimumSkill": 125,
+      "orange": 125,
+      "yellow": 150,
+      "gray": 225,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:liferoot",
+      "name": "Liferoot",
+      "category": "herbalism",
+      "minimumSkill": 150,
+      "orange": 150,
+      "yellow": 175,
+      "gray": 250,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:fadeleaf",
+      "name": "Fadeleaf",
+      "category": "herbalism",
+      "minimumSkill": 160,
+      "orange": 160,
+      "yellow": 185,
+      "gray": 260,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:goldthorn",
+      "name": "Goldthorn",
+      "category": "herbalism",
+      "minimumSkill": 170,
+      "orange": 170,
+      "yellow": 195,
+      "gray": 270,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:khadgar's-whisker",
+      "name": "Khadgar's Whisker",
+      "category": "herbalism",
+      "minimumSkill": 185,
+      "orange": 185,
+      "yellow": 210,
+      "gray": 285,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:wintersbite",
+      "name": "Wintersbite",
+      "category": "herbalism",
+      "minimumSkill": 195,
+      "orange": 195,
+      "yellow": 220,
+      "gray": 295,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:firebloom",
+      "name": "Firebloom",
+      "category": "herbalism",
+      "minimumSkill": 205,
+      "orange": 205,
+      "yellow": 230,
+      "gray": 305,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:purple-lotus",
+      "name": "Purple Lotus",
+      "category": "herbalism",
+      "minimumSkill": 210,
+      "orange": 210,
+      "yellow": 235,
+      "gray": 310,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:arthas'-tears",
+      "name": "Arthas' Tears",
+      "category": "herbalism",
+      "minimumSkill": 220,
+      "orange": 220,
+      "yellow": 245,
+      "gray": 320,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:sungrass",
+      "name": "Sungrass",
+      "category": "herbalism",
+      "minimumSkill": 230,
+      "orange": 230,
+      "yellow": 255,
+      "gray": 330,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:blindweed",
+      "name": "Blindweed",
+      "category": "herbalism",
+      "minimumSkill": 235,
+      "orange": 235,
+      "yellow": 260,
+      "gray": 335,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:ghost-mushroom",
+      "name": "Ghost Mushroom",
+      "category": "herbalism",
+      "minimumSkill": 245,
+      "orange": 245,
+      "yellow": 270,
+      "gray": 345,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:gromsblood",
+      "name": "Gromsblood",
+      "category": "herbalism",
+      "minimumSkill": 250,
+      "orange": 250,
+      "yellow": 275,
+      "gray": 350,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:golden-sansam",
+      "name": "Golden Sansam",
+      "category": "herbalism",
+      "minimumSkill": 260,
+      "orange": 260,
+      "yellow": 285,
+      "gray": 360,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:dreamfoil",
+      "name": "Dreamfoil",
+      "category": "herbalism",
+      "minimumSkill": 270,
+      "orange": 270,
+      "yellow": 295,
+      "gray": 370,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:mountain-silversage",
+      "name": "Mountain Silversage",
+      "category": "herbalism",
+      "minimumSkill": 280,
+      "orange": 280,
+      "yellow": 305,
+      "gray": 380,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:plaguebloom",
+      "name": "Plaguebloom",
+      "category": "herbalism",
+      "minimumSkill": 285,
+      "orange": 285,
+      "yellow": 310,
+      "gray": 385,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:icecap",
+      "name": "Icecap",
+      "category": "herbalism",
+      "minimumSkill": 290,
+      "orange": 290,
+      "yellow": 315,
+      "gray": 390,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "herbalism:black-lotus",
+      "name": "Black Lotus",
+      "category": "herbalism",
+      "minimumSkill": 300,
+      "orange": 300,
+      "yellow": 325,
+      "gray": 400,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-herbalism-guide",
+        "icy-herbalism"
+      ]
+    },
+    {
+      "id": "mining:gold-vein",
+      "name": "Gold Vein",
+      "category": "mining",
+      "minimumSkill": 155,
+      "orange": 155,
+      "yellow": 180,
+      "gray": 255,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide",
+        "icy-mining"
+      ]
+    },
+    {
+      "id": "mining:mithril-deposit",
+      "name": "Mithril Deposit",
+      "category": "mining",
+      "minimumSkill": 175,
+      "orange": 175,
+      "yellow": 200,
+      "gray": 275,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide",
+        "icy-mining"
+      ]
+    },
+    {
+      "id": "mining:dark-iron-deposit",
+      "name": "Dark Iron Deposit",
+      "category": "mining",
+      "minimumSkill": 230,
+      "orange": 230,
+      "yellow": 255,
+      "gray": 330,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide",
+        "icy-mining"
+      ]
+    },
+    {
+      "id": "mining:truesilver-deposit",
+      "name": "Truesilver Deposit",
+      "category": "mining",
+      "minimumSkill": 230,
+      "orange": 230,
+      "yellow": 255,
+      "gray": 330,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide",
+        "icy-mining"
+      ]
+    },
+    {
+      "id": "mining:small-thorium-vein",
+      "name": "Small Thorium Vein",
+      "category": "mining",
+      "minimumSkill": 245,
+      "orange": 245,
+      "yellow": 270,
+      "gray": 345,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide",
+        "icy-mining"
+      ]
+    },
+    {
+      "id": "mining:rich-thorium-vein",
+      "name": "Rich Thorium Vein",
+      "category": "mining",
+      "minimumSkill": 275,
+      "orange": 275,
+      "yellow": 300,
+      "gray": 375,
+      "verificationStatus": "reference_reviewed",
+      "locations": [],
+      "loot": [],
+      "sourceIDs": [
+        "wowhead-mining-guide",
+        "icy-mining"
+      ]
+    },
+    {
+      "id": "mining:poor-copper-vein",
+      "name": "Poor Copper Vein",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Starting zones",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 1,
+      "orange": 1,
+      "itemID": 2770
+    },
+    {
+      "id": "mining:ooze-covered-silver-vein",
+      "name": "Ooze Covered Silver Vein",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Thousand Needles",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 75,
+      "orange": 75,
+      "itemID": 2775
+    },
+    {
+      "id": "mining:ooze-covered-gold-vein",
+      "name": "Ooze Covered Gold Vein",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Feralas",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        },
+        {
+          "zone": "Thousand Needles",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 155,
+      "orange": 155,
+      "itemID": 2776
+    },
+    {
+      "id": "mining:ooze-covered-mithril-deposit",
+      "name": "Ooze Covered Mithril Deposit",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Feralas",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        },
+        {
+          "zone": "Thousand Needles",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 175,
+      "orange": 175,
+      "itemID": 3858
+    },
+    {
+      "id": "mining:ooze-covered-truesilver-deposit",
+      "name": "Ooze Covered Truesilver Deposit",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Silithus",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        },
+        {
+          "zone": "Un'Goro Crater",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        },
+        {
+          "zone": "Feralas",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 230,
+      "orange": 230,
+      "itemID": 7911
+    },
+    {
+      "id": "mining:ooze-covered-thorium-vein",
+      "name": "Ooze Covered Thorium Vein",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Un'Goro Crater",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        },
+        {
+          "zone": "Feralas",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 245,
+      "orange": 245,
+      "itemID": 10620
+    },
+    {
+      "id": "mining:ooze-covered-rich-thorium-vein",
+      "name": "Ooze Covered Rich Thorium Vein",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [
+        {
+          "zone": "Silithus",
+          "sourceID": "icy-mining",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "minimumSkill": 275,
+      "orange": 275,
+      "itemID": 10620
+    },
+    {
+      "id": "herbalism:marefoil",
+      "name": "Marefoil",
+      "category": "herbalism",
+      "sourceIDs": [
+        "icy-herbalism"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Gathering source and requirements unverified"
+    },
+    {
+      "id": "herbalism:demonsage",
+      "name": "Demonsage",
+      "category": "herbalism",
+      "sourceIDs": [
+        "icy-herbalism"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Gathering source and requirements unverified"
+    },
+    {
+      "id": "herbalism:death-lotus",
+      "name": "Death Lotus",
+      "category": "herbalism",
+      "sourceIDs": [
+        "icy-herbalism"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Gathering source and requirements unverified"
+    },
+    {
+      "id": "herbalism:scarce-frilled-lichen",
+      "name": "Scarce Frilled Lichen",
+      "category": "herbalism",
+      "sourceIDs": [
+        "icy-herbalism"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Gathering source and requirements unverified"
+    },
+    {
+      "id": "herbalism:scarce-rosecap",
+      "name": "Scarce Rosecap",
+      "category": "herbalism",
+      "sourceIDs": [
+        "icy-herbalism"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Gathering source and requirements unverified"
+    },
+    {
+      "id": "herbalism:scarce-stranglevine",
+      "name": "Scarce Stranglevine",
+      "category": "herbalism",
+      "sourceIDs": [
+        "icy-herbalism"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Gathering source and requirements unverified"
+    },
+    {
+      "id": "mining:heavy-thorium-ore",
+      "name": "Heavy Thorium Ore",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Material reference; exact source or requirements may be unknown."
+    },
+    {
+      "id": "mining:pyrite",
+      "name": "Pyrite",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Material reference; exact source or requirements may be unknown."
+    },
+    {
+      "id": "mining:bauxite",
+      "name": "Bauxite",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Material reference; exact source or requirements may be unknown."
+    },
+    {
+      "id": "mining:pitchblende",
+      "name": "Pitchblende",
+      "category": "mining",
+      "sourceIDs": [
+        "icy-mining"
+      ],
+      "locations": [],
+      "loot": [],
+      "verificationStatus": "reference_reviewed",
+      "environment": "Material reference; exact source or requirements may be unknown."
+    },
+    {
+      "id": "fishing:whimsyfin-reference",
+      "name": "Whimsyfin reference",
+      "category": "fishing",
+      "sourceIDs": [
+        "icy-fishing",
+        "wowhead-whimsyfin"
+      ],
+      "locations": [
+        {
+          "zone": "Redridge Mountains",
+          "sourceID": "icy-fishing",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [
+        {
+          "name": "Whimsyfin",
+          "itemID": 251524,
+          "sourceID": "icy-fishing"
+        }
+      ],
+      "verificationStatus": "reference_reviewed",
+      "fishingSourceType": "unknown",
+      "itemID": 251524
+    },
+    {
+      "id": "fishing:floating-wreckage",
+      "name": "Floating Wreckage",
+      "category": "fishing",
+      "sourceIDs": [
+        "azeroth-wreckage"
+      ],
+      "locations": [
+        {
+          "zone": "The Barrens",
+          "sourceID": "azeroth-wreckage",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [
+        {
+          "name": "Iron Bound Trunk",
+          "itemID": 21150,
+          "sourceID": "azeroth-wreckage"
+        }
+      ],
+      "verificationStatus": "reference_reviewed",
+      "fishingSourceType": "wreckage"
+    },
+    {
+      "id": "fishing:open-water:-durotar",
+      "name": "Open water: Durotar",
+      "category": "fishing",
+      "sourceIDs": [
+        "icy-fishing-leveling"
+      ],
+      "locations": [
+        {
+          "zone": "Durotar",
+          "sourceID": "icy-fishing-leveling",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [
+        {
+          "name": "Raw Slitherskin Mackerel",
+          "itemID": 6303,
+          "sourceID": "icy-fishing-leveling"
+        }
+      ],
+      "verificationStatus": "reference_reviewed",
+      "fishingSourceType": "open_water"
+    },
+    {
+      "id": "fishing:open-water:-elwynn-forest",
+      "name": "Open water: Elwynn Forest",
+      "category": "fishing",
+      "sourceIDs": [
+        "icy-fishing-leveling"
+      ],
+      "locations": [
+        {
+          "zone": "Elwynn Forest",
+          "sourceID": "icy-fishing-leveling",
+          "verificationStatus": "reported_reference"
+        }
+      ],
+      "loot": [
+        {
+          "name": "Raw Brilliant Smallfish",
+          "itemID": 6291,
+          "sourceID": "icy-fishing-leveling"
+        },
+        {
+          "name": "Raw Longjaw Mud Snapper",
+          "itemID": 6289,
+          "sourceID": "icy-fishing-leveling"
+        }
+      ],
+      "verificationStatus": "reference_reviewed",
+      "fishingSourceType": "open_water"
     }
   ],
   "coverage": {
     "complete": false,
     "scope": "Curated WoW Forever object and skill references",
     "gaps": [
-      "Other resources require local reference acquisition"
+      "Sources disagree on green breakpoints for many herbs and deposits",
+      "Some scarce or endgame items have no verified node or zone",
+      "Water skill and named pool loot are incomplete"
     ]
   }
 }

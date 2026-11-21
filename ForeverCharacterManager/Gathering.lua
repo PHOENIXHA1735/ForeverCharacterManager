@@ -296,8 +296,7 @@ end
 
 function FCM:GatherNodeIcon(kind,name,catches,referenceID)
     local item=referenceID
-    if kind=="fishing" then
-        item=nil
+    if kind=="fishing" and not item then
         for id,count in pairs(type(catches)=="table" and catches or {}) do
             id=number(id,1,10000000)
             if id and number(count,1,1000000000) and (not item or id<item) then item=id end

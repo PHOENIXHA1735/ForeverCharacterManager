@@ -1328,7 +1328,7 @@ function UI:Create()
     self.gatherCategoryButton=button(panel,"Resources: All",155,25,function()
         local entries={}
         for _,entry in ipairs({{"All"},{"Herbalism","herbalism"},{"Mining","mining"},
-            {"Fishing","fishing"},{"Fishing: Oil Spill","fishing","oil_spill"},{"Fishing: Wreckage","fishing","wreckage"},{"Fishing: School","fishing","school"},{"Fishing: Pool","fishing","pool"},{"Treasure","treasure"}}) do
+            {"Fishing","fishing"},{"Fishing: Oil Spill","fishing","oil_spill"},{"Fishing: Wreckage","fishing","wreckage"},{"Fishing: School","fishing","school"},{"Fishing: Pool","fishing","pool"},{"Fishing: Open Water","fishing","open_water"},{"Fishing: Unknown Source","fishing","unknown"},{"Treasure","treasure"}}) do
             entries[#entries+1]={label=entry[1],run=function()
                 self.gatherCategory=entry[2];self.gatherPoolType=entry[3]
                 self.gatherCategoryButton:SetText(entry[3] and entry[1] or "Resources: "..entry[1])
@@ -1339,6 +1339,20 @@ function UI:Create()
     end)
     self.gatherCategoryButton:SetPoint("LEFT",self.gatherWorldButton,"RIGHT",8,0)
     self.gatherCategoryButton:Hide()
+    self.gatherSkillButton=button(panel,"Skill: All",120,25,function()
+        local entries={}
+        for _,entry in ipairs({{"All"},{"1–74",{1,74}},{"75–149",{75,149}},
+            {"150–224",{150,224}},{"225–299",{225,299}},{"300+",{300,10000}},{"Unknown","unknown"}}) do
+            entries[#entries+1]={label=entry[1],run=function()
+                self.gatherSkillRange=entry[2]
+                self.gatherSkillButton:SetText("Skill: "..entry[1])
+                self:Refresh()
+            end}
+        end
+        self:MakeMenu(self.gatherSkillButton,entries,140,true)
+    end)
+    self.gatherSkillButton:SetPoint("LEFT",self.gatherCategoryButton,"RIGHT",8,0)
+    self.gatherSkillButton:Hide()
 
     self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
     self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
@@ -2427,7 +2441,7 @@ local function buildRows(ui)
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
     elseif tab=="Gathering" then
         for _,resource in ipairs(FCM:GatherResourceRows(ui.appliedSearch,
-                ui.gatherCategory,ch,ui.gatherPoolType)) do
+                ui.gatherCategory,ch,ui.gatherPoolType,ui.gatherSkillRange)) do
             add(resource.id,resource.name,resource.summary,resource.detail)
             rows[#rows].gatherIcon=resource.icon
         end
@@ -3760,7 +3774,7 @@ function UI:Refresh()
         end
     end
     local matchedCount=#entries
-    while #entries>200 do table.remove(entries) end
+    if tab~="Gathering" then while #entries>200 do table.remove(entries) end end
     local hasSelected=false
     for _,r in ipairs(entries) do if r.id==self.selectedRow then hasSelected=true end end
     if not hasSelected then
@@ -3901,6 +3915,7 @@ function UI:Refresh()
         self.gatherSizeButton:SetShown(gathering)
         self.gatherWorldButton:SetShown(gathering)
         self.gatherCategoryButton:SetShown(gathering)
+        self.gatherSkillButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or

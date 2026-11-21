@@ -664,3 +664,39 @@ FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 FCM:GatherEvent('LOOT_CLOSED')
 IsFishingLoot=nil
 eq(FCM:GatherResourceRows('6358','fishing')[1].unattributed,2,'stale hover and unrelated loot rejected')
+
+-- The stock catalog is loaded from the TOC and can be rebuilt after restart
+-- without an importer, a discovered location or any live API calls.
+local function freshCatalog(db)
+    local addon={db=db,Now=function() return 1800000000 end,Try=function(_,fn,...) if fn then return fn(...) end end}
+    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatherBrowser.lua'}) do
+        assert(loadfile('ForeverCharacterManager/'..file))('FCM',addon)
+    end
+    return addon
+end
+local catalogDB={gathering={schema=1,nodes={},stats={}}}
+local catalog=freshCatalog(catalogDB)
+local herb=catalog:GatherResourceRows('Black Lotus','herbalism')[1]
+assert(herb and herb.count==0 and herb.detail():find('Required skill: 300',1,true))
+local ore=catalog:GatherResourceRows('Rough Stone','mining')[1]
+assert(ore and ore.count==0)
+local fish=catalog:GatherResourceRows('251524','fishing')[1]
+assert(fish and fish.name=='Whimsyfin' and fish.count==0 and fish.detail():find('Redridge Mountains',1,true))
+assert(catalog:GatherResourceRows('21150','fishing',nil,'wreckage')[1])
+assert(catalog:GatherResourceRows('raw slitherskin mackerel','fishing',nil,'open_water')[1])
+assert(catalog:GatherResourceRows('Black Lotus','herbalism',nil,nil,{300,10000})[1])
+assert(not catalog:GatherResourceRows('Black Lotus','herbalism',nil,nil,{1,74})[1])
+eq(#catalog:GatherNodes(),0,'bundled catalogs never make a map point')
+catalog:AddGatherNode('herbalism',1438,1234,2345,'Black Lotus','personal')
+catalog:AddGatherNode('mining',1438,1234,2345,'Copper Vein','personal')
+catalog:AddGatherNode('fishing',1438,1234,2345,'Oil Spill','personal',nil,{[251524]=2})
+catalog=freshCatalog(catalogDB)
+eq(catalog:GatherResourceRows('Black Lotus','herbalism')[1].count,1,'herb observations survive reload')
+local mining=catalog:GatherResourceRows('Copper Vein','mining')
+local copper
+for _,r in ipairs(mining) do if r.name=='Copper Vein' then copper=r end end
+assert(copper and copper.count==1)
+local caught=catalog:GatherResourceRows('251524','fishing')[1]
+eq(caught.count,2,'fish count only includes personal observations after restart')
+eq(#caught.locations,1,'reference zone does not increase personal fishing locations')
+eq(#catalog:GatherNodes(),3,'only personal observations are saved')

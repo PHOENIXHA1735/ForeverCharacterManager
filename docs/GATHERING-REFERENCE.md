@@ -1,6 +1,6 @@
 # Gathering resource browser
 
-The browser groups confirmed fishing catches by item ID across source pools. Other resources are grouped by name and profession. Reference zones and associated items remain separate from account-wide personal observations. Legacy observations with no repeat counts appear as minimums. The selected character supplies the skill snapshot. Skill snapshots older than 24 hours or missing a timestamp produce unknown eligibility. The ten-record seed contains nine resources with reviewed Forever difficulty bands and Battered Chest. Fishing skill-up requirements are left unknown.
+The browser groups confirmed fishing catches by item ID across source pools. Other resources are grouped by name and profession. Reference zones and associated items remain separate from account-wide personal observations. Legacy observations with no repeat counts appear as minimums. The selected character supplies the skill snapshot. Skill snapshots older than 24 hours or missing a timestamp produce unknown eligibility. The bundled catalog includes verified facts, provider reference hints, and explicitly unknown fields. Fishing skill-up requirements are left unknown.
 
 A named pool observation requires a fishing cast followed by a recent recognized tooltip, game-object loot evidence, and a cleared item loot slot. If only a recent pre-cast tooltip was observed and the client independently marks the loot as fishing through IsFishingLoot, FCM retains the cleared item as an unattributed catch. It does not assign a pool or map location. If that signal is absent, use the fishing diagnostics to check why a catch was skipped. Item IDs and quantities come from the cleared slots. The marker represents the player standing position. The client event order, tooltip identification and correspondence to the pool or bobber still need live-client verification. Clients without the required loot evidence do not write a fishing record.
 
@@ -18,4 +18,14 @@ A successful generation contains a normalized reference, addon Lua and an audit 
 
     python -B ForeverCharacterManager/FCM-Companion/build_gather_reference.py PRIVATE_DIRECTORY/GENERATION/gathering-reference.json TEST_ADDON/GatheringReferenceData.lua
 
-The public branch ships only the small reviewed seed. Keep API responses and locally generated provider data outside Git. See https://foreverdb.net/developers and https://www.wowhead.com/forever/guide/professions/herbalism/overview-leveling for source coverage.
+The public branch ships the reviewed, normalized snapshot. Keep original API responses and local refresh data outside Git. See https://foreverdb.net/developers and https://www.wowhead.com/forever/guide/professions/herbalism/overview-leveling for source coverage.
+
+## Bundled catalog coverage
+
+The bundle uses normalized ForeverDB Gathering responses for build 1.60.1.70959 plus independently reviewed Forever references. The provider explicitly documents addon bundling and requires attribution. See https://foreverdb.net/developers. No raw API response, credentials, client identifier, private observations, or coordinates are bundled.
+
+- Herbalism: 34 rows, comprising the 28 provider herbs plus six documented scarce or endgame herbs with incomplete source details.
+- Mining: 21 rows, comprising 17 named deposits and four material references. Search by a yield such as Rough Stone to find its source nodes. Quest and raid nodes such as Hakkari Thorium and Obsidian Chunks are not comprehensively covered.
+- Fishing: 68 distinct selectable item IDs and 21 stand-alone source references. The source records include zones as well as known pools. Water tables, named-pool associations, and no-escape thresholds are incomplete. The provider's Classic candidate loot and Forever-observed loot retain different provenance. A zone-level catch cannot be attributed to a specific school from zone membership alone.
+
+The catalog includes Black Lotus, Rich Thorium, Poor Copper Vein, Whimsyfin, and Iron Bound Trunk. The full set of obtainable items and spawn zones remains unverified. Difficulty colors stay unknown where guides disagree. In particular, the green breakpoints disagree between the Icy Veins and Wowhead Forever guides, so those values are omitted. Fishing remains independent of the herbalism and mining color bands. Effective Fishing is shown only when the active client's profession API reports both base skill and bonus.

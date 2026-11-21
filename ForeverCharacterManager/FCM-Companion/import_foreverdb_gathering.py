@@ -25,12 +25,14 @@ def add(kind,name):
 def location(row,z):
     if not any(x['sourceID']==source and x['zone']==z for x in row['locations']):
         row['locations'].append(dict(sourceID=source,zone=z,verificationStatus='reported_reference'))
-def loot(row,items):
+def loot(row,items,source_id=None):
+    source_id=source_id or source
+    if items and source_id not in row['sourceIDs']:row['sourceIDs'].append(source_id)
     for item in items:
         name,ident=item['name'],item['itemId']
         assert type(ident) is int and ident>0
-        if not any(i['itemID']==ident and i['sourceID']==source for i in row['loot']):
-            row['loot'].append(dict(name=name,itemID=ident,sourceID=source))
+        if not any(i['itemID']==ident and i['sourceID']==source_id for i in row['loot']):
+            row['loot'].append(dict(name=name,itemID=ident,sourceID=source_id))
 for kind in ('herbalism','mining','fishing'):
     with (incoming/(kind+'.json')).open('rb') as stream:
         raw=stream.read(MAX_INPUT+1)
@@ -70,7 +72,7 @@ for kind in ('herbalism','mining','fishing'):
                 if row.get(key) not in (None,val):
                     stats[kind]['conflicts'].append([name,key,row[key],val])
                 else:row[key]=val
-            loot(row,n['alsoGives'])
+            loot(row,([n['item']] if n.get('item') else [])+n['alsoGives'])
             for z in n['topZones']:location(row,z['name'])
         unknown=set()
         for z in zones:
@@ -80,22 +82,31 @@ for kind in ('herbalism','mining','fishing'):
                 location(row,z['name'])
         stats[kind]['zoneOnlyNames']=sorted(unknown)
     else:
+        for suffix,title in [('classic','Classic water loot; Forever availability unverified'),('observed','Reported in WoW Forever; water type unspecified')]:
+            doc['sources'].append(dict(id=source+'-'+suffix,name='ForeverDB.net: '+title,
+                url=d['url'],permission='Authorized API reference with attribution',version=build,status='imported_reference'))
+        def pool_type(name):
+            normalized=name.casefold()
+            if normalized=='oil spill':return 'oil_spill'
+            if 'wreckage' in normalized or 'debris' in normalized or 'flotsam' in normalized:return 'wreckage'
+            return 'school' if 'school' in normalized else 'pool'
         poolNames=set(d['pools'])
         if not poolNames:raise ValueError('Empty provider fishing pool data')
         assert len(poolNames)==len(d['pools'])
         stats[kind]['poolNames']=len(poolNames)
         for name in sorted(poolNames):
             row=add(kind,name)
-            row['fishingSourceType']={'Floating Wreckage':'wreckage','Oil Spill':'oil_spill'}.get(name,'school' if 'school' in name.lower() else 'pool')
+            row['fishingSourceType']=pool_type(name)
         for z in zones:
             row=add(kind,'Zone fishing reference: '+z['name'])
             row.update(fishingSourceType='unknown',fishingMinimum=max(z['skill'] or 0,0) or None,
                        fishingNoGetAways=max(z['noEscapeSkill'] or 0,0) or None)
             location(row,z['name'])
-            loot(row,z['loot']+z['caughtInForever'])
+            loot(row,z['loot'],source+'-classic')
+            loot(row,z['caughtInForever'],source+'-observed')
             for name in z['pools']:
                 row=add(kind,name)
-                row.setdefault('fishingSourceType','pool')
+                row.setdefault('fishingSourceType',pool_type(name))
                 location(row,z['name'])
 now=datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 if any(stat['conflicts'] for stat in stats.values()):raise ValueError('Conflicting provider IDs or requirements')
