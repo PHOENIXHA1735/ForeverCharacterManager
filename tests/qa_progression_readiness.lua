@@ -63,4 +63,18 @@ for _,tab in ipairs({"Upgrade Plan","Upgrades","Talents","Legacy","Leveling","Re
         if type(row.detail)=="function" then assert(type(row.detail())=="string",tab) end
     end
 end
+local crafter={name="Mira"}
+local recipient={name="Ada"}
+local plan={recipe={id=9,name="Transfer Boots",reagents={{itemID=2,count=12}}},
+    crafter=crafter,recipient=recipient,requestedCrafts=1,status="Materials available after transfer",
+    steps={{recipeID=9,crafts=1}},missing={},reserved={},warnings={},blockers={},withdrawals={},
+    transfers={{count=12,name="Material 2",from="Bram",where="bags",to="Mira"}}}
+function host:MaterialLocations() return 12,12,{{name="Bram",count=12,where="bags",lastScan=self:Now(),bound=false,usable=true}} end
+host.ItemName=function() return "Material 2" end
+local plain=host.UI:PlannerDetail(plan,"One-craft preview",false)
+assert(plain:find("Crafted by: Mira",1,true) and plain:find("Crafting for: Ada",1,true))
+assert(plain:find("Transfer Required",1,true) and plain:find("Transfer 12 x Material 2 from Bram's bags to Mira.",1,true))
+assert(plain:find("Next Action:",1,true)<plain:find("Materials:",1,true))
+assert(not plain:find("Technical Details:",1,true))
+assert(host.UI:PlannerDetail(plan,"One-craft preview",true):find("Technical Details:",1,true))
 print("PASS: keyed and malformed professions, Battle Slayer restrictions, future and unknown handling")

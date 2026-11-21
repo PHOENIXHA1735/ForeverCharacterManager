@@ -69,6 +69,10 @@ local function render(width)
 end
 local small=render(210)
 assert(#small==2 and small[1].sub.value:find("Requires a higher level",1,true))
+for _,r in ipairs(small) do
+    assert(r.sub.offset<=r.name.offset-r.name.height)
+    assert(r.height>=-r.sub.offset+r.sub.height)
+end
 local wide=render(420)
 assert(wide[1].width>small[1].width and ui.detailChild.height>=340)
 ui.dungeonBossFocus={dungeon=row.id,index=2}

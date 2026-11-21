@@ -559,6 +559,23 @@ function UI:AcquireDungeonWidget(kind)
     pool[index]=widget
     return widget
 end
+local function stackRowText(row,title,description,inset,width)
+    local y=6
+    for _,label in ipairs({title,description}) do
+        label:ClearAllPoints()
+        label:SetPoint("TOPLEFT",row,"TOPLEFT",inset,-y)
+        label:SetWidth(math.max(40,width-inset-8))
+        label:SetWordWrap(true)
+        label:SetHeight(0)
+        local height=math.max(14,math.ceil(tonumber(label:GetStringHeight()) or 0))
+        label:SetHeight(height)
+        y=y+height+3
+    end
+    local height=math.max(45,y+5)
+    row:SetSize(width,height)
+    return height
+end
+
 function UI:RenderDungeonDetail(r,ch)
     if not r then return end
     self.detailText:Hide()
@@ -795,10 +812,8 @@ function UI:RenderDungeonDetail(r,ch)
         local row=self:AcquireDungeonWidget("row")
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",8,-y)
-        row:SetSize(width-15,49)
         row.bg:SetColorTexture(selected and 0.15 or 0.09,selected and 0.28 or 0.16,selected and 0.38 or 0.23,0.94)
         row.icon:SetTexture(meta.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-        row.name:SetWidth(width-70)
         local label=meta.slot or meta.typeName or "Item type unknown"
         local verdict="Stats unknown"
         if eligibility=="other" then verdict="Not for this class"
@@ -810,9 +825,9 @@ function UI:RenderDungeonDetail(r,ch)
         local fitLabel=fit=="match" and "spec fit?" or (fit=="offspec" and "off-spec?" or "")
         local evidence=drop.evidence=="forever-observed" and "Forever observed" or
             (drop.evidence=="classic" and "Classic reference" or "Evidence unknown")
-        row.sub:SetText(short(label.." | "..verdict..(fitLabel~="" and (" | "..fitLabel) or ""),51))
-        row.name:SetText(color(short(meta.name.." | "..evidence,60),meta.color))
-        row.sub:SetWidth(width-70)
+        row.sub:SetText(label.." | "..verdict..(fitLabel~="" and (" | "..fitLabel) or ""))
+        row.name:SetText(color(meta.name,meta.color).." | "..evidence)
+        local height=stackRowText(row,row.name,row.sub,46,width-15)
         -- Left click opens a readable in-panel detail area at the top.
         -- Only right click opens the game's large (and addon-extended) tooltip.
         -- No automatic hover tooltip: that previously obscured the FCM window.
@@ -832,7 +847,7 @@ function UI:RenderDungeonDetail(r,ch)
         row:SetScript("OnEnter",nil)
         row:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
         row:Show()
-        y=y+54
+        y=y+height+5
     end
     line("Boss Information",24,"ffd76d")
     if #bossRows==0 then line("Boss details unavailable.",22,"aeb9ca") end
@@ -1600,6 +1615,11 @@ function UI:Create()
     self.cancelRequestButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
     self.cancelRequestButton:Hide()
     self.gatherMoreButton=button(panel,"Show All Details",155,29,function()
+        if self.tab=="Planner" then
+            self.plannerExpanded=not self.plannerExpanded
+            self:Refresh()
+            return
+        end
         self.gatherShowAllDetails=not self.gatherShowAllDetails
         if self.detailScroll and self.detailScroll.SetVerticalScroll then
             self.detailScroll:SetVerticalScroll(0)
@@ -1771,11 +1791,29 @@ function UI:Reflow()
     elseif self.detailCardSource then
         self:RenderDetailCards(self.detailCardSource,self.detailCardTab,self.detailCardOffset)
     end
-    for _,w in ipairs(self.rows or {}) do
-        w:SetWidth(listWidth-3)
-        if w.label then w.label:SetWidth(listWidth-18) end
-        if w.desc then w.desc:SetWidth(listWidth-20) end
+    local plannerY=0
+    for i,w in ipairs(self.rows or {}) do
+        if self.tab=="Planner" and i<=(self.plannerRowCount or 0) then
+            w:ClearAllPoints()
+            w:SetPoint("TOPLEFT",self.scrollChild,"TOPLEFT",2,-plannerY)
+            plannerY=plannerY+stackRowText(w,w.label,w.desc,8,listWidth-3)+3
+        else
+            w:SetSize(listWidth-3,45)
+            if w.label then
+                w.label:SetWidth(listWidth-18)
+                w.label:SetHeight(0)
+                w.label:SetWordWrap(false)
+            end
+            if w.desc then
+                w.desc:ClearAllPoints()
+                w.desc:SetPoint("TOPLEFT",w,"TOPLEFT",8,-24)
+                w.desc:SetWidth(listWidth-20)
+                w.desc:SetHeight(0)
+                w.desc:SetWordWrap(false)
+            end
+        end
     end
+    if self.tab=="Planner" then self.scrollChild:SetHeight(math.max(250,plannerY+4)) end
     self:SaveWindow()
 end
 function UI:ShowAdvisorFilterMenu()
@@ -2429,6 +2467,115 @@ function UI:ShowCrafterMenu(recipe, recipientKey, existing, eligibleCrafters, qu
     if ok then self.selectedRow=nil;self:Refresh() end
 end
 
+local plannerStatus={
+    ["Recorded bags ready"]="Ready to Craft",
+    ["Materials available after transfer"]="Transfer Required",
+    ["Bank withdrawal required"]="Bank Withdrawal Required",
+    ["Missing ingredients"]="Missing Materials",
+    ["Verification required"]="Verification Required",
+    ["Blocked"]="Verification Required",
+}
+
+local function readinessLabel(status)
+    return plannerStatus[status] or status or "Verification Required"
+end
+
+function UI:PlannerDetail(plan,context,expanded)
+    local function name(ch) return ch and FCM:DisplayCharacter(ch) or "None selected" end
+    local function material(id) return FCM.ItemName(id) end
+    local status=readinessLabel(plan.status)
+    local title=plan.recipe.name or "Recipe name unavailable"
+    local lines={color(title,"ffd76d"),"Status: "..status,"Crafted by: "..name(plan.crafter),
+        "Crafting for: "..name(plan.recipient),context}
+    local actions,locations={},{}
+    local materials={}
+    local function include(id)
+        if not materials[id] then materials[id]=0 end
+    end
+    for _,step in ipairs(plan.steps) do
+        local recipe=step.recipeID==plan.recipe.id and plan.recipe or FCM:RecipeByID(step.recipeID)
+        for _,reagent in ipairs(recipe and recipe.reagents or {}) do
+            local id,quantity=tonumber(reagent.itemID),tonumber(reagent.count)
+            if id and quantity then include(id);materials[id]=materials[id]+step.crafts*quantity end
+        end
+    end
+    if #plan.steps==0 then
+        for _,reagent in ipairs(plan.recipe.reagents or {}) do
+            local id,quantity=tonumber(reagent.itemID),tonumber(reagent.count)
+            if id and quantity then include(id);materials[id]=materials[id]+plan.requestedCrafts*quantity end
+        end
+    end
+    for id in pairs(plan.missing) do include(id) end
+    local ids={}
+    for id in pairs(materials) do ids[#ids+1]=id end
+    table.sort(ids)
+    local now=FCM:Now()
+    local verification={}
+    for _,id in ipairs(ids) do
+        local total,available,stock=FCM:MaterialLocations(id,plan.crafter)
+        local blockedStock={}
+        locations[#locations+1]=material(id)
+        locations[#locations+1]=string.format("Required %d | Recorded available %d | Reserved %d | Missing %d",
+            materials[id],available,plan.reserved[id] or 0,plan.missing[id] or 0)
+        locations[#locations+1]="Account stock recorded: "..total
+        if #stock==0 then locations[#locations+1]="No recorded locations." end
+        for _,loc in ipairs(stock) do
+            local binding=loc.bound==true and "bound to owner" or (loc.bound==false and "unbound" or "binding unknown")
+            local stamp=tonumber(loc.lastScan)
+            local age=(not stamp or stamp<=0 or stamp>now) and "scan time unavailable" or
+                (now-stamp>172800 and "stale scan" or "recorded scan")
+            locations[#locations+1]=string.format("%s: %d in %s | %s | %s%s",loc.name,loc.count,
+                loc.where=="bank" and "bank" or "bags",binding,age,loc.usable and "" or " | unavailable to crafter")
+            if not loc.usable and loc.bound~=false then
+                blockedStock[#blockedStock+1]=loc.name..(loc.bound==true and "'s stock is bound." or "'s stock has unknown binding.")
+            end
+            if plan.uncertain and loc.usable and age~="recorded scan" then
+                verification[#verification+1]="Verify "..loc.name.."'s "..loc.where.." before relying on "..loc.count.." x "..material(id).."."
+            end
+        end
+        local missing=plan.missing[id]
+        if missing and missing>0 then
+            actions[#actions+1]="Obtain "..missing.." x "..material(id).."."
+            if (plan.reserved[id] or 0)>0 then
+                actions[#actions+1]="Stock reserved for another request is already excluded."
+            end
+            for _,reason in ipairs(blockedStock) do actions[#actions+1]=reason end
+        end
+        locations[#locations+1]=""
+    end
+    lines[#lines+1]=""
+    lines[#lines+1]="Next Action:"
+    if plan.ready then
+        lines[#lines+1]=#plan.steps>1 and "Prepare the intermediates in the craft sequence before making the final item." or
+            "Confirm the recorded bags in game, then craft it yourself."
+    elseif #plan.blockers>0 then
+        for _,reason in ipairs(plan.blockers) do lines[#lines+1]=reason end
+    else
+        for _,step in ipairs(verification) do lines[#lines+1]=step end
+        for _,warning in ipairs(plan.warnings) do lines[#lines+1]=warning end
+        for _,row in ipairs(plan.withdrawals) do
+            lines[#lines+1]="Withdraw "..row.count.." x "..material(row.itemID).." from "..name(row.owner).."'s bank."
+        end
+        for _,row in ipairs(plan.transfers) do
+            lines[#lines+1]="Transfer "..row.count.." x "..row.name.." from "..row.from.."'s "..row.where.." to "..row.to.."."
+        end
+        for _,action in ipairs(actions) do lines[#lines+1]=action end
+        if #plan.steps>1 then lines[#lines+1]="Check the intermediate crafts under Technical Details." end
+    end
+    lines[#lines+1]=""
+    lines[#lines+1]="Materials:"
+    lines[#lines+1]="Available is recorded stock compatible with the selected crafter before reservations. Shortages reflect the full plan."
+    lines[#lines+1]=""
+    for _,line in ipairs(locations) do lines[#lines+1]=line end
+    if #locations==0 then lines[#lines+1]="No verified ingredient list is available." end
+    if expanded then
+        lines[#lines+1]=""
+        lines[#lines+1]="Technical Details:"
+        for _,line in ipairs(FCM:SmartCraftingPlanLines(plan)) do lines[#lines+1]=line end
+    end
+    return table.concat(lines,"\n")
+end
+
 local function buildRows(ui)
     local rows, tab, ch = {}, ui.tab or "Overview", ui:GetCharacter()
     local function add(id,title,summary,detail,recipe,request,crafters,recipientKey,ready)
@@ -2480,7 +2627,7 @@ local function buildRows(ui)
             local prefix=e.kind=="crafted" and "Craft" or
                 (e.kind=="dungeon" and "Dungeon" or "Unlearned")
             add("account-plan:"..i,FCM:DisplayCharacter(e.character)..": "..e.itemName,
-                prefix.." | +"..FCM.Gear:ScoreLabel(e.delta).." weighted | "..e.status,
+                prefix.." | +"..FCM.Gear:ScoreLabel(e.delta).." weighted | "..readinessLabel(e.status),
                 function() return table.concat(FCM:AccountUpgradePlanLines(e),"\n") end,
                 e.kind=="crafted" and e.recipe or nil,nil,
                 e.kind=="crafted" and e.crafters or nil,
@@ -3176,7 +3323,7 @@ local function buildRows(ui)
                 end
                 local excludeKey=queued and queued.key or nil
                 local plan=FCM:CraftAvailability(r,crafter,excludeKey,preview.needed)
-                d[#d+1]=plan.status or plan.reason or "REAGENTS AND STOCK (recorded snapshots)"
+                d[#d+1]=readinessLabel(plan.status or plan.reason)
                 for _,m in ipairs(plan.lines or {}) do
                     d[#d+1]=m.name..": need "..m.required..", accessible "..m.unreserved..
                         ", missing "..m.missing.." (reserved "..m.reserved..")"
@@ -3223,14 +3370,17 @@ local function buildRows(ui)
             end
         end
     elseif tab=="Planner" then
-        add("planner-summary","Smart Crafting Planner | recorded data",
-            "Select a known recipe or pending request to calculate an account-wide crafting chain.",
-            "This planner uses cached materials and learned recipes. It selects eligible crafters, reserves existing requests, recursively expands simple recipes, and shows missing ingredients and potential transfers. Reach Total requests subtract finished items already recorded on the recipient; Craft Additional requests do not. Remaining output requirements are rounded up by recipe yield.\n\nAlternative reagent slots and unknown bind restrictions require manual verification. Nothing is moved, bought, crafted, or mailed automatically.")
+        add("planner-summary","Smart Crafting Planner","Select a recipe or saved request.",
+            "Choose the recipient at the top of FCM, then select an available recipe to preview one craft or a saved request to review its remaining quantity.")
+        add("planner-requests","Saved Crafting Requests","Existing requests and their remaining quantities.",
+            "Use Requests to change a saved request. Selecting it here only shows the plan.")
+        local seenRequests={}
         for _,pending in ipairs(FCM:VisibleRequests()) do
             local row=pending
-            if row.recipe and row.recipient then
+            if row.recipe and row.recipient and row.request.key and not seenRequests[row.request.key] then
                 local r=row.recipe
                 local request=row.request
+                seenRequests[request.key]=true
                 local who=row.crafter
                 local wanted=FCM:CraftRequestQuantity(request)
                 local runs,_,_,needed,owned,known,mode=FCM:CraftRequestRuns(r,request,row.recipient)
@@ -3238,20 +3388,23 @@ local function buildRows(ui)
                     (mode=="total" and "SAVED TARGET: " or "SAVED CRAFT: ")..wanted.."x "..(r.name or "Recipe"),
                     "For "..FCM:DisplayCharacter(row.recipient).." | "..needed.." more needed, "..runs.." craft(s) | "..
                     (who and ("Best stock preview: "..FCM:DisplayCharacter(who)) or "No eligible learned crafter"),
-                    function()
+                    function(expanded)
                         if runs==0 then
-                            return "Target already met by recorded recipient inventory ("..owned.." owned). "..
-                                "No new crafts or reagents are required. Check that bags and bank were scanned recently."
+                            return r.name.."\nCrafting for: "..FCM:DisplayCharacter(row.recipient)..
+                                "\n\nNext Action:\nVerify the recorded "..owned.." finished items. No further crafts are planned."
                         end
                         local plan=FCM:SmartCraftingPlan(r,row.recipient,who,runs,request.key)
-                        return "Mode: "..(mode=="total" and "Reach Total" or "Craft Additional")..
-                            " | Desired: "..wanted.." | "..(known and ("Recorded owned: "..owned) or "Owned count unavailable")..
-                            " | Additional needed: "..needed.."\n\n"..
-                            table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
+                        local context=(mode=="total" and "Reach Total" or "Craft Additional")..
+                            " | Requested "..wanted.." | Still needed "..needed..
+                            (known and (" | Recorded owned "..owned) or " | Owned count unavailable")
+                        return ui:PlannerDetail(plan,context,expanded)
                     end)
+                rows[#rows].plannerDetail=runs>0
                 rows[#rows].itemID=tonumber(r.outputID)
             end
         end
+        add("planner-recipes","Available Recipes","One-craft previews from learned recipes.",
+            "Previewing a recipe does not add or change a saved request.")
         local recipeCount=0
         for _,r in ipairs(FCM:AllRecipes()) do
             -- List without calculating every plan on every UI refresh. The full
@@ -3266,12 +3419,12 @@ local function buildRows(ui)
             add("plan-recipe:"..tostring(recipe.id),recipe.name or ("Recipe #"..tostring(recipe.id)),
                 "One-cast preview (not saved target) | "..(recipe.profession or "Craft").." | "..#(recipe.crafters or {})..
                     " scanned crafter(s) | "..(available and "Plan available" or "Not transferable to selected character"),
-                function()
+                function(expanded)
                     local plan=FCM:SmartCraftingPlan(recipe,ch,nil,1)
-                    return "RECIPE PREVIEW - ONE CAST\nNot the saved request target. Select a SAVED TARGET row to plan its full quantity.\n\n"..
-                        table.concat(FCM:SmartCraftingPlanLines(plan),"\n")
+                    return ui:PlannerDetail(plan,"One-craft recipe preview",expanded)
                 end,available and recipe or nil,nil,available and eligible or nil,
-                ch and ch.key,available and true or false)
+                ch and ch.key,false)
+            rows[#rows].plannerDetail=true
             rows[#rows].itemID=tonumber(recipe.outputID)
         end
         if recipeCount==0 then add("planner-empty","No learned recipes recorded",
@@ -3348,7 +3501,7 @@ local function buildRows(ui)
                     local mats, ready = plan.lines, plan.ready
                     d[#d+1]=""
                     d[#d+1]="Materials for "..FCM:DisplayCharacter(reviewer).." (last scanned):"
-                    d[#d+1]=plan.status or plan.reason or "Verification required"
+                    d[#d+1]=readinessLabel(plan.status or plan.reason)
                     for _, m in ipairs(mats) do
                         local usable=m.unreserved
                         local missing=m.missing
@@ -3826,6 +3979,7 @@ function UI:Refresh()
     if not self.frame or not self.frame:IsShown() or not FCM.db then return end
     local tab=self.tab or "Overview"
     self:HideDetailCards()
+    if self.gatherMoreButton then self.gatherMoreButton:Hide() end
     self.detailCardSource=nil
     if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or (tab=="Gathering" and 405 or 340)) end
     self.heading:SetText(tab)
@@ -3935,6 +4089,10 @@ function UI:Refresh()
             self.detailScroll:SetVerticalScroll(0)
         end
     end
+    if tab=="Planner" and self.plannerDetailSelection~=self.selectedRow then
+        self.plannerDetailSelection=self.selectedRow
+        self.plannerExpanded=false
+    end
     self.activeRecipe=nil
     self.activeCrafters=nil
     self.activeRequest=nil
@@ -3954,8 +4112,8 @@ function UI:Refresh()
         widget:ClearAllPoints()
         widget:SetPoint("TOPLEFT",self.scrollChild,"TOPLEFT",2,-((i-1)*47))
         local icon=row.gatherIcon and ("|T"..tostring(row.gatherIcon)..":16:16|t ") or ""
-        widget.label:SetText(icon..short(row.title,63))
-        widget.desc:SetText(short(row.summary,80))
+        widget.label:SetText(icon..(tab=="Planner" and row.title or short(row.title,63)))
+        widget.desc:SetText(tab=="Planner" and row.summary or short(row.summary,80))
         local shade=row.id==self.selectedRow and palette.selected or palette.row
         widget.bg:SetColorTexture(shade[1],shade[2],shade[3],0.9)
         if widget.label.SetTextColor then
@@ -4001,6 +4159,7 @@ function UI:Refresh()
         if row.id==self.selectedRow then selected=row end
     end
     for i=#entries+1,#self.rows do self.rows[i]:Hide() end
+    self.plannerRowCount=tab=="Planner" and #entries or nil
     self.scrollChild:SetHeight(math.max(250,#entries*47+4))
     self:Reflow()
     if tab=="Global Search" then
@@ -4211,6 +4370,11 @@ function UI:Refresh()
             self:ResetItemPreview()
             self:HideDetailCards()
             self:RenderGatherMaterialPanel(selected.gatherResource,ch,self.gatherShowAllDetails)
+        elseif tab=="Planner" then
+            if self.HideGatherMaterialPanel then self:HideGatherMaterialPanel() end
+            self:ResetItemPreview()
+            local content=type(selected.detail)=="function" and selected.detail(self.plannerExpanded) or selected.detail
+            self:RenderDetailCards(content,tab,0)
         else
             if self.HideGatherMaterialPanel then self:HideGatherMaterialPanel() end
             self.detailText:Show()
@@ -4231,8 +4395,11 @@ function UI:Refresh()
             self:RenderDetailCards(content,tab,previewHeight)
         end
         if self.gatherMoreButton then
-            self.gatherMoreButton:SetShown(tab=="Gathering" and selected.gatherHasExtraDetails==true)
-            self.gatherMoreButton:SetText(self.gatherShowAllDetails and "Show Less Details" or "Show All Details")
+            local planner=tab=="Planner"
+            self.gatherMoreButton:SetShown((planner and selected.plannerDetail==true) or
+                (tab=="Gathering" and selected.gatherHasExtraDetails==true))
+            self.gatherMoreButton:SetText(planner and (self.plannerExpanded and "Hide Technical Details" or "Technical Details") or
+                (self.gatherShowAllDetails and "Show Less Details" or "Show All Details"))
         end
         if selected.request then
             self.activeRequest=selected.request
