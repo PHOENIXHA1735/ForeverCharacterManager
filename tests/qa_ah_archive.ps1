@@ -64,6 +64,7 @@ Copy-Item -LiteralPath $launcher -Destination $probeLauncher
 param([string]$Mode, [string]$AddonRoot, [switch]$IncludeProviderTables)
 if ($Mode -ne 'Sync') { exit 91 }
 if (-not (Test-Path -LiteralPath (Join-Path $AddonRoot 'ForeverCharacterManager.toc'))) { exit 92 }
+if (Test-Path -LiteralPath (Join-Path $AddonRoot 'launcher-error.flag')) { exit 9 }
 $label=if ($IncludeProviderTables) { 'provider' } else { 'personal' }
 [IO.File]::WriteAllText((Join-Path $AddonRoot 'launcher-probe.txt'),$label)
 exit 0
@@ -78,6 +79,11 @@ if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath (Join-Path $addon 'launche
 if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath (Join-Path $addon 'launcher-probe.txt') -Raw).Trim() -ne 'provider') {
     throw 'Explicit provider mode failed to propagate opt-in'
 }
+$failureFlag=Join-Path $addon 'launcher-error.flag'
+Set-Content -LiteralPath $failureFlag -Value 'synthetic-failure'
+& $wscript '//B' '//NoLogo' $probeLauncher 'personal'
+if ($LASTEXITCODE -ne 9) { throw 'Hidden launcher did not forward child PowerShell failure' }
+Remove-Item -LiteralPath $failureFlag
 & $wscript '//B' '//NoLogo' $probeLauncher 'unexpected'
 if ($LASTEXITCODE -ne 64) { throw 'Hidden launcher accepted an unexpected mode' }
 Remove-Item -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1')
