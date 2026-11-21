@@ -64,6 +64,29 @@ function FCM:GatherZoneLabel(mapID)
     return type(info)=="table" and type(info.name)=="string" and info.name or "Map "..tostring(mapID or "unknown")
 end
 
+local function fishingLabel(name,itemID)
+    if not itemID then return "Fishing source" end
+    local n=name:lower()
+    if n:find("pattern:",1,true) or n:find("recipe:",1,true) or
+       n:find("potion",1,true) or n:find("trunk",1,true) or
+       n:find("crate",1,true) or n:find("footlocker",1,true) or
+       n:find("flotsam",1,true) or n:find("chest",1,true) or
+       n:find("scroll",1,true) then return "Fishing loot" end
+    if n:match("^raw ") or n:match("^oily blackmouth") or
+       n:match("^firefin snapper") or n:match("^stonescale eel") or
+       n:match("^deviate fish") or n:match("^whimsyfin") or
+       n:match("^sagefish") or n:match("catfish$") then return "Fish" end
+    return "Fishing item"
+end
+
+local function limitedLines(lines,limit,expanded,subject)
+    if expanded or #lines<=limit then return lines end
+    local summary={}
+    for i=1,limit do summary[#summary+1]=lines[i] end
+    summary[#summary+1]="+"..(#lines-limit).." more "..subject.." (Show All Details below)"
+    return summary
+end
+
 local function poolType(name,ref)
     if ref then return ref.fishingSourceType end
     local lower=name:lower()
@@ -211,9 +234,22 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
         end
         row.icon=self:GatherNodeIcon(row.kind,row.name,row.itemID and {[row.itemID]=row.count} or catches,row.itemID or (ref and ref.itemID))
         row.summary=ref and ref.material and (ref.materialType.." | Item "..tostring(ref.itemID or "Unknown")) or
-            (row.itemID and ("Fishing | "..row.count.." confirmed caught"..(row.referenceWaters and " | Catalog" or "")) or
+            (row.kind=="fishing" and (fishingLabel(row.name,row.itemID).." | "..row.count..
+                (row.itemID and " confirmed caught" or " personal observations")..
+                (row.referenceWaters and " | Catalog" or "")) or
              labels[row.kind].." | "..(row.minimum and "At least " or "")..row.count.." personal gathers")
-        row.detail=function()
+        row.hasExtraDetails=false
+        if ref and #(ref.locations or {})>8 then row.hasExtraDetails=true end
+        if ref and ref.material then
+            for _,sourceName in ipairs(ref.materialSources or {}) do
+                local source=referenceByName[row.kind..":"..sourceName:lower()]
+                if source and #((source.locations) or {})>6 then row.hasExtraDetails=true end
+            end
+        end
+        if row.referenceWaters and #row.referenceWaters>6 then row.hasExtraDetails=true end
+        if ref and #(ref.sourceIDs or {})>0 then row.hasExtraDetails=true end
+        if row.referenceWaters and #row.referenceWaters>0 then row.hasExtraDetails=true end
+        row.detail=function(expanded)
             local blocks={}
             local function block(title,lines)
                 if #lines>0 then blocks[#blocks+1]=title.."\n"..table.concat(lines,"\n") end
@@ -272,55 +308,92 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                 if #sources==0 then sources[1]="Verified source nodes not yet documented" end
                 block("SOURCE NODES",sources)
             end
-            local places,seenZones={},{}
-            local function addZone(zone,status)
-                if type(zone)~="string" or zone=="" or seenZones[zone:lower()] then return end
-                seenZones[zone:lower()]=true
-                places[#places+1]=zone..(status=="reported_reference" and " (reported)" or "")
+            local function uniqueZones(locations)
+                local result,seen={},{}
+                for _,place in ipairs(locations or {}) do
+                    local zone=place.zone
+                    if type(zone)=="string" and zone~="" and not seen[zone:lower()] then
+                        seen[zone:lower()]=true
+                        result[#result+1]=zone..
+                            (place.verificationStatus=="reported_reference" and " (reported)" or "")
+                    end
+                end
+                table.sort(result)
+                return result
             end
-            if ref then
-                for _,place in ipairs(ref.locations or {}) do addZone(place.zone,place.verificationStatus) end
-                if ref.material then
-                    for _,name in ipairs(ref.materialSources or {}) do
-                        local source=referenceByName[row.kind..":"..name:lower()]
-                        for _,place in ipairs(source and source.locations or {}) do
-                            addZone(place.zone,place.verificationStatus)
+            if ref and ref.material then
+                local derived={}
+                for _,name in ipairs(ref.materialSources or {}) do
+                    local source=referenceByName[row.kind..":"..name:lower()]
+                    local zones=uniqueZones(source and source.locations)
+                    derived[#derived+1]=name.." (source node)"
+                    if #zones==0 then
+                        derived[#derived+1]="  Zones not verified"
+                    else
+                        for _,line in ipairs(limitedLines(zones,6,expanded,"source zones")) do
+                            derived[#derived+1]="  "..line
                         end
                     end
                 end
-            end
-            if row.referenceWaters then
-                for _,water in ipairs(row.referenceWaters) do
-                    for _,place in ipairs(water.water.locations or {}) do addZone(place.zone,place.verificationStatus) end
+                if #derived>0 then
+                    block(row.kind=="herbalism" and "POTENTIAL SOURCE-HERB ZONES" or
+                        "POTENTIAL SOURCE-DEPOSIT ZONES",derived)
                 end
+            else
+                local combined={}
+                for _,place in ipairs(ref and ref.locations or {}) do combined[#combined+1]=place end
+                for _,entry in ipairs(row.referenceWaters or {}) do
+                    for _,place in ipairs(entry.water.locations or {}) do combined[#combined+1]=place end
+                end
+                local places=uniqueZones(combined)
+                if #places==0 then places[1]="No verified zone locations yet" end
+                block(row.kind=="fishing" and "REPORTED FISHING WATERS" or "REFERENCE ZONES",
+                    limitedLines(places,8,expanded,"zones"))
             end
-            table.sort(places)
-            if #places==0 then places[1]="No independently verified zone list yet" end
-            block(row.kind=="fishing" and "KNOWN WATERS AND ZONES" or "KNOWN ZONES",places)
             if ref and ref.material and ref.environment then
                 block("HOW IT IS OBTAINED",{ref.environment})
             end
             if row.referenceWaters then
-                local waters,seenWater={},{}
+                -- Group repeated provider zone references by source type and
+                -- thresholds without fabricating observed fish/loot locations.
+                local groups,ordered={},{}
                 local effective=self:GatherEffectiveFishingSkill(ch)
                 for _,entry in ipairs(row.referenceWaters) do
                     local water=entry.water
-                    local key=water.name..":"..tostring(entry.type)
-                    if not seenWater[key] then
-                        seenWater[key]=true
-                        local min,noEscape=water.fishingMinimum,water.fishingNoGetAways
-                        local status="UNKNOWN"
-                        if effective and min and noEscape and noEscape>=min then
-                            status=effective<min and "RED" or (effective<noEscape and "YELLOW" or "GREEN")
-                        end
-                        waters[#waters+1]=water.name.." ("..(entry.type or "unknown"):gsub("_"," ")..")"..
-                            "\n  Min: "..tostring(min or "Unknown")..
-                            " | No escape: "..tostring(noEscape or "Unknown")..
-                            "\n  Your status: |cff"..(colors[status] or colors.UNKNOWN)..status.."|r"..
-                            " (reference; Forever water verification pending)"
+                    local min,noEscape=water.fishingMinimum,water.fishingNoGetAways
+                    local status="UNKNOWN"
+                    if effective and min and effective<min then status="RED"
+                    elseif effective and min and noEscape and noEscape>=min then
+                        status=effective<noEscape and "YELLOW" or "GREEN"
                     end
+                    local isZone=water.name:match("^Zone fishing reference:") or
+                        water.name:match("^Open water:")
+                    local typ=(entry.type or "unknown"):gsub("_"," ")
+                    local key=(isZone and "zone" or water.name)..":"..typ..":"..
+                        tostring(min)..":"..tostring(noEscape)..":"..status
+                    local group=groups[key]
+                    if not group then
+                        group={name=isZone and typ.." reference waters" or water.name..
+                            " ("..typ..")",minimum=min,noEscape=noEscape,status=status,count=0}
+                        groups[key]=group
+                        ordered[#ordered+1]=group
+                    end
+                    group.count=group.count+1
                 end
-                block("FISHING SOURCES",waters)
+                table.sort(ordered,function(a,b)return a.name<b.name end)
+                local waters={}
+                for _,group in ipairs(ordered) do
+                    local qty=group.count>1 and (" | "..group.count.." references") or ""
+                    waters[#waters+1]=group.name..qty..
+                        "\n  Minimum: "..tostring(group.minimum or "Unknown")..
+                        " | No escape: "..tostring(group.noEscape or "Unknown")..
+                        "\n  Your status: |cff"..(colors[group.status] or colors.UNKNOWN)..
+                        group.status.."|r"
+                end
+                if #waters>0 then
+                    waters[#waters+1]="Thresholds are reference hints; Forever-specific verification is pending."
+                    block("FISHING SOURCES",limitedLines(waters,7,expanded,"source groups"))
+                end
             end
             if ref and not ref.material and #((ref.loot) or {})>0 then
                 local yields={}
@@ -356,10 +429,9 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             end
             for _,id in ipairs(ref and ref.sourceIDs or {}) do addRef(id) end
             for _,entry in ipairs(row.referenceWaters or {}) do addRef(entry.sourceID) end
-            if #refsOut>0 then
+            if #refsOut>0 and expanded then
                 table.sort(refsOut)
-                block("REFERENCE INFORMATION",{"Sources: "..table.concat(refsOut,", "),
-                    "Reference locations do not create personal map pins."})
+                block("REFERENCE SOURCES",refsOut)
             end
             return table.concat(blocks,"\n\n")
         end

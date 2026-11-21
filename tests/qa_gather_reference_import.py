@@ -49,6 +49,8 @@ class ImportTests(unittest.TestCase):
         self.assertIn('Fishing - Schools & Pools',ui)
         self.assertIn('Fishing - Oil Spills & Wreckage',ui)
         self.assertIn('Gathering Filters',ui)
+        self.assertIn('self:MakeMenu(self.gatherCategoryButton,entries,270,false)',ui)
+        self.assertIn('self.gatherMoreButton=button',ui)
 
 
 if __name__=='__main__':

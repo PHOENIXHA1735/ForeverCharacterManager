@@ -1347,11 +1347,15 @@ function UI:Create()
                 self.gatherCategory=selected[2]
                 self.gatherPoolType=selected[3]
                 self.gatherSkillRange=nil
+                self.gatherShowAllDetails=false
+                if self.detailScroll and self.detailScroll.SetVerticalScroll then
+                    self.detailScroll:SetVerticalScroll(0)
+                end
                 self.gatherCategoryButton:SetText(selected[1])
                 self:Refresh()
             end}
         end
-        self:MakeMenu(self.gatherCategoryButton,entries,270,true)
+        self:MakeMenu(self.gatherCategoryButton,entries,270,false)
     end)
     self.gatherCategoryButton:SetPoint("LEFT",self.gatherWorldButton,"RIGHT",8,0)
     self.gatherCategoryButton:Hide()
@@ -1481,6 +1485,15 @@ function UI:Create()
     end)
     self.cancelRequestButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
     self.cancelRequestButton:Hide()
+    self.gatherMoreButton=button(panel,"Show All Details",155,29,function()
+        self.gatherShowAllDetails=not self.gatherShowAllDetails
+        if self.detailScroll and self.detailScroll.SetVerticalScroll then
+            self.detailScroll:SetVerticalScroll(0)
+        end
+        self:Refresh()
+    end)
+    self.gatherMoreButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
+    self.gatherMoreButton:Hide()
     self.status = text(panel,"", "GameFontHighlightSmall",14,-501,285,20)
     self.status:ClearAllPoints()
     self.status:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",14,13)
@@ -2446,6 +2459,7 @@ local function buildRows(ui)
                 ui.gatherCategory,ch,ui.gatherPoolType)) do
             add(resource.id,resource.name,resource.summary,resource.detail)
             rows[#rows].gatherIcon=resource.icon
+            rows[#rows].gatherHasExtraDetails=resource.hasExtraDetails
         end
     elseif tab=="Shopping" then
         local list,unresolved=FCM:ShoppingList(FCM:FactionView())
@@ -3789,6 +3803,13 @@ function UI:Refresh()
         end
         self.selectedRow = foundCharacter and selectedID or entries[1].id
     end
+    if tab=="Gathering" and self.gatherDetailSelection~=self.selectedRow then
+        self.gatherDetailSelection=self.selectedRow
+        self.gatherShowAllDetails=false
+        if self.detailScroll and self.detailScroll.SetVerticalScroll then
+            self.detailScroll:SetVerticalScroll(0)
+        end
+    end
     self.activeRecipe=nil
     self.activeCrafters=nil
     self.activeRequest=nil
@@ -4061,7 +4082,8 @@ function UI:Refresh()
         self:ResetDungeonWidgets()
         self.detailText:Show()
         local previewHeight=self:RenderItemPreview(selected)
-        local content=type(selected.detail)=="function" and selected.detail() or selected.detail or ""
+        local content=type(selected.detail)=="function" and
+            (tab=="Gathering" and selected.detail(self.gatherShowAllDetails) or selected.detail()) or selected.detail or ""
         -- The same quick red/green comparison appears wherever a real item is
         -- selected. Non-equipment rows simply retain their existing details.
         local itemID=previewItemID(selected)
@@ -4074,6 +4096,10 @@ function UI:Refresh()
         end
         self.detailText:SetText(self:DecorateDetail(content,tab))
         self:RenderDetailCards(content,tab,previewHeight)
+        if self.gatherMoreButton then
+            self.gatherMoreButton:SetShown(tab=="Gathering" and selected.gatherHasExtraDetails==true)
+            self.gatherMoreButton:SetText(self.gatherShowAllDetails and "Show Less Details" or "Show All Details")
+        end
         if selected.request then
             self.activeRequest=selected.request
             self.action:SetWidth(170)
@@ -4106,6 +4132,7 @@ function UI:Refresh()
             self.action:Show()
         end
     else
+        if self.gatherMoreButton then self.gatherMoreButton:Hide() end
         self:ResetDungeonWidgets()
         self:ResetItemPreview()
         self.detailText:Show()
