@@ -122,6 +122,5 @@ function P:ViewRows(ch,lookahead,expanded)
         }
     end
     return results,{totalCandidates=#candidates,withheldWeapons=shortlist.withheldWeapons,
-        hiddenByLimit=shortlist.hiddenByLimit,totalShown=shortlist.totalShown,
-        validatedWeapons=shortlist.totalShown - (shortlist.totalShown - 0)}
+        hiddenByLimit=shortlist.hiddenByLimit,totalShown=shortlist.totalShown}
 end
