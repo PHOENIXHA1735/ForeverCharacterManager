@@ -669,7 +669,7 @@ eq(FCM:GatherResourceRows('6358','fishing')[1].unattributed,2,'stale hover and u
 -- without an importer, a discovered location or any live API calls.
 local function freshCatalog(db)
     local addon={db=db,Now=function() return 1800000000 end,Try=function(_,fn,...) if fn then return fn(...) end end}
-    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatheringExtras.lua','GatherBrowser.lua'}) do
+    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatheringExtras.lua','GatherBrowser.lua','GatherDetailModel.lua'}) do
         assert(loadfile('ForeverCharacterManager/'..file))('FCM',addon)
     end
     return addon
@@ -680,6 +680,21 @@ local herb=catalog:GatherResourceRows('Black Lotus','herbalism')[1]
 assert(herb and herb.count==0 and herb.detail():find('Required skill: 300',1,true))
 local ore=catalog:GatherResourceRows('Rough Stone','mining')[1]
 assert(ore and ore.count==0 and ore.detail():find('Copper Vein',1,true))
+local model=catalog:GatherMaterialDetailModel(ore,{professions={}},false)
+assert(model and model.itemID==2835 and model.name=='Rough Stone','read-only material panel header')
+eq(model.required,'1','identical candidate node requirements are summarized')
+eq(model.current,'Unknown','missing character profession never gets an invented skill')
+eq(model.canGather,'Unknown','candidate source must not imply a verified Forever drop')
+eq(#model.sources,2,'Rough Stone retains both candidate deposits')
+eq(model.sources[1].name,'Copper Vein','ordered candidate source')
+eq(model.sources[2].name,'Poor Copper Vein','ordered second candidate source')
+assert(model.zoneGroups[1].remaining>0,'default view limits long zone lists')
+local expandedModel=catalog:GatherMaterialDetailModel(ore,{professions={}},true)
+eq(expandedModel.zoneGroups[1].remaining,0,'expanded model exposes full reference zone list')
+assert(#expandedModel.zoneGroups[1].locations>4,'expanded list contains the hidden zones')
+assert(catalog:GatherMaterialDetailModel(catalog:GatherResourceRows('Copper Vein','mining')[1],nil,false)==nil,
+    'node records continue to use the existing detail UI')
+
 assert(catalog:GatherResourceRows('Coarse Stone','mining')[1])
 assert(catalog:GatherResourceRows('Heavy Stone','mining')[1])
 assert(catalog:GatherResourceRows('Solid Stone','mining')[1])

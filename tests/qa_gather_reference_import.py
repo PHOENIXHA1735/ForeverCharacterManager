@@ -51,6 +51,20 @@ class ImportTests(unittest.TestCase):
         self.assertIn('Gathering Filters',ui)
         self.assertIn('self:MakeMenu(self.gatherCategoryButton,entries,270,false)',ui)
         self.assertIn('self.gatherMoreButton=button',ui)
+        self.assertIn('self:RenderGatherMaterialPanel(selected.gatherResource,ch,self.gatherShowAllDetails)',ui)
+        self.assertIn('rows[#rows].gatherResource=resource',ui)
+        self.assertIn('self:HideGatherMaterialPanel()',ui)
+        for toc in ('ForeverCharacterManager.toc','ForeverCharacterManager_Camelot.toc'):
+            content=(ROOT/'ForeverCharacterManager'/toc).read_text(encoding='utf8')
+            self.assertIn('GatherDetailModel.lua',content)
+            self.assertIn('GatherDetailUI.lua',content)
+            self.assertLess(content.index('GatherBrowser.lua'),content.index('GatherDetailModel.lua'))
+            self.assertLess(content.index('UI.lua'),content.index('GatherDetailUI.lua'))
+        renderer=(ROOT/'ForeverCharacterManager/GatherDetailUI.lua').read_text(encoding='utf8')
+        self.assertIn('POSSIBLE SOURCE DEPOSITS',renderer)
+        self.assertIn('POTENTIAL SOURCE ZONES',renderer)
+        self.assertIn('YOUR GATHERING HISTORY',renderer)
+
 
 
 if __name__=='__main__':

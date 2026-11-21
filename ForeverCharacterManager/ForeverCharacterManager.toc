@@ -13,6 +13,7 @@ Gathering.lua
 GatheringReferenceData.lua
 GatheringExtras.lua
 GatherBrowser.lua
+GatherDetailModel.lua
 CommunityGathering.generated.lua
 Scan.lua
 Crafting.lua
@@ -42,4 +43,5 @@ FarmingAdvisor.lua
 ItemDecisions.lua
 Diagnostics.lua
 UI.lua
+GatherDetailUI.lua
 Tooltips.lua
