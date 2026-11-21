@@ -33,6 +33,7 @@ try{
     $engine=(Get-Process -Id $PID).Path
     & $engine -NoProfile -ExecutionPolicy Bypass -File $child (Join-Path $PSScriptRoot '../ForeverCharacterManager/FCM-Companion/ReferencePublication.ps1') $root $name
     if($LASTEXITCODE -ne 42){throw 'Cross-process writer was not blocked'}
+    $global:LASTEXITCODE=0 # The expected child refusal is a successful test.
 }finally{$hold.Dispose()}
 $reader=[IO.File]::Open($target,'Open','Read','ReadWrite')
 try{
