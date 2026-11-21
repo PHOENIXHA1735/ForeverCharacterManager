@@ -4080,9 +4080,7 @@ function UI:Refresh()
         self:RenderDungeonDetail(selected.dungeonRecord,ch)
     elseif selected then
         self:ResetDungeonWidgets()
-        local visualMaterial=tab=="Gathering" and selected.gatherResource and
-            selected.gatherResource.reference and selected.gatherResource.reference.material and
-            self.RenderGatherMaterialPanel
+        local visualMaterial=tab=="Gathering" and selected.gatherResource and self.RenderGatherMaterialPanel
         if visualMaterial then
             self:ResetItemPreview()
             self:HideDetailCards()

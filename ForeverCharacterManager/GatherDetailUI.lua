@@ -1,4 +1,4 @@
--- Opt-in visual-detail prototype for collected Gathering materials.
+-- Framed Gathering details for materials, nodes, fishing and treasure.
 -- The rest of FCM continues to use UI:RenderDetailCards unchanged.
 local _,FCM=...
 local UI=FCM.UI
@@ -46,14 +46,14 @@ function UI:HideGatherMaterialPanel()
 end
 
 function UI:RenderGatherMaterialPanel(resource,ch,expanded)
-    if not self.detailChild or not FCM.GatherMaterialDetailModel then return false end
-    local model=FCM:GatherMaterialDetailModel(resource,ch,expanded)
+    if not self.detailChild or not FCM.GatherDetailModel then return false end
+    local model=FCM:GatherDetailModel(resource,ch,expanded)
     if not model then return false end
     self.gatherMaterialFrames=self.gatherMaterialFrames or {}
     for _,frame in ipairs(self.gatherMaterialFrames) do frame:Hide() end
     local index=0
     local host=self.detailChild
-    local width=math.max(220,host:GetWidth()-8)
+    local width=math.max(1,host:GetWidth()-8)
     local y=5
     local function card(w,h,x,top)
         index=index+1
@@ -91,37 +91,51 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
     header.title:SetText("|cffffd17b"..tostring(model.name).."|r")
     header.title:Show()
     header.subtitle:ClearAllPoints()
-    header.subtitle:SetPoint("TOPLEFT",header,"TOPLEFT",59,-35)
+    local titleHeight=math.max(20,math.ceil(header.title:GetStringHeight()))
+    header.subtitle:SetPoint("TOPLEFT",header,"TOPLEFT",59,-(14+titleHeight))
     header.subtitle:SetWidth(width-72)
-    header.subtitle:SetText(tostring(model.itemType).."  |  Item "..tostring(model.itemID or "Unknown")..
-        "  |  "..tostring(model.profession))
+    header.subtitle:SetText(tostring(model.itemType)..
+        (model.itemID and ("  |  Item "..model.itemID) or "").."  |  "..tostring(model.profession))
     header.subtitle:Show()
-    y=y+77
+    local headerHeight=math.max(70,26+titleHeight+math.ceil(header.subtitle:GetStringHeight()))
+    header:SetHeight(headerHeight)
+    y=y+headerHeight+10
 
-    local spacing=5
-    local tileW=math.floor((width-spacing*2)/3)
-    local metricData={
-        {"Required Skill",model.required,"ffddb27a"},
-        {"Your Skill",model.current..(model.cap and ("/"..model.cap) or ""),"ffb7e4c4"},
-        {"Can Gather",model.canGather,"ffffc77b"}
-    }
-    for n,entry in ipairs(metricData) do
-        local x=3+(n-1)*(tileW+spacing)
-        local w=n==3 and width-2*(tileW+spacing) or tileW
-        local box=card(w,54,x,y)
+    local metrics=model.metrics or {}
+    local spacing=7
+    local metricColors={"ddb27a","b7e4c4","ffc77b"}
+    local inline=width>=330 and #metrics>1
+    local tileW=inline and math.floor((width-spacing*(#metrics-1))/#metrics) or width
+    local tileHeight=0
+    local tiles={}
+    for n,entry in ipairs(metrics) do
+        local x=inline and 3+(n-1)*(tileW+spacing) or 3
+        local box=card(tileW,56,x,y)
         box.bg:SetColorTexture(.08,.105,.105,.98)
         box.subtitle:ClearAllPoints()
-        box.subtitle:SetPoint("TOPLEFT",box,"TOPLEFT",7,-8)
-        box.subtitle:SetWidth(w-12)
+        box.subtitle:SetPoint("TOPLEFT",box,"TOPLEFT",9,-8)
+        box.subtitle:SetWidth(tileW-18)
         box.subtitle:SetText(entry[1])
         box.subtitle:Show()
+        local labelHeight=math.ceil(box.subtitle:GetStringHeight())
         box.title:ClearAllPoints()
-        box.title:SetPoint("TOPLEFT",box,"TOPLEFT",7,-26)
-        box.title:SetWidth(w-12)
-        box.title:SetText("|cff"..entry[3]..tostring(entry[2]).."|r")
+        box.title:SetPoint("TOPLEFT",box,"TOPLEFT",9,-(13+labelHeight))
+        box.title:SetWidth(tileW-18)
+        box.title:SetText("|cff"..metricColors[n]..tostring(entry[2]).."|r")
         box.title:Show()
+        local height=math.max(54,23+labelHeight+math.ceil(box.title:GetStringHeight()))
+        if inline then
+            tileHeight=math.max(tileHeight,height)
+            tiles[#tiles+1]=box
+        else
+            box:SetHeight(height)
+            y=y+height+spacing
+        end
     end
-    y=y+62
+    if inline then
+        for _,box in ipairs(tiles) do box:SetHeight(tileHeight) end
+        y=y+tileHeight+spacing
+    end
 
     local function section(title,lines)
         local box=card(width,50,3,y)
@@ -132,44 +146,50 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
         box.title:SetText("|cffffcf75"..title.."|r")
         box.title:Show()
         box.body:ClearAllPoints()
-        box.body:SetPoint("TOPLEFT",box,"TOPLEFT",11,-32)
+        local bodyTop=21+math.ceil(box.title:GetStringHeight())
+        box.body:SetPoint("TOPLEFT",box,"TOPLEFT",11,-bodyTop)
         box.body:SetWidth(width-22)
         box.body:SetText(table.concat(lines,"\n"))
         box.body:Show()
         local contentHeight=math.ceil(tonumber(box.body:GetStringHeight()) or 0)
-        local height=math.max(56,contentHeight+43)
+        local height=math.max(56,contentHeight+bodyTop+13)
         box:SetHeight(height)
         y=y+height+8
     end
 
-    local sources={}
-    for _,src in ipairs(model.sources) do
-        sources[#sources+1]="|cffffe4b5"..src.name.."|r  (Req: "..tostring(src.required)..
-            ")  |cffd5d5d5"..tostring(src.eligibility).."|r"
-    end
-    sources[#sources+1]="|cffffc77bWoW Forever material drops are not confirmed.|r"
-    section("POSSIBLE SOURCE DEPOSITS",sources)
-
-    local places={}
-    for _,group in ipairs(model.zoneGroups) do
-        places[#places+1]="|cffffd27f"..group.name.."|r"
-        for _,loc in ipairs(group.locations) do
-            places[#places+1]="   "..loc.name..(loc.reported and " (reported)" or " (reference)")
+    if model.sources then
+        local sources={}
+        for _,src in ipairs(model.sources) do
+            sources[#sources+1]="|cffffe4b5"..src.name.."|r  (Req: "..tostring(src.required)..
+                ")\nMeets reference node skill: "..tostring(src.eligibility)
         end
-        if group.total==0 then places[#places+1]="   No verified zone locations" end
-        if group.remaining>0 then
-            places[#places+1]="   |cffb3d3fb+"..group.remaining..
-                " more zones — Show All Details below|r"
-        end
-    end
-    section("POTENTIAL SOURCE ZONES",places)
+        sources[#sources+1]="|cffffc77bWoW Forever material drops are not confirmed.|r"
+        section(model.sourceHeading,sources)
 
-    section("YOUR GATHERING HISTORY",model.history)
-    -- Keep acquisition notes and provenance in expanded detail, rather
-    -- than presenting redundant cards in the default material overview.
-    if expanded then
-        section("HOW IT IS OBTAINED",{model.explanation})
-        section("REFERENCE STATUS",{model.verificationNote})
+        local places={}
+        for _,group in ipairs(model.zoneGroups) do
+            places[#places+1]="|cffffd27f"..group.name.."|r"
+            for _,loc in ipairs(group.locations) do
+                places[#places+1]="   "..loc.name..(loc.reported and " (reported)" or " (reference)")
+            end
+            if group.total==0 then places[#places+1]="   No verified zone locations" end
+            if group.remaining>0 then
+                places[#places+1]="   |cffb3d3fb+"..group.remaining..
+                    " more zones — Show All Details below|r"
+            end
+        end
+        section("POTENTIAL SOURCE ZONES",places)
+
+        section("YOUR GATHERING HISTORY",model.history)
+        -- Keep acquisition notes and provenance in expanded detail, rather
+        -- than presenting redundant cards in the default material overview.
+        if expanded then
+            section("HOW IT IS OBTAINED",{model.explanation})
+            section("REFERENCE STATUS",{model.verificationNote})
+            if model.referenceSection then section(model.referenceSection.title,model.referenceSection.lines) end
+        end
+    else
+        for _,entry in ipairs(model.sections or {}) do section(entry.title,entry.lines) end
     end
     host:SetHeight(math.max(345,y+9))
     self.detailText:Hide()

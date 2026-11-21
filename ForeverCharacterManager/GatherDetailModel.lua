@@ -1,6 +1,8 @@
 -- Structured, read-only view data for the Gathering visual-detail prototype.
 -- This module never changes gathering history, map pins, reference records or skill snapshots.
 local _,FCM=...
+local sourceHeadings={herbalism="Possible Source Herbs",mining="Possible Source Deposits",
+    fishing="Fishing Sources",treasure="Treasure Sources"}
 local professionNames={herbalism="Herbalism",mining="Mining",fishing="Fishing",treasure="Treasure"}
 
 local function zonesFor(source,expanded)
@@ -31,7 +33,7 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
     local model={
         name=row.name, icon=row.icon, itemID=ref.itemID or row.itemID,
         itemType=ref.materialType or "Material", profession=professionNames[row.kind] or row.kind,
-        kind=row.kind, sources={}, zoneGroups={}, history={},
+        kind=row.kind, sourceHeading=sourceHeadings[row.kind], sources={}, zoneGroups={}, history={},
         required="Varies",current="Unknown",cap=nil,canGather="Unknown",
         explanation=ref.environment or "Potential source mapping; WoW Forever drop verification pending.",
         expanded=not not expanded
@@ -100,6 +102,50 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
         end
     end
     if #model.history==0 then model.history[1]="No personal discoveries recorded." end
-    model.verificationNote="Source deposits are candidate references; item drops in WoW Forever are not confirmed."
+    model.verificationNote="These source nodes are candidates. A character meeting the node skill does not verify the specific WoW Forever item drop."
+    return model
+end
+
+function FCM:GatherDetailModel(row,ch,expanded)
+    if not row or not sourceHeadings[row.kind] or type(row.detail)~="function" then return end
+    local material=self:GatherMaterialDetailModel(row,ch,expanded)
+    local model=material or {
+        name=row.name,icon=row.icon,kind=row.kind,profession=professionNames[row.kind],
+        itemID=row.itemID or (row.reference and row.reference.itemID),
+        itemType=row.kind=="treasure" and "Treasure" or row.kind=="fishing" and
+            (row.summary or "Fishing") or "Gathering node",
+        sections={}
+    }
+    local sections=row.detail(expanded,true)
+    if material then
+        model.metrics={{"Source node skill",model.required},{"Your skill",model.current..(model.cap and ("/"..model.cap) or "")},
+            {"Forever drop","Unverified"}}
+        if expanded then
+            for _,section in ipairs(sections) do
+                if section.title=="REFERENCE SOURCES" then model.referenceSection=section end
+            end
+        end
+    elseif row.kind=="herbalism" or row.kind=="mining" then
+        local _,_,skill=self:GatherResourceSkill(row.kind,row.name,ch)
+        local fresh=skill.age and skill.age>=0 and skill.age<=86400
+        model.metrics={{"Required skill",skill.required or "Unknown"},{"Your skill",fresh and skill.current or "Unknown"},
+            {"Can gather node",skill.can}}
+    elseif row.kind=="fishing" then
+        model.metrics={{"Effective Fishing",self:GatherEffectiveFishingSkill(ch) or "Unknown"}}
+    end
+    if not material then
+        local hasFishingSources=false
+        for _,section in ipairs(sections) do
+            if section.title=="FISHING SOURCES" then hasFishingSources=true end
+        end
+        for _,section in ipairs(sections) do
+            if section.title=="FISHING SOURCES" or
+                (section.title=="REPORTED FISHING WATERS" and not hasFishingSources) or
+                section.title=="REFERENCE ZONES" then
+                section.title=sourceHeadings[row.kind]
+            end
+            model.sections[#model.sections+1]=section
+        end
+    end
     return model
 end

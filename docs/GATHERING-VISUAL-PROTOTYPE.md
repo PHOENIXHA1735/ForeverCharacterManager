@@ -21,3 +21,13 @@ The layout uses native frame textures and font strings, not photorealistic art. 
 ## Removing the optional GatherMate2 integration
 
 GatherMate2 importing has been removed from the Gathering UI and Lua backend. The prior imported-only points are retained in the user's SavedVariables for possible future migration, but are no longer displayed as active FCM resource nodes, counted discoveries, minimap icons or world-map pins. Personal discoveries and community references continue to behave normally. The single Show All Details button is now anchored at the right edge below the detail pane; there is no GatherMate2 import action. Acquisition/reference notes are placed in the expanded material view, keeping the default panel compact. This does not uninstall or alter a separately installed GatherMate2 addon.
+
+## Phase 2
+
+The framed renderer now handles ordinary herb and mining nodes, fishing, and
+treasure in addition to collected materials. Sections reuse the Gathering browser
+reference and observation data. Material rows show source-node skill eligibility
+separately from the unverified Forever drop. Fishing shows effective Fishing when
+known, and treasure has no profession tile or difficulty ladder. Narrow panes
+stack the skill tiles, and wrapped headers and section text contribute to scroll height.
+The actual game font metrics and resizing still require manual in-game QA.

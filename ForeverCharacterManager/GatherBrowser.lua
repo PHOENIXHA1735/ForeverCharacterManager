@@ -249,10 +249,13 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
         if row.referenceWaters and #row.referenceWaters>6 then row.hasExtraDetails=true end
         if ref and #(ref.sourceIDs or {})>0 then row.hasExtraDetails=true end
         if row.referenceWaters and #row.referenceWaters>0 then row.hasExtraDetails=true end
-        row.detail=function(expanded)
-            local blocks={}
+        row.detail=function(expanded,structured)
+            local blocks,sections={},{}
             local function block(title,lines)
-                if #lines>0 then blocks[#blocks+1]=title.."\n"..table.concat(lines,"\n") end
+                if #lines>0 then
+                    if structured then sections[#sections+1]={title=title,lines=lines}
+                    else blocks[#blocks+1]=title.."\n"..table.concat(lines,"\n") end
+                end
             end
             local main={(row.icon and ("|T"..tostring(row.icon)..":24:24|t ") or "")..row.name,
                 row.summary}
@@ -271,7 +274,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                 skillLines[#skillLines+1]="RED: below minimum | YELLOW: escapes possible"
                 skillLines[#skillLines+1]="GREEN: no escapes expected | UNKNOWN: unverified"
                 skillLines[#skillLines+1]="Fishing skill-up chance is separate from escape risk."
-            else
+            elseif row.kind~="treasure" then
                 local _,state,info=self:GatherResourceSkill(row.kind,row.name,ch)
                 info=info or {}
                 skillLines[#skillLines+1]="Required skill: "..tostring(info.required or "Unknown")
@@ -302,7 +305,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                         local required=source and (source.minimumSkill or source.orange) or nil
                         local eligibility=info and info.can or "Unknown"
                         sources[#sources+1]=name.." - required "..tostring(required or "Unknown")..
-                            " - Can gather: "..eligibility
+                            " - Meets reference node skill: "..eligibility
                     end
                 end
                 if #sources==0 then sources[1]="Verified source nodes not yet documented" end
@@ -420,7 +423,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             if #observations==0 then observations[1]="No personal discoveries recorded" end
             block("YOUR GATHERING HISTORY",observations)
             if row.kind=="fishing" and #row.locations>0 then
-                blocks[#blocks+1]="Map coordinates show the player's standing position, not the pool."
+                block("LOCATION NOTES",{"Map coordinates show the player's standing position, not the pool."})
             end
             local refsOut,seenRef={},{}
             local function addRef(id)
@@ -433,6 +436,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                 table.sort(refsOut)
                 block("REFERENCE SOURCES",refsOut)
             end
+            if structured then return sections end
             return table.concat(blocks,"\n\n")
         end
     end

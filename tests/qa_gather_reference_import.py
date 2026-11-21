@@ -68,7 +68,7 @@ class ImportTests(unittest.TestCase):
             self.assertLess(content.index('GatherBrowser.lua'),content.index('GatherDetailModel.lua'))
             self.assertLess(content.index('UI.lua'),content.index('GatherDetailUI.lua'))
         renderer=(ROOT/'ForeverCharacterManager/GatherDetailUI.lua').read_text(encoding='utf8')
-        self.assertIn('POSSIBLE SOURCE DEPOSITS',renderer)
+        self.assertIn('section(model.sourceHeading,sources)',renderer)
         self.assertIn('POTENTIAL SOURCE ZONES',renderer)
         self.assertIn('YOUR GATHERING HISTORY',renderer)
 

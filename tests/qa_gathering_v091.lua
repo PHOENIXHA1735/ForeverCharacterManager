@@ -757,3 +757,77 @@ local caught=catalog:GatherResourceRows('251524','fishing')[1]
 eq(caught.count,2,'fish count only includes personal observations after restart')
 eq(#caught.locations,1,'reference zone does not increase personal fishing locations')
 eq(#catalog:GatherNodes(),3,'only personal observations are saved')
+
+-- Render all professions using synthetic frames with wrapped line metrics.
+local function mockFrame(w)
+    local f={width=w or 340}
+    function f:SetWidth(value) self.width=value end
+    function f:GetWidth() return self.width end
+    function f:SetHeight(value) self.height=value end
+    function f:SetSize(width,height) self.width,self.height=width,height end
+    function f:SetText(value) self.text=value end
+    function f:SetPoint(_,_,_,x,y) self.x,self.y=x,y end
+    function f:GetStringHeight()
+        local rows=0
+        local text=(self.text or ""):gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+        for line in (text.."\n"):gmatch("(.-)\n") do
+            rows=rows+math.max(1,math.ceil(#line/math.max(1,math.floor(self.width/7))))
+        end
+        return rows*15
+    end
+    function f:Hide() self.visible=false end
+    function f:Show() self.visible=true end
+    f.CreateTexture=mockFrame
+    f.CreateFontString=mockFrame
+    return setmetatable(f,{__index=function() return function() end end})
+end
+local originalCreate=CreateFrame
+CreateFrame=function() return mockFrame() end
+catalog.UI={detailText=mockFrame()}
+assert(loadfile('ForeverCharacterManager/GatherDetailUI.lua'))('FCM',catalog)
+local function exactRow(kind,name)
+    for _,r in ipairs(catalog:GatherResourceRows(name,kind)) do
+        if r.name==name then return r end
+    end
+end
+local mined=exactRow('mining','Rough Stone')
+local herbMaterial=exactRow('herbalism','Swiftthistle')
+local herbNode=exactRow('herbalism',"Arthas' Tears")
+local fishRow=exactRow('fishing','Firefin Snapper')
+local treasureRow=exactRow('treasure','Battered Chest')
+local skilled={professions={Mining={skill=121,maxSkill=150,scan=catalog:Now()}}}
+local model2=catalog:GatherDetailModel(mined,skilled,false)
+eq(model2.metrics[2][2],'121/150','character metric is printable')
+eq(model2.metrics[3][2],'Unverified','skill cannot verify the drop')
+eq(model2.sources[1].eligibility,'Yes','candidate skill met independently')
+local cases={{mined,'Possible Source Deposits'},{herbMaterial,'Possible Source Herbs'},
+    {herbNode,'Possible Source Herbs'},{copperNode,'Possible Source Deposits'},
+    {fishRow,'Fishing Sources'},{treasureRow,'Treasure Sources'}}
+for _,case in ipairs(cases) do
+    for _,width in ipairs({220,300,405,500}) do
+        catalog.UI.detailChild=mockFrame(width)
+        catalog.UI.gatherMaterialFrames=nil
+        for _,expanded in ipairs({false,true}) do
+            assert(catalog.UI:RenderGatherMaterialPanel(case[1],skilled,expanded))
+            local heading=false
+            for _,card in ipairs(catalog.UI.gatherMaterialFrames) do
+                if card.visible then
+                    assert(card.x+card.width<=width,'framed section fits the pane')
+                    assert(-card.y+card.height<=catalog.UI.detailChild.height,'scroll extent covers the card')
+                    if card.title.text:find(case[2],1,true) then heading=true end
+                    if case[1]==treasureRow then
+                        assert(not card.title.text:lower():find('skill',1,true))
+                    end
+                end
+            end
+            assert(heading,case[2])
+        end
+    end
+end
+catalog.UI.detailChild=mockFrame(405)
+catalog.UI.gatherMaterialFrames=nil
+assert(catalog.UI:RenderGatherMaterialPanel(mined,skilled,false))
+eq(catalog.UI.gatherMaterialFrames[2].title.text,'|cffddb27a1|r','exact WoW skill color bytes')
+eq(catalog.UI.gatherMaterialFrames[3].title.text,'|cffb7e4c4121/150|r','exact WoW character color bytes')
+eq(catalog.UI.gatherMaterialFrames[4].title.text,'|cffffc77bUnverified|r','exact WoW drop color bytes')
+CreateFrame=originalCreate
