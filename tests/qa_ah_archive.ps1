@@ -48,4 +48,57 @@ $disableProbe=@{Called=$false}
 function Disable-ScheduledTask { param($TaskName,$ErrorAction) if ($TaskName -ne 'FCM-AHHistory') { throw 'Wrong task' }; $disableProbe.Called=$true }
 & $script -AddonRoot $addon -Mode Disable
 if (-not $disableProbe.Called -or @(Get-ChildItem -LiteralPath (Join-Path $addon 'AHHistory\RawScans') -Recurse -Filter '*.lua').Count -ne 2) { throw 'Disable changed archive contents' }
+# Exercise the hidden-launcher contract with a synthetic PowerShell target.
+# This never runs the real archiver through WScript or touches a user's WoW files.
+$launcher=Join-Path $repo 'ForeverCharacterManager\FCM-Companion\FCM-AHHistory-Hidden.vbs'
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Hidden AHHistory launcher absent' }
+$enableSource=[IO.File]::ReadAllText($script)
+if ($enableSource -notmatch 'FCM-AHHistory-Hidden\.vbs' -or $enableSource -notmatch 'wscript\.exe' -or $enableSource -notmatch 'launcherMode') {
+    throw 'Enable mode must register the fixed-mode hidden launcher'
+}
+$probeCompanion=Join-Path $addon 'FCM-Companion'
+New-Item -ItemType Directory -Path $probeCompanion -Force | Out-Null
+$probeLauncher=Join-Path $probeCompanion 'FCM-AHHistory-Hidden.vbs'
+Copy-Item -LiteralPath $launcher -Destination $probeLauncher
+@'
+param([string]$Mode, [string]$AddonRoot, [switch]$IncludeProviderTables)
+if ($Mode -ne 'Sync') { exit 91 }
+if (-not (Test-Path -LiteralPath (Join-Path $AddonRoot 'ForeverCharacterManager.toc'))) { exit 92 }
+if (Test-Path -LiteralPath (Join-Path $AddonRoot 'launcher-error.flag')) { exit 9 }
+$label=if ($IncludeProviderTables) { 'provider' } else { 'personal' }
+[IO.File]::WriteAllText((Join-Path $AddonRoot 'launcher-probe.txt'),$label)
+exit 0
+'@ | Set-Content -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1') -Encoding UTF8
+$wscript=Join-Path $env:SystemRoot 'System32\wscript.exe'
+if (-not (Test-Path -LiteralPath $wscript)) { throw 'Windows Script Host unavailable to test hidden launcher' }
+# wscript.exe is a GUI-subsystem executable. PowerShell's bare & invocation
+# can return before it finishes, so use Start-Process -Wait -PassThru.
+function Invoke-HiddenProbe([string]$mode) {
+    $args=('//B //NoLogo "{0}" {1}' -f $probeLauncher,$mode)
+    $process=Start-Process -FilePath $wscript -ArgumentList $args -Wait -PassThru -ErrorAction Stop
+    return $process.ExitCode
+}
+$probeFile=Join-Path $addon 'launcher-probe.txt'
+$code=Invoke-HiddenProbe 'personal'
+$observed=if (Test-Path -LiteralPath $probeFile) { (Get-Content -LiteralPath $probeFile -Raw).Trim() } else { '<missing>' }
+if ($code -ne 0 -or $observed -ne 'personal') {
+    throw "Personal mode failed: exit=$code probe=$observed"
+}
+$code=Invoke-HiddenProbe 'provider'
+$observed=if (Test-Path -LiteralPath $probeFile) { (Get-Content -LiteralPath $probeFile -Raw).Trim() } else { '<missing>' }
+if ($code -ne 0 -or $observed -ne 'provider') {
+    throw "Explicit provider mode failed: exit=$code probe=$observed"
+}
+$failureFlag=Join-Path $addon 'launcher-error.flag'
+Set-Content -LiteralPath $failureFlag -Value 'synthetic-failure'
+$code=Invoke-HiddenProbe 'personal'
+if ($code -ne 9) { throw "Hidden launcher failed to forward child exit 9; got $code" }
+Remove-Item -LiteralPath $failureFlag
+$code=Invoke-HiddenProbe 'unexpected'
+if ($code -ne 64) { throw "Hidden launcher accepted unexpected mode; exit=$code" }
+Remove-Item -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1')
+$code=Invoke-HiddenProbe 'personal'
+if ($code -ne 2) { throw "Missing target script expected exit 2; got $code" }
+Write-Output 'PASS: fixed-mode hidden AHHistory launcher, opt-in routing, invalid-mode refusal and exit codes (synthetic fixture).'
+
 Write-Output 'PASS: initial copy, deduplication, preservation, UTC/hash metadata, change retention, overlap lock and locked-source cleanup. Synthetic fixture only, including provider opt-in.'

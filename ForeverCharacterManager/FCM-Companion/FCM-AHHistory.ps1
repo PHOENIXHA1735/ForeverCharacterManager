@@ -19,9 +19,15 @@ if (-not $GameRoot) { $GameRoot = Split-Path -Parent (Split-Path -Parent (Split-
 if ($Mode -eq 'Status') { Get-ScheduledTask -TaskName $taskName -ErrorAction Stop; return }
 if ($Mode -eq 'Disable') { Disable-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null; return }
 if ($Mode -eq 'Enable') {
-    $taskArgs = ('-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -AddonRoot "{1}"' -f $MyInvocation.MyCommand.Path,$AddonRoot)
-    if ($IncludeProviderTables) { $taskArgs += ' -IncludeProviderTables' }
-    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $taskArgs
+    # A console executable can flash even with -WindowStyle Hidden when started
+    # by an interactive task. WScript invokes the fixed local PowerShell script
+    # invisibly, waits for completion and forwards its exit code to Scheduler.
+    # Provider tables are NEVER included unless the caller explicitly opts in.
+    $launcher = Join-Path $companion 'FCM-AHHistory-Hidden.vbs'
+    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'AHHistory hidden launcher missing; task not modified' }
+    $launcherMode = if ($IncludeProviderTables) { 'provider' } else { 'personal' }
+    $taskArgs = ('//B //NoLogo "{0}" {1}' -f $launcher,$launcherMode)
+    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\wscript.exe" -Argument $taskArgs -WorkingDirectory $companion
     $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 30)
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 25) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited

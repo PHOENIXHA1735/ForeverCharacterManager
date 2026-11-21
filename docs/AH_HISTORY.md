@@ -8,9 +8,22 @@ Run the existing Setup-FCM-AHHistory.ps1 against the installed addon first.
 The companion's FCM-AHHistory.ps1 supports Sync, Enable, Disable and Status.
 The matching CMD controls are installed beside it. Enable registers one
 FCM-AHHistory task, repeating every 30 minutes while the Windows user is signed
-in. It needs no running game. Disable prevents future runs without deleting
-archives or interrupting an active safe copy. The task ignores overlapping
-runs, and a file lock also covers manual invocations.
+in. It needs no running game. On Windows, Enable uses the shipped
+FCM-AHHistory-Hidden.vbs launcher via wscript.exe //B //NoLogo, rather than
+starting a visible powershell.exe console directly. The launcher accepts only
+the fixed `personal` or explicitly opted-in `provider` mode, derives the
+installed script path locally, waits for the PowerShell process and forwards
+its exit code. It does not allow arbitrary commands or input paths.
+
+The default scheduled mode is **personal**: it never retains provider tables.
+The `provider` mode is selected only when the user independently has retention
+permission and explicitly enables with `-IncludeProviderTables`. Re-enabling
+the task may replace an existing custom task action and reset its trigger;
+back up a working task configuration before any intentional re-enable. Merely
+installing the new scripts does not change existing scheduled tasks.
+Disable prevents future runs without deleting archives or interrupting an
+active safe copy. The task ignores overlapping runs, and a file lock also
+covers manual invocations.
 
 By default, Sync and the optional task archive ONLY personal AHledger.lua
 SavedVariables. To archive downloaded AHledger_Data.lua provider tables, a
@@ -85,3 +98,19 @@ Tests: qa_ah_archive.ps1 (PowerShell 5.1); qa_ah_history.py; qa_gold_advisor.lua
 Live Task Scheduler, sign-in startup and in-game visual behavior require their
 own Windows/client verification. A failing task installation must be reported,
 never presented as active automation. No release is authorized by these changes.
+
+## Separate private Windows updater
+
+Some installations have an additional, **locally maintained** Private365
+updater that is not part of the public GitHub release. Its own scheduled task
+and private records must not be bundled into source control. When using an
+isolated/embedded Python runtime with a trusted `deps/lupa` installation,
+a different `lupa` directory inside the updater application can shadow the
+working compiled `lupa.lua51` extension. In that layout, after backing up the
+local updater, placing its own application path after the runtime dependencies
+(`sys.path.append(str(HERE))` instead of `sys.path.insert(0,str(HERE))`)
+resolved the import conflict on the verified Windows installation. This is
+a **diagnostic for that specific path layout**, not a universal automatic
+rewrite. Confirm the imported Lupa location, check the scheduled task's exit
+code and verify a freshly written local status file with no errors. Keep
+`binding.json`, private data, personal paths and archives out of GitHub.
