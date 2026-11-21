@@ -678,7 +678,10 @@ local catalogDB={gathering={schema=1,nodes={},stats={}}}
 local catalog=freshCatalog(catalogDB)
 local herb=catalog:GatherResourceRows('Black Lotus','herbalism')[1]
 assert(herb and herb.count==0 and herb.detail():find('Required skill: 300',1,true))
-local ore=catalog:GatherResourceRows('Rough Stone','mining')[1]
+local ore
+for _,candidate in ipairs(catalog:GatherResourceRows('Rough Stone','mining')) do
+    if candidate.name=='Rough Stone' then ore=candidate;break end
+end
 assert(ore and ore.count==0 and ore.detail():find('Copper Vein',1,true))
 local model=catalog:GatherMaterialDetailModel(ore,{professions={}},false)
 assert(model and model.itemID==2835 and model.name=='Rough Stone','read-only material panel header')
