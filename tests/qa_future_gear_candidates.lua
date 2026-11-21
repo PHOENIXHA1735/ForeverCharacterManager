@@ -91,4 +91,43 @@ assert(unknownBind.sources[1].knownCrafters[1].recipientStatus=='verify',
  'Unknown binding cannot become ready')
 items[100].bindType=2
 assert(mine.level==25 and items[100].requiredLevel==30 and #F.externalData.dungeons.d1.lootIDs==2,'All inputs remain read-only')
+-- Actual companion serializes human-readable subclass/binding, numbered slotID,
+-- and resultID for references; check adapters against those exact field names.
+local originalRecipe=F.externalData.recipes
+local originalDungeons=F.externalData.dungeons
+F.externalData.recipes={
+ [901]={name='Companion cloth',profession='Tailoring',resultID=201,
+     skill=125,sourceProvider='ForeverDB',acquisition='Vendor unverified'},
+ [902]={name='Companion bad metadata',resultID=202},
+ [903]={name='Companion unknown bind',resultID=203},
+ [904]={name='Companion two hand',resultID=204},
+ [905]={name='Companion beta-only',resultID=205},
+}
+F.externalData.dungeons={}
+items[201]={name='Companion-only chest',requiredLevel='29',itemLevel='47',
+    classID='4',subclass='Cloth',equipLoc='Chest',slotID='5',binding='Bind on Equip',
+    sourceProvider='ForeverDB',referenceCheckedAt='2026-11-21T16:00:00Z'}
+items[202]={name='Contradiction',requiredLevel=29,classID=4,subclass='Cloth',
+    equipLoc='Chest',slotID=1}
+items[203]={name='Unknown bind',requiredLevel=30,classID=4,subclass='Cloth',
+    equipLoc='INVTYPE_CHEST',binding='No binding data'}
+items[204]={name='Two handed axe',requiredLevel=28,classID=2,
+    equipLoc='Two-Hand',slotID=17,binding='Binds when equipped'}
+items[205]={name='Old beta item',requiredLevel=28,classID=4,subclass='Cloth',
+    equipLoc='Chest',betaEvent=true}
+local imported=indexed(P:Candidates(mine,10,{source='crafting'}))
+assert(imported[201] and imported[201].slot==5 and imported[201].requiredLevel==29,
+ 'Companion-specific equipLoc and string level are recognized')
+assert(imported[201].bindType==2 and imported[201].subclassID==1,
+ 'Companion binding and named armor subtype normalized conservatively')
+assert(imported[201].itemSourceProvider=='ForeverDB' and imported[201].itemCheckedAt,
+ 'Reference provenance retained')
+assert(not imported[202], 'Contradictory equipLoc and slotID must not be accepted')
+assert(imported[203].bindType==nil and imported[203].eligibility=='verify',
+ 'Unverified binding and class restrictions remain unknown')
+assert(imported[204].eligibility=='verify', 'Named two-hand weapon cannot bypass proficiency')
+assert(imported[205].availabilityStatus=='historical-beta-event',
+ 'Historical beta items must be visibly flagged as uncertain')
+F.externalData.recipes=originalRecipe
+F.externalData.dungeons=originalDungeons
 print('PASS: future candidate aggregation, levels, filters, restrictions, provenance and read-only handling')
