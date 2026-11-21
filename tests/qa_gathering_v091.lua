@@ -669,7 +669,7 @@ eq(FCM:GatherResourceRows('6358','fishing')[1].unattributed,2,'stale hover and u
 -- without an importer, a discovered location or any live API calls.
 local function freshCatalog(db)
     local addon={db=db,Now=function() return 1800000000 end,Try=function(_,fn,...) if fn then return fn(...) end end}
-    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatherBrowser.lua'}) do
+    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatheringExtras.lua','GatherBrowser.lua'}) do
         assert(loadfile('ForeverCharacterManager/'..file))('FCM',addon)
     end
     return addon
@@ -679,7 +679,22 @@ local catalog=freshCatalog(catalogDB)
 local herb=catalog:GatherResourceRows('Black Lotus','herbalism')[1]
 assert(herb and herb.count==0 and herb.detail():find('Required skill: 300',1,true))
 local ore=catalog:GatherResourceRows('Rough Stone','mining')[1]
-assert(ore and ore.count==0)
+assert(ore and ore.count==0 and ore.detail():find('Copper Vein',1,true))
+assert(catalog:GatherResourceRows('Coarse Stone','mining')[1])
+assert(catalog:GatherResourceRows('Heavy Stone','mining')[1])
+assert(catalog:GatherResourceRows('Solid Stone','mining')[1])
+assert(catalog:GatherResourceRows('Dense Stone','mining')[1])
+for _,name in ipairs({'Malachite','Tigerseye','Jade','Citrine','Arcane Crystal'}) do
+    local mat=catalog:GatherResourceRows(name,'mining')[1]
+    assert(mat and mat.detail():find('SOURCE NODES',1,true),'mining material catalog entry: '..name)
+end
+local swift=catalog:GatherResourceRows('Swiftthistle','herbalism')[1]
+assert(swift and swift.detail():find('Mageroyal',1,true))
+local lichen=catalog:GatherResourceRows('Frilled Lichen','herbalism')[1]
+assert(lichen and lichen.detail():find('Earthroot',1,true))
+local seeds=catalog:GatherResourceRows('Commonplace Herb Seeds','herbalism')[1]
+assert(seeds and seeds.count==0 and seeds.detail():find('Peacebloom',1,true))
+assert(#catalog:GatherNodes()==0,'reference materials never produce personal map pins')
 local fish=catalog:GatherResourceRows('251524','fishing')[1]
 assert(fish and fish.name=='Whimsyfin' and fish.count==0 and fish.detail():find('Redridge Mountains',1,true))
 assert(catalog:GatherResourceRows('21150','fishing',nil,'wreckage')[1])

@@ -45,6 +45,10 @@ class ImportTests(unittest.TestCase):
         self.assertLess(ui.index('14,contentTop)'),ui.index('self.gatherWorldButton:SetShown(gathering)'))
         self.assertLess(ui.index('-15,contentTop)'),ui.index('self.gatherWorldButton:SetShown(gathering)'))
         self.assertLess(138+25,170)
+        self.assertNotIn('self.gatherSkillButton',ui)
+        self.assertIn('Fishing - Schools & Pools',ui)
+        self.assertIn('Fishing - Oil Spills & Wreckage',ui)
+        self.assertIn('Gathering Filters',ui)
 
 
 if __name__=='__main__':

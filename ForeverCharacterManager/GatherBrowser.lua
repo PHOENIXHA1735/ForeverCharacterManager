@@ -343,7 +343,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                         self:GatherCountLabel(point))
                 end
             end
-            if row.unattributed then observations[#observations+1]="Catch with no verified pool or location: x"..row.unattributed end
+            if row.unattributed then observations[#observations+1]="Confirmed catch; pool and location unverified: x"..row.unattributed end
             if #observations==0 then observations[1]="No personal discoveries recorded" end
             block("YOUR GATHERING HISTORY",observations)
             if row.kind=="fishing" and #row.locations>0 then
