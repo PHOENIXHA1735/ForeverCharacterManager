@@ -45,7 +45,8 @@ local equipNames={
     feet="INVTYPE_FEET",boots="INVTYPE_FEET",wrist="INVTYPE_WRIST",
     wrists="INVTYPE_WRIST",hands="INVTYPE_HAND",gloves="INVTYPE_HAND",
     finger="INVTYPE_FINGER",ring="INVTYPE_FINGER",trinket="INVTYPE_TRINKET",
-    weapon="INVTYPE_WEAPON",mainhand="INVTYPE_WEAPONMAINHAND",
+    weapon="INVTYPE_WEAPON",onehand="INVTYPE_WEAPON",
+    mainhand="INVTYPE_WEAPONMAINHAND",
     offhand="INVTYPE_WEAPONOFFHAND",twohand="INVTYPE_2HWEAPON",
     twohanded="INVTYPE_2HWEAPON",shield="INVTYPE_SHIELD",
     holdable="INVTYPE_HOLDABLE",heldinoffhand="INVTYPE_HOLDABLE",
@@ -53,20 +54,30 @@ local equipNames={
     thrown="INVTYPE_THROWN",relic="INVTYPE_RELIC",
 }
 local armorNames={cloth=1,leather=2,mail=3,plate=4,shield=6}
+local function equipToken(value,slots)
+    if value==nil then return nil end
+    if slots[value] then return value end
+    if type(value)=="number" then return inventoryTypes[value] end
+    if type(value)=="string" then
+        local clean=value:lower():gsub("[^%w]","")
+        return equipNames[clean] or inventoryTypes[tonumber(value)]
+    end
+    return nil
+end
 local function rawEquip(ref,info,gear)
     local slots=gear.slots
-    if info and info.equip and slots[info.equip] then return info.equip end
-    local raw=ref.equipLoc or ref.equip
-    local named=raw and slots[raw] and raw or nil
-    if not named and type(raw)=="string" then
-        local normalized=raw:lower():gsub("[^%w]","")
-        named=equipNames[normalized]
-    end
-    local numeric=inventoryTypes[tonumber(ref.slotID)]
-    if named and numeric and named~=numeric then
+    -- Real Nov 19 companion records write human-readable slotID such as
+    -- "Main Hand", "One-Hand", "Two-Hand", "Held In Off-hand", "Chest".
+    -- equipLoc may be absent for every imported item. Do not assume slotID
+    -- is a numeric inventory type or misread it as a character gear slot.
+    local live=info and equipToken(info.equip,slots)
+    if live and slots[live] then return live end
+    local named=equipToken(ref.equipLoc or ref.equip,slots)
+    local inventory=equipToken(ref.slotID,slots)
+    if named and inventory and named~=inventory then
         return nil,"Conflicting inventory type and equipment location"
     end
-    local selected=named or numeric
+    local selected=named or inventory
     if not selected or not slots[selected] then
         return nil,"Equipment location not validated"
     end
