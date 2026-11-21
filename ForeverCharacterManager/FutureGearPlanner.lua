@@ -25,6 +25,66 @@ end
 local function fromRef(items,id)
     return items[id] or items[tostring(id)] or {}
 end
+-- These are *inventory type* IDs, not character inventory slot numbers.
+-- The companion emits slotID/inventoryType and sometimes a human-readable
+-- equipLoc rather than WoW's INVTYPE_* token.
+local inventoryTypes={
+    [1]="INVTYPE_HEAD",[2]="INVTYPE_NECK",[3]="INVTYPE_SHOULDER",
+    [5]="INVTYPE_CHEST",[6]="INVTYPE_WAIST",[7]="INVTYPE_LEGS",
+    [8]="INVTYPE_FEET",[9]="INVTYPE_WRIST",[10]="INVTYPE_HAND",
+    [11]="INVTYPE_FINGER",[12]="INVTYPE_TRINKET",[13]="INVTYPE_WEAPON",
+    [14]="INVTYPE_SHIELD",[15]="INVTYPE_RANGED",[16]="INVTYPE_CLOAK",
+    [17]="INVTYPE_2HWEAPON",[20]="INVTYPE_ROBE",[21]="INVTYPE_WEAPONMAINHAND",
+    [22]="INVTYPE_WEAPONOFFHAND",[23]="INVTYPE_HOLDABLE",
+    [25]="INVTYPE_THROWN",[26]="INVTYPE_RANGEDRIGHT",[28]="INVTYPE_RELIC",
+}
+local equipNames={
+    head="INVTYPE_HEAD",neck="INVTYPE_NECK",shoulder="INVTYPE_SHOULDER",
+    shoulders="INVTYPE_SHOULDER",chest="INVTYPE_CHEST",robe="INVTYPE_ROBE",
+    waist="INVTYPE_WAIST",belt="INVTYPE_WAIST",legs="INVTYPE_LEGS",
+    feet="INVTYPE_FEET",boots="INVTYPE_FEET",wrist="INVTYPE_WRIST",
+    wrists="INVTYPE_WRIST",hands="INVTYPE_HAND",gloves="INVTYPE_HAND",
+    finger="INVTYPE_FINGER",ring="INVTYPE_FINGER",trinket="INVTYPE_TRINKET",
+    weapon="INVTYPE_WEAPON",mainhand="INVTYPE_WEAPONMAINHAND",
+    offhand="INVTYPE_WEAPONOFFHAND",twohand="INVTYPE_2HWEAPON",
+    twohanded="INVTYPE_2HWEAPON",shield="INVTYPE_SHIELD",
+    holdable="INVTYPE_HOLDABLE",heldinoffhand="INVTYPE_HOLDABLE",
+    cloak="INVTYPE_CLOAK",back="INVTYPE_CLOAK",ranged="INVTYPE_RANGED",
+    thrown="INVTYPE_THROWN",relic="INVTYPE_RELIC",
+}
+local armorNames={cloth=1,leather=2,mail=3,plate=4,shield=6}
+local function rawEquip(ref,info,gear)
+    local slots=gear.slots
+    if info and info.equip and slots[info.equip] then return info.equip end
+    local raw=ref.equipLoc or ref.equip
+    local named=raw and slots[raw] and raw or nil
+    if not named and type(raw)=="string" then
+        local normalized=raw:lower():gsub("[^%w]","")
+        named=equipNames[normalized]
+    end
+    local numeric=inventoryTypes[tonumber(ref.slotID)]
+    if named and numeric and named~=numeric then
+        return nil,"Conflicting inventory type and equipment location"
+    end
+    local selected=named or numeric
+    if not selected or not slots[selected] then
+        return nil,"Equipment location not validated"
+    end
+    return selected
+end
+local function bindingCode(info,ref)
+    local candidate=(info and info.bindType) or ref.bindType or ref.binding
+    local number=tonumber(candidate)
+    if number and number>=1 and number<=4 then return number end
+    local normalized=tostring(candidate or ""):lower():gsub("[^%w]","")
+    if normalized=="bop" or normalized=="bindonpickup" or
+        normalized=="bindsonpickup" or normalized=="bindsonacquire" then return 1 end
+    if normalized=="boe" or normalized=="bindonequip" or
+        normalized=="bindsonequip" or normalized=="bindswhenequipped" then return 2 end
+    if normalized=="bou" or normalized=="bindonuse" or
+        normalized=="bindswhenused" then return 3 end
+    return nil
+end
 local function itemInformation(id,items,gear)
     local ref=fromRef(items,id)
     local info=nil
@@ -40,21 +100,32 @@ local function itemInformation(id,items,gear)
     end
     local required=clientLevel or importedLevel
     if not required then return nil,"Required character level unavailable" end
-    local equip=(info and info.equip) or ref.equipLoc or ref.equip
-    local slots=gear and gear.slots and gear.slots[equip]
-    if type(slots)~="table" or #slots==0 then
-        return nil,"Confirmed equipment slot unavailable"
+    local equip,equipReason=rawEquip(ref,info,gear)
+    if not equip then return nil,equipReason end
+    local slots=gear.slots[equip]
+    local clientSubclass=tonumber(info and info.subclassID)
+    local importedSubclass=tonumber(ref.subclassID)
+    if not importedSubclass and type(ref.subclass)=="string" then
+        importedSubclass=armorNames[ref.subclass:lower():gsub("^%s+",""):gsub("%s+$","")]
     end
+    if clientSubclass and importedSubclass and clientSubclass~=importedSubclass then
+        return nil,"Conflicting armor subclasses in client and reference"
+    end
+    local status="reference-unverified"
+    if ref.betaEvent==true then status="historical-beta-event"
+    elseif ref.speculation==true then status="speculative" end
     return {
         itemID=id,itemName=(info and info.name) or ref.name or ("Item #"..id),
         requiredLevel=required,equip=equip,slots=tcopy(slots),slot=slots[1],
         classID=tonumber((info and info.classID) or ref.classID),
-        subclassID=tonumber((info and info.subclassID) or ref.subclassID),
-        bindType=tonumber((info and info.bindType) or ref.bindType),
+        subclassID=clientSubclass or importedSubclass,
+        bindType=bindingCode(info,ref),bindingReference=ref.binding,
         allowableClassMask=tonumber(ref.allowableClassMask or ref.classMask),
         itemSourceProvider=ref.sourceProvider or ref.metadataSource or ref.source,
         itemEvidence=ref.sourceEvidence or ref.sourceStatus,
         itemCheckedAt=ref.referenceCheckedAt,
+        itemReferenceURL=ref.link,itemLevel=tonumber(ref.itemLevel),
+        availabilityStatus=status,availabilityNote=ref.availabilityNote,
         -- Information only. This is not a stat snapshot or comparison.
         comparison="not-evaluated",scored=false,
     }
