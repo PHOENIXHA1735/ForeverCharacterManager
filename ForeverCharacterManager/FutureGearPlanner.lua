@@ -317,7 +317,10 @@ function P:Candidates(ch,lookahead,filters)
                                 local detail={}
                                 for k,v in pairs(details) do detail[k]=v end
                                 detail.boss=valid and bossName or nil
-                                add(id,recordSource(valid and "dungeon-boss" or "dungeon-unassigned",dungeonName,detail))
+                                local sourceKind=kind:find("dungeon",1,true) and
+                                    (valid and "dungeon-boss" or "dungeon-unassigned") or
+                                    (valid and "instance-boss-unverified" or "instance-unassigned")
+                                add(id,recordSource(sourceKind,dungeonName,detail))
                                 seen[id]=true
                             end
                         end
@@ -325,14 +328,18 @@ function P:Candidates(ch,lookahead,filters)
                     for _,drop in ipairs(dungeon.dungeonLoot or {}) do
                         local id=positiveInteger(type(drop)=="table" and (drop.id or drop.itemID) or drop)
                         if id then
-                            add(id,recordSource("dungeon-unassigned",dungeonName,details))
+                            local sourceKind=kind:find("dungeon",1,true) and
+                                "dungeon-unassigned" or "instance-unassigned"
+                            add(id,recordSource(sourceKind,dungeonName,details))
                             seen[id]=true
                         end
                     end
                     for _,id in ipairs(dungeon.lootIDs or {}) do
                         local key=positiveInteger(id)
                         if key and not seen[key] then
-                            add(key,recordSource("dungeon-unassigned",dungeonName,details))
+                            local sourceKind=kind:find("dungeon",1,true) and
+                                "dungeon-unassigned" or "instance-unassigned"
+                            add(key,recordSource(sourceKind,dungeonName,details))
                         end
                     end
                 end
