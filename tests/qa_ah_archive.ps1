@@ -48,4 +48,41 @@ $disableProbe=@{Called=$false}
 function Disable-ScheduledTask { param($TaskName,$ErrorAction) if ($TaskName -ne 'FCM-AHHistory') { throw 'Wrong task' }; $disableProbe.Called=$true }
 & $script -AddonRoot $addon -Mode Disable
 if (-not $disableProbe.Called -or @(Get-ChildItem -LiteralPath (Join-Path $addon 'AHHistory\RawScans') -Recurse -Filter '*.lua').Count -ne 2) { throw 'Disable changed archive contents' }
+# Exercise the hidden-launcher contract with a synthetic PowerShell target.
+# This never runs the real archiver through WScript or touches a user's WoW files.
+$launcher=Join-Path $repo 'ForeverCharacterManager\FCM-Companion\FCM-AHHistory-Hidden.vbs'
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Hidden AHHistory launcher absent' }
+$enableSource=[IO.File]::ReadAllText($script)
+if ($enableSource -notmatch 'FCM-AHHistory-Hidden\.vbs' -or $enableSource -notmatch 'wscript\.exe' -or $enableSource -notmatch 'launcherMode') {
+    throw 'Enable mode must register the fixed-mode hidden launcher'
+}
+$probeCompanion=Join-Path $addon 'FCM-Companion'
+New-Item -ItemType Directory -Path $probeCompanion -Force | Out-Null
+$probeLauncher=Join-Path $probeCompanion 'FCM-AHHistory-Hidden.vbs'
+Copy-Item -LiteralPath $launcher -Destination $probeLauncher
+@'
+param([string]$Mode, [string]$AddonRoot, [switch]$IncludeProviderTables)
+if ($Mode -ne 'Sync') { exit 91 }
+if (-not (Test-Path -LiteralPath (Join-Path $AddonRoot 'ForeverCharacterManager.toc'))) { exit 92 }
+$label=if ($IncludeProviderTables) { 'provider' } else { 'personal' }
+[IO.File]::WriteAllText((Join-Path $AddonRoot 'launcher-probe.txt'),$label)
+exit 0
+'@ | Set-Content -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1') -Encoding UTF8
+$wscript=Join-Path $env:SystemRoot 'System32\wscript.exe'
+if (-not (Test-Path -LiteralPath $wscript)) { throw 'Windows Script Host unavailable to test hidden launcher' }
+& $wscript '//B' '//NoLogo' $probeLauncher 'personal'
+if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath (Join-Path $addon 'launcher-probe.txt') -Raw).Trim() -ne 'personal') {
+    throw 'Personal mode did not invoke the fixed synthetic target correctly'
+}
+& $wscript '//B' '//NoLogo' $probeLauncher 'provider'
+if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath (Join-Path $addon 'launcher-probe.txt') -Raw).Trim() -ne 'provider') {
+    throw 'Explicit provider mode failed to propagate opt-in'
+}
+& $wscript '//B' '//NoLogo' $probeLauncher 'unexpected'
+if ($LASTEXITCODE -ne 64) { throw 'Hidden launcher accepted an unexpected mode' }
+Remove-Item -LiteralPath (Join-Path $probeCompanion 'FCM-AHHistory.ps1')
+& $wscript '//B' '//NoLogo' $probeLauncher 'personal'
+if ($LASTEXITCODE -ne 2) { throw 'Missing target script must return exit code 2' }
+Write-Output 'PASS: fixed-mode hidden AHHistory launcher, opt-in routing, invalid-mode refusal and exit codes (synthetic fixture).'
+
 Write-Output 'PASS: initial copy, deduplication, preservation, UTC/hash metadata, change retention, overlap lock and locked-source cleanup. Synthetic fixture only, including provider opt-in.'
