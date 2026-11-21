@@ -2,20 +2,23 @@
 # and normalization happen before this lock, and never execute downloaded Lua.
 function Publish-FCMReferenceData {
     param([string]$Addon,[string]$Name,[byte[]]$Bytes)
-    if($Name -notin @('ExternalData.generated.lua','CommunityGathering.generated.lua','GatheringReferenceData.lua')){
+    if($Name -notin @('ExternalData.generated.lua','CommunityGathering.generated.lua','GatheringReferenceData.lua','PublicHistory.generated.lua')){
         throw 'This dataset is outside the live reference publication allowlist.'
     }
     if(!$Bytes -or $Bytes.Length -gt 24MB){throw 'Invalid reference payload size.'}
+    if($Name -eq 'PublicHistory.generated.lua' -and $Bytes.Length -gt 8MB){throw 'Public history exceeds 8 MiB.'}
     $text=[Text.UTF8Encoding]::new($false,$true).GetString($Bytes)
     $prefix=switch($Name){
         'ExternalData.generated.lua' {'local _, FCM = ...'}
         'CommunityGathering.generated.lua' {'-- FCM community gathering: data only'}
         'GatheringReferenceData.lua' {'-- Generated offline Gathering reference;'}
+        'PublicHistory.generated.lua' {'FCM_PublicHistory={'}
     }
     $suffix=switch($Name){
         'ExternalData.generated.lua' {'-- FCM reference complete'}
         'CommunityGathering.generated.lua' {'}}'}
         'GatheringReferenceData.lua' {'}'}
+        'PublicHistory.generated.lua' {'}'}
     }
     if(!$text.TrimEnd().EndsWith($suffix,[StringComparison]::Ordinal)){throw 'Incomplete generated reference footer.'}
     if(!$text.StartsWith($prefix,[StringComparison]::Ordinal) -or !$text.EndsWith("`n") -or $text.Contains([char]0)){

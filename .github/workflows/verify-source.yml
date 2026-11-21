@@ -48,6 +48,8 @@ jobs:
       - name: Validate offline Gathering reference staging
         if: success() || failure()
         run: python3 tests/qa_gather_reference_import.py
+      - name: Validate the Public30 publisher through Gold Advisor
+        run: python3 tests/qa_public30_pipeline.py
       - name: Validate public gathering snapshot schema
         if: success() || failure()
         shell: python
@@ -101,3 +103,9 @@ jobs:
       - name: Verify transactional reference publication (PowerShell 5.1)
         shell: powershell
         run: .\tests\qa_reference_publication.ps1
+      - name: Verify Public30 publication (PowerShell 5.1)
+        shell: powershell
+        run: |
+          python -m pip install tzdata==2025.2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tests/qa_public30_pipeline.py PublisherTests.test_windows_publication_and_preservation

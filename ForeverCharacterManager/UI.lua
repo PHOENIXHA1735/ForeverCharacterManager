@@ -1126,7 +1126,8 @@ end
 function UI:PublishedDataStatus(tab)
     local external=FCM.externalData or {}
     if tab=="Gold" then
-        return updateLabel("History loaded",FCM_AHHistory and FCM_AHHistory.generatedUtc)
+        local data=FCM.GoldAdvisor and FCM.GoldAdvisor.providerData
+        return updateLabel("Validated history as of",data and data.asOf)
     elseif tab=="Auction" then
         return updateLabel("Price fetch loaded",external.ahFetchedUtc)
     elseif tab=="Gathering" then
@@ -3171,8 +3172,7 @@ local function buildRows(ui)
                 end
                 local excludeKey=queued and queued.key or nil
                 local plan=FCM:CraftAvailability(r,crafter,excludeKey,preview.needed)
-                d[#d+1]=plan.ready and "Recorded materials sufficient after reservations*" or
-                    "REAGENTS AND STOCK (recorded snapshots)"
+                d[#d+1]=plan.status or plan.reason or "REAGENTS AND STOCK (recorded snapshots)"
                 for _,m in ipairs(plan.lines or {}) do
                     d[#d+1]=m.name..": need "..m.required..", accessible "..m.unreserved..
                         ", missing "..m.missing.." (reserved "..m.reserved..")"
@@ -3344,6 +3344,7 @@ local function buildRows(ui)
                     local mats, ready = plan.lines, plan.ready
                     d[#d+1]=""
                     d[#d+1]="Materials for "..FCM:DisplayCharacter(reviewer).." (last scanned):"
+                    d[#d+1]=plan.status or plan.reason or "Verification required"
                     for _, m in ipairs(mats) do
                         local usable=m.unreserved
                         local missing=m.missing

@@ -5,7 +5,7 @@ local root='ForeverCharacterManager/'
 local toc=slurp(root..'ForeverCharacterManager.toc')
 local accepted={
     ['ExternalData.generated.lua']='local _,f=...; f.externalData={ahFetchedUtc=1700000000}',
-    ['AHHistory.generated.lua']='FCM_AHHistory={generatedUtc=1700000001}',
+    ['PublicHistory.generated.lua']='FCM_PublicHistory={asOf=1700000001}',
     ['GatheringReferenceData.lua']='local _,f=...; f.gatheringReference={generatedUtc=1700000002}',
 }
 local function loadSession()
@@ -15,6 +15,8 @@ local function loadSession()
         if accepted[line] then assert(loadstring(accepted[line]))('FCM',f);seen[line]=true end
     end
     for path in pairs(accepted) do assert(seen[path],path..' must be registered') end
+    -- Gold reports the selected provider's validated dataset, not raw globals.
+    f.GoldAdvisor={providerData=FCM_PublicHistory}
     assert(loadfile(root..'UI.lua'))('FCM',f)
     return f.UI
 end

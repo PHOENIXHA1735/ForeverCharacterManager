@@ -62,7 +62,8 @@ function G:Info(item)
         end
     end
     if not name then return nil end
-    return {name=name, link=link, quality=quality, ilvl=ilvl, level=minlevel or 0,
+    local itemID=tonumber(item) or (type(link)=="string" and tonumber(link:match("item:(%d+)")))
+    return {name=name, link=link, itemID=itemID, quality=quality, ilvl=ilvl, level=minlevel,
         equip=equip, icon=icon, itemType=itemType, subType=subType, classID=classID, subclassID=subclassID, bindType=bindType}
 end
 
@@ -600,6 +601,18 @@ local slots = {
     INVTYPE_2HWEAPON={16}, INVTYPE_SHIELD={17}, INVTYPE_HOLDABLE={17},
     INVTYPE_RANGED={18}, INVTYPE_RANGEDRIGHT={18}, INVTYPE_THROWN={18}, INVTYPE_RELIC={18},
 }
+local function equippedAt(ch,slot)
+    if ch.key and ch.key==FCM.currentKey and type(GetInventoryItemLink)=="function" then
+        local actual=safe(GetInventoryItemLink,"player",slot)
+        local id=type(actual)=="string" and tonumber(actual:match("item:(%d+)"))
+        if id then return {link=actual,itemID=id,slot=slot} end
+        if type(GetInventoryItemID)=="function" then
+            local ok,value=pcall(GetInventoryItemID,"player",slot)
+            if ok and value==nil then return nil end
+        end
+    end
+    return ch.gear and ch.gear[slot]
+end
 G.slots = slots
 
 -- All item-backed modules share this comparison. For two rings or trinkets,
@@ -619,10 +632,11 @@ function G:CompareItem(item,ch,preferredSlot,options)
             tonumber(ch.level) and info.level>ch.level then
         wearableAs={class=ch.class,level=info.level}
     end
-    if not self:IsPotentiallyWearable(info,wearableAs) then
-        return {status="ineligible",reason="Item level, armor type, or equipment restrictions may prevent use."}
+    local eligible,reason=self:IsPotentiallyWearable(info,wearableAs,ch)
+    if not eligible then
+        return {status=eligible==false and "ineligible" or "unknown",reason=reason}
     end
-    if not ch.gearStamp or type(ch.gear)~="table" then
+    if FCM.gearScanFailedFor==ch or not ch.gearStamp or type(ch.gear)~="table" then
         return {status="unknown",reason="Equipment has not been scanned for this character."}
     end
     local candidateStats,diagnostics=self:StatValues(item)
@@ -664,29 +678,36 @@ function G:CompareItem(item,ch,preferredSlot,options)
     local newScore=self:Score(item,ch,mode,activity)
     if type(newScore)~="number" then return {status="unknown",reason="Candidate score is unavailable."} end
     local options=slots[info.equip]
+    local uniqueness=C_Item and C_Item.GetItemUniqueness
+    local category,limit=safe(uniqueness,item)
     local choice=nil
     local modelError=nil
     for _,slot in ipairs(options) do
         if not preferredSlot or slot==preferredSlot then
             local valid=true
+            if category and tonumber(limit) and tonumber(limit)>0 then
+                local count=0
+                for equippedSlot=1,19 do
+                    if equippedSlot~=slot and not (slot==16 and info.equip=="INVTYPE_2HWEAPON" and equippedSlot==17) then
+                        local worn=equippedAt(ch,equippedSlot)
+                        if worn and safe(uniqueness,worn.link or worn.itemID)==category then count=count+1 end
+                    end
+                end
+                if count>=tonumber(limit) then valid=false end
+            end
             -- Replacing an equipped two-hander with an offhand alone is not
             -- a legal isolated comparison; cannot infer the missing main-hand.
             if slot==17 and info.equip~="INVTYPE_2HWEAPON" then
-                local main=ch.gear[16]
+                local main=equippedAt(ch,16)
                 local mainInfo=main and self:Info(main.link or main.itemID)
                 if mainInfo and mainInfo.equip=="INVTYPE_2HWEAPON" then valid=false end
-            end
-            local old=ch.gear[slot]
-            -- Current character: a live equipped item link takes precedence over
-            -- the SavedVariables snapshot. Otherwise a stale empty-slot record
-            -- can produce a false +score when an item is already equipped.
-            if ch.key and FCM.currentKey and ch.key==FCM.currentKey and
-                    type(GetInventoryItemLink)=="function" then
-                local actual=safe(GetInventoryItemLink,"player",slot)
-                if type(actual)=="string" and actual:find("item:",1,true) then
-                    old={link=actual,itemID=tonumber(actual:match("item:(%d+)")),slot=slot}
+                if info.classID==2 then
+                    local off=equippedAt(ch,17)
+                    local offInfo=off and self:Info(off.link or off.itemID)
+                    if not (offInfo and offInfo.classID==2) then valid=false end
                 end
             end
+            local old=equippedAt(ch,slot)
             local oldRef=old and (old.link or old.itemID)
             local oldStats,oldScore={},0
             local oldName="Empty slot"
@@ -698,7 +719,7 @@ function G:CompareItem(item,ch,preferredSlot,options)
                 if not oldStats or type(oldScore)~="number" or unknownSchool(oldStats) then valid=false end
             end
             if info.equip=="INVTYPE_2HWEAPON" and slot==16 then
-                local off=ch.gear[17]
+                local off=equippedAt(ch,17)
                 local offRef=off and (off.link or off.itemID)
                 if offRef then
                     local extraStats=self:StatValues(offRef)
@@ -867,12 +888,40 @@ end
 local allowedArmor = { MAGE=1, WARLOCK=1, PRIEST=1, ROGUE=2, DRUID=2,
     HUNTER=3, SHAMAN=3, WARRIOR=4, PALADIN=4 }
 
-function G:IsPotentiallyWearable(itemInfo, ch)
+function G:IsPotentiallyWearable(itemInfo, ch, snapshotOwner)
     if not itemInfo or not itemInfo.equip or not slots[itemInfo.equip] then return false end
-    if itemInfo.level and (ch.level or 0) < itemInfo.level then return false end
-    if itemInfo.classID == 4 and itemInfo.subclassID and itemInfo.subclassID >= 1 and itemInfo.subclassID <= 4 then
-        if itemInfo.subclassID > (allowedArmor[ch.class] or 4) then return false end
+    if not tonumber(itemInfo.level) or not tonumber(ch.level) or not allowedArmor[ch.class] then
+        return nil,"Equipment level or character class is unavailable."
     end
+    if tonumber(ch.level)<tonumber(itemInfo.level) then return false,"Requires a higher character level." end
+    local id=itemInfo.itemID or (itemInfo.link and tonumber(itemInfo.link:match("item:(%d+)")))
+    local ref=id and FCM.externalData and FCM.externalData.items and FCM.externalData.items[id]
+    local mask=tonumber(ref and (ref.allowableClassMask or ref.classMask))
+    local bits={WARRIOR=1,PALADIN=2,HUNTER=4,ROGUE=8,PRIEST=16,SHAMAN=64,MAGE=128,WARLOCK=256,DRUID=1024}
+    if mask and mask>0 and math.floor(mask/bits[ch.class])%2==0 then return false,"Item is restricted to another class." end
+    if itemInfo.classID == 4 and itemInfo.subclassID and itemInfo.subclassID >= 1 and itemInfo.subclassID <= 4 then
+        if itemInfo.subclassID > allowedArmor[ch.class] then return false,"Armor proficiency is incompatible." end
+        if itemInfo.subclassID>=3 and itemInfo.subclassID==allowedArmor[ch.class] and
+            (ch.class=="HUNTER" or ch.class=="SHAMAN" or ch.class=="WARRIOR" or ch.class=="PALADIN") and tonumber(ch.level)<40 then
+            return nil,"Advanced armor proficiency is not confirmed at this level."
+        end
+    end
+    local equip=itemInfo.equip
+    if itemInfo.classID==2 or equip=="INVTYPE_SHIELD" or equip=="INVTYPE_HOLDABLE" or equip=="INVTYPE_RELIC" or
+       equip=="INVTYPE_WEAPON" or equip=="INVTYPE_WEAPONMAINHAND" or equip=="INVTYPE_WEAPONOFFHAND" or
+       equip=="INVTYPE_2HWEAPON" or equip=="INVTYPE_RANGED" or equip=="INVTYPE_RANGEDRIGHT" or equip=="INVTYPE_THROWN" then
+        if not itemInfo.classID or not itemInfo.subclassID then return nil,"Equipment proficiency metadata is unavailable." end
+        -- A recorded equipped item of the same type is evidence of actual
+        -- usability in Forever. Missing evidence must not imply proficiency.
+        local owner=snapshotOwner or ch
+        for _,slot in ipairs(slots[equip]) do
+            local equipped=equippedAt(owner,slot)
+            local known=equipped and self:Info(equipped.link or equipped.itemID)
+            if known and known.classID==itemInfo.classID and known.subclassID==itemInfo.subclassID then return true end
+        end
+        return nil,"Weapon or offhand proficiency has not been verified for this character."
+    end
+    if not itemInfo.classID then return nil,"Equipment category is unavailable." end
     return true
 end
 

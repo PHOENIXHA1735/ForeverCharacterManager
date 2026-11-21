@@ -189,6 +189,11 @@ function FCM:DungeonItemEligibility(itemID, ch)
     if required and required>0 and required>(tonumber(ch.level) or 0) then
         return "future","future: requires level "..required
     end
+    if info and self.Gear.IsPotentiallyWearable then
+        local eligible,reason=self.Gear:IsPotentiallyWearable(info,ch)
+        if eligible==false then return "other",reason end
+        if eligible==nil then return "unknown",reason end
+    end
     if not info and not imported.equipLoc and not imported.slotID then
         return "unknown","eligibility not verified"
     end

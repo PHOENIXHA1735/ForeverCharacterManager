@@ -22,6 +22,7 @@ local function label(character)
 end
 local function stockStatus(plan)
     if not plan or not plan.crafter then return "No eligible learned crafter" end
+    if plan.status then return plan.status end
     if #list(plan.blockers)>0 then return "Blocked / verify restrictions" end
     if (tonumber(plan.totalMissing) or 0)>0 then
         return tostring(plan.totalMissing).." materials missing (after nested crafts)"
@@ -162,6 +163,12 @@ function FCM:AccountUpgradePlanLines(entry)
         else
             lines[#lines+1]="Missing after saved stock, reservations and intermediate crafts: "..
                 tostring(p.totalMissing or "unknown")
+            for _,row in ipairs(list(p.withdrawals)) do
+                lines[#lines+1]="Withdraw "..row.count.." x "..self.ItemName(row.itemID).." from "..label(row.owner).."'s bank."
+            end
+            for _,row in ipairs(list(p.transfers)) do
+                lines[#lines+1]="Retrieve "..row.count.." x "..row.name.." from "..row.from.." ("..row.where..")."
+            end
             lines[#lines+1]="This is ONE potential craft; other recommendations may need the same stock."
             if #list(p.steps)>0 then
                 lines[#lines+1]="Craft sequence (not automatically executed):"

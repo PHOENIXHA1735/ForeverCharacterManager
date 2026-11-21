@@ -1,0 +1,1 @@
+-- Public30 history unavailable until the companion publishes a validated generation.
