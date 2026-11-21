@@ -18,6 +18,11 @@ CommunityGathering.generated.lua
 Scan.lua
 Crafting.lua
 Gear.lua
+FutureGearPlanner.lua
+FutureGearAssessment.lua
+FutureGearShortlist.lua
+FutureGearWeaponEligibility.lua
+FutureGearView.lua
 PriorityGuides.lua
 StatWeightEngine.lua
 StatWeightCapture.lua
