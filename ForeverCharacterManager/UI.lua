@@ -1438,12 +1438,6 @@ function UI:Create()
 
     -- Footer is OUTSIDE the scrolling detail panel, so it never covers recipe text.
     self.action = button(panel,"Request craft",264,29,function()
-        if self.tab=="Gathering" then
-            local added,message=FCM:ImportGatherMate()
-            FCM:Say(message or "Unable to import GatherMate2 data.")
-            if added then self:Refresh() end
-            return
-        end
         if self.tab == "Requests" and self.activeRequest then
             local req = self.activeRequest
             local recipe = FCM:RecipeByID(req.recipeID)
@@ -1492,7 +1486,9 @@ function UI:Create()
         end
         self:Refresh()
     end)
-    self.gatherMoreButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
+    -- Gathering no longer has a second GatherMate import action. Place the
+    -- one remaining detail control at the panel's bottom-right.
+    self.gatherMoreButton:SetPoint("TOPRIGHT",detailPanel,"BOTTOMRIGHT",-8,-8)
     self.gatherMoreButton:Hide()
     self.status = text(panel,"", "GameFontHighlightSmall",14,-501,285,20)
     self.status:ClearAllPoints()
@@ -4124,10 +4120,6 @@ function UI:Refresh()
             end
             self.cancelRequestButton:SetText("Status / Qty")
             self.cancelRequestButton:Show()
-        elseif tab=="Gathering" then
-            self.action:SetWidth(190)
-            self.action:SetText("Import GatherMate2")
-            self.action:Show()
         elseif selected.recipe and ch then
             self.activeRecipe=selected.recipe
             self.activeCrafters=selected.crafters

@@ -22,22 +22,23 @@ eq(type(FCM_GatherExport),'table','companion export markers')
 local token=next(FCM_GatherExport)
 eq(token,'FCMG1|mining|37|4590|6780|Copper Vein','export contains only node fields')
 
--- GM2's public GetNodesForZone returns packed map coordinates, node ID.
-local gm={gmdbs={['Herb Gathering']={__gm2_base_storage={[41]={}}}}}
-function gm:GetNodesForZone(zone,kind,all)
-    eq(zone,41);eq(kind,'Herb Gathering');eq(all,true)
-    return pairs({[2314000000+452100]='257'})
-end
-function gm:GetNameForNode(kind,id) return kind=='Herb Gathering' and id=='257' and 'Silverleaf' or nil end
-_G.GatherMate2=gm
-local count=FCM:ImportGatherMate()
-eq(count,1,'gm import')
-eq(FCM:ImportGatherMate(),0,'idempotent import')
-eq(FCM:GatherCounts().herbalism,1,'GM2 herb count')
-eq(FCM:GatherCountLabel(FCM:GatherNodes('herbalism')[1]),
-    'No personal gathers recorded','imported locations have no invented personal count')
+-- No GatherMate2 integration, even when that addon is loaded globally.
+-- Saved old GM2-only nodes are kept in FCM_DB but deliberately absent from
+-- resource lists, counts, minimap and world-map overlays.
+_G.GatherMate2={GetNodesForZone=function()error("must never call GatherMate2")end}
+eq(FCM.ImportGatherMate,nil,'GatherMate2 importer removed')
+eq(FCM:AddGatherNode('herbalism',41,2314,4521,'Silverleaf','community'),true,
+    'community herb remains visible on legacy zone map')
+local legacyGM={name='Unused GM2-Only Herb',x=4444,y=5555,source='gathermate',
+    personal=false,gmID=257}
+FCM.db.gathering.nodes.herbalism[41]['4444:5555:unused gm2-only herb']=legacyGM
+FCM._gatherCounts=nil
+eq(FCM:GatherCounts().herbalism,1,'legacy GM2-only node excluded from active counts')
+eq(#FCM:GatherNodes('herbalism','Unused GM2-Only Herb'),0,
+    'legacy GM2-only node not presented as live finding')
+eq(FCM.db.gathering.nodes.herbalism[41]['4444:5555:unused gm2-only herb'],legacyGM,
+    'old GM2 record retained without destructive SavedVariables cleanup')
 _G.GatherMate2=nil
-eq(FCM:GatherCounts().herbalism,1,'import persists without GM2')
 
 FCM.communityGathering.nodes={{kind='mining',mapID=37,x=4590,y=6780,name='Copper Vein'},
   {kind='fishing',mapID=37,x=1234,y=5678,name='School of Fish'},
@@ -472,7 +473,11 @@ for _,pin in ipairs(FCM._gatherWorldPins) do
         importedTeldrassil=true
     end
 end
-eq(importedTeldrassil,true,'legacy Teldrassil map 41 imports appear on modern map 1438')
+eq(importedTeldrassil,true,'community Teldrassil map 41 records appear on modern map 1438')
+for _,pin in ipairs(FCM._gatherWorldPins) do
+    eq(pin.nodeName~='Unused GM2-Only Herb' or not pin:IsShown(),true,
+        'GM2-only legacy records cannot leak onto world map')
+end
 eq(FCM._gatherWorldDiagnostic:find('Map 1438',1,true)~=nil,true,
     'world-map diagnostic records selected client map ID')
 -- Real Forever draws the scroll canvas at a different scale than the map

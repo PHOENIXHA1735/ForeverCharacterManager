@@ -18,3 +18,6 @@ Before deploying, run Lua 5.1 syntax and the Gathering regression suite, Python 
 ## Known limitations
 
 The layout uses native frame textures and font strings, not photorealistic art. The first pass does not implement drag-resizable pane dividers, independent clickable zone rows, or an equivalent structured layout for fishing and treasure. Those remain later phases after screenshots of this material prototype.
+## Removing the optional GatherMate2 integration
+
+GatherMate2 importing has been removed from the Gathering UI and Lua backend. The prior imported-only points are retained in the user's SavedVariables for possible future migration, but are no longer displayed as active FCM resource nodes, counted discoveries, minimap icons or world-map pins. Personal discoveries and community references continue to behave normally. The single Show All Details button is now anchored at the right edge below the detail pane; there is no GatherMate2 import action. Acquisition/reference notes are placed in the expanded material view, keeping the default panel compact. This does not uninstall or alter a separately installed GatherMate2 addon.

@@ -164,9 +164,13 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
     end
     section("POTENTIAL SOURCE ZONES",places)
 
-    section("HOW IT IS OBTAINED",{model.explanation})
     section("YOUR GATHERING HISTORY",model.history)
-    if expanded then section("REFERENCE STATUS",{model.verificationNote}) end
+    -- Keep acquisition notes and provenance in expanded detail, rather
+    -- than presenting redundant cards in the default material overview.
+    if expanded then
+        section("HOW IT IS OBTAINED",{model.explanation})
+        section("REFERENCE STATUS",{model.verificationNote})
+    end
     host:SetHeight(math.max(345,y+9))
     self.detailText:Hide()
     self.gatherMaterialActive=true

@@ -39,3 +39,7 @@ GatheringExtras.lua is a reviewed, data-only supplement to the generated Forever
 ## Live client QA follow-up
 
 The single-page category menu opens below its button rather than covering the top toolbar. Selecting a new resource or filter resets detail scroll to the beginning. Long reference zone, source-herb zone and fishing-water lists show compact, deduplicated default summaries with a Show All Details control for expanded source provenance. Derived material zones are explicitly source-node candidate zones, not verified material drop zones. Fishing loot items, fish and pool/source objects are labeled separately. The default pane omits redundant provider-name lists while the footer keeps required attribution.
+
+## Legacy GatherMate2 data
+
+The optional GatherMate2 import integration is disabled and removed in the isolated visual prototype. No GatherMate2 import button or API calls remain. Preexisting imported-only FCM_DB records are preserved but ignored by active lists, counts, minimap pins and world-map pins. A personally confirmed node remains visible. This is non-destructive and does not uninstall a separate GatherMate2 addon or modify its SavedVariables.

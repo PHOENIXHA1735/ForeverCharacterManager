@@ -51,6 +51,13 @@ class ImportTests(unittest.TestCase):
         self.assertIn('Gathering Filters',ui)
         self.assertIn('self:MakeMenu(self.gatherCategoryButton,entries,270,false)',ui)
         self.assertIn('self.gatherMoreButton=button',ui)
+        self.assertNotIn('Import GatherMate2',ui)
+        self.assertNotIn('ImportGatherMate(',ui)
+        self.assertIn('self.gatherMoreButton:SetPoint("TOPRIGHT",detailPanel,"BOTTOMRIGHT",-8,-8)',ui)
+        gathering=(ROOT/'ForeverCharacterManager/Gathering.lua').read_text(encoding='utf8')
+        self.assertNotIn('function FCM:ImportGatherMate()',gathering)
+        self.assertIn('local function visibleGatherNode(node)',gathering)
+
         self.assertIn('self:RenderGatherMaterialPanel(selected.gatherResource,ch,self.gatherShowAllDetails)',ui)
         self.assertIn('rows[#rows].gatherResource=resource',ui)
         self.assertIn('self:HideGatherMaterialPanel()',ui)
