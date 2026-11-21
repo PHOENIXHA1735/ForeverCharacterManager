@@ -1325,34 +1325,32 @@ function UI:Create()
     end)
     self.gatherWorldButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-138)
     self.gatherWorldButton:Hide()
-    self.gatherCategoryButton=button(panel,"Resources: All",155,25,function()
+    self.gatherCategoryButton=button(panel,"Gathering Filters",200,25,function()
         local entries={}
-        for _,entry in ipairs({{"All"},{"Herbalism","herbalism"},{"Mining","mining"},
-            {"Fishing","fishing"},{"Fishing: Oil Spill","fishing","oil_spill"},{"Fishing: Wreckage","fishing","wreckage"},{"Fishing: School","fishing","school"},{"Fishing: Pool","fishing","pool"},{"Fishing: Open Water","fishing","open_water"},{"Fishing: Unknown Source","fishing","unknown"},{"Treasure","treasure"}}) do
-            entries[#entries+1]={label=entry[1],run=function()
-                self.gatherCategory=entry[2];self.gatherPoolType=entry[3]
-                self.gatherCategoryButton:SetText(entry[3] and entry[1] or "Resources: "..entry[1])
+        local choices={
+            {"All Resources"},
+            {"Herbalism","herbalism"},
+            {"Mining","mining"},
+            {"Fishing - All","fishing"},
+            {"Fishing - Schools & Pools","fishing","school_pool"},
+            {"Fishing - Oil Spills & Wreckage","fishing","spill_wreckage"},
+            {"Fishing - Open Water","fishing","open_water"},
+            {"Treasure","treasure"}
+        }
+        for _,entry in ipairs(choices) do
+            local selected=entry
+            entries[#entries+1]={label=selected[1],run=function()
+                self.gatherCategory=selected[2]
+                self.gatherPoolType=selected[3]
+                self.gatherSkillRange=nil
+                self.gatherCategoryButton:SetText(selected[1])
                 self:Refresh()
             end}
         end
-        self:MakeMenu(self.gatherCategoryButton,entries,155,true)
+        self:MakeMenu(self.gatherCategoryButton,entries,270,true)
     end)
     self.gatherCategoryButton:SetPoint("LEFT",self.gatherWorldButton,"RIGHT",8,0)
     self.gatherCategoryButton:Hide()
-    self.gatherSkillButton=button(panel,"Skill: All",120,25,function()
-        local entries={}
-        for _,entry in ipairs({{"All"},{"1–74",{1,74}},{"75–149",{75,149}},
-            {"150–224",{150,224}},{"225–299",{225,299}},{"300+",{300,10000}},{"Unknown","unknown"}}) do
-            entries[#entries+1]={label=entry[1],run=function()
-                self.gatherSkillRange=entry[2]
-                self.gatherSkillButton:SetText("Skill: "..entry[1])
-                self:Refresh()
-            end}
-        end
-        self:MakeMenu(self.gatherSkillButton,entries,140,true)
-    end)
-    self.gatherSkillButton:SetPoint("LEFT",self.gatherCategoryButton,"RIGHT",8,0)
-    self.gatherSkillButton:Hide()
 
     self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
     self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
@@ -2441,7 +2439,7 @@ local function buildRows(ui)
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
     elseif tab=="Gathering" then
         for _,resource in ipairs(FCM:GatherResourceRows(ui.appliedSearch,
-                ui.gatherCategory,ch,ui.gatherPoolType,ui.gatherSkillRange)) do
+                ui.gatherCategory,ch,ui.gatherPoolType)) do
             add(resource.id,resource.name,resource.summary,resource.detail)
             rows[#rows].gatherIcon=resource.icon
         end
@@ -3685,7 +3683,7 @@ function UI:Refresh()
     local tab=self.tab or "Overview"
     self:HideDetailCards()
     self.detailCardSource=nil
-    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or 340) end
+    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or (tab=="Gathering" and 405 or 340)) end
     self.heading:SetText(tab)
     self.factionButton:SetText(FCM:FactionView()=="all" and "All" or FCM:FactionView())
     local ch=self:GetCharacter()
@@ -3915,7 +3913,6 @@ function UI:Refresh()
         self.gatherSizeButton:SetShown(gathering)
         self.gatherWorldButton:SetShown(gathering)
         self.gatherCategoryButton:SetShown(gathering)
-        self.gatherSkillButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or

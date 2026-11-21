@@ -46,7 +46,7 @@ function FCM:GatherResourceSkill(kind, name, ch)
                 or "Verified difficulty thresholds: Unknown"),
         "|cff"..colors[state]..state.."|r | Can gather: "..can.." | Skill-up: "..ups,
         kind=="fishing" and "Pool requirements and fishing skill-ups are evaluated separately; eligibility is unverified." or nil
-    },state
+    },state,{required=threshold,current=current,can=can,ups=ups,ref=ref,age=age,color=state}
 end
 
 function FCM:GatherEffectiveFishingSkill(ch)
@@ -76,6 +76,16 @@ end
 function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
     local entries,byKey,refs={},{},{}
     local q=(search or ""):lower()
+    local function sourceAllowed(typ)
+        if not sourceType then return true end
+        if sourceType=='school_pool' then return typ=='school' or typ=='pool' end
+        if sourceType=='spill_wreckage' then return typ=='oil_spill' or typ=='wreckage' end
+        return typ==sourceType
+    end
+    local referenceByName={}
+    for _,r in ipairs(self.gatheringReference and self.gatheringReference.resources or {}) do
+        referenceByName[r.category..':'..r.name:lower()]=r
+    end
     local function add(category,name,identity)
         if not labels[category] or (kind and kind~=category) then return end
         local key=category..":"..(identity or name:lower())
@@ -88,7 +98,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
     end
     local sourceNames={}
     for _,source in ipairs(self.gatheringReference and self.gatheringReference.sources or {}) do
-        sourceNames[source.id]=source.name.." | "..source.url
+        sourceNames[source.id]=source.name
     end
     local function addFishingItem(id,name)
         local row=add("fishing",name,"item:"..id)
@@ -98,7 +108,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
     for _,ref in ipairs(self.gatheringReference and self.gatheringReference.resources or {}) do
         if ref.category=="fishing" then refs[ref.name:lower()]=ref end
         local typ=poolType(ref.name,ref)
-        if not sourceType or typ==sourceType then
+        if sourceAllowed(typ) then
             if ref.category=="fishing" and #((ref.loot) or {})>0 and (not kind or kind=="fishing") then
                 for _,item in ipairs(ref.loot) do
                     if item.itemID then
@@ -115,7 +125,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
     end
     for _,point in ipairs(self:GatherNodes(kind)) do
         local typ=point.kind=="fishing" and poolType(point.name,refs[point.name:lower()])
-        local row=(not sourceType or typ==sourceType) and add(point.kind,point.name)
+        local row=sourceAllowed(typ) and add(point.kind,point.name)
         if row and point.kind=="fishing" and point.personal and type(point.catches)=="table" then
             local recorded=false
             for id,qty in pairs(point.catches) do
@@ -140,7 +150,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             end
         end
     end
-    local db=not sourceType and (not kind or kind=="fishing") and self:GatherDB()
+    local db=(not sourceType or sourceType=='unknown') and (not kind or kind=="fishing") and self:GatherDB()
     local unattributed=db and db.unattributedFishing
     for id,qty in pairs(type(unattributed)=="table" and unattributed or {}) do
         id,qty=tonumber(id),tonumber(qty)
@@ -166,6 +176,7 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
         local skillMatch=inRange(ref and (ref.minimumSkill or ref.fishingMinimum))
         if ref then
             matches=matches or has(ref.itemID) or has(ref.fishingSourceType)
+            for _,src in ipairs(ref.materialSources or {}) do matches=matches or has(src) end
             for _,place in ipairs(ref.locations or {}) do matches=matches or has(place.zone) end
             for _,item in ipairs(ref.loot or {}) do matches=matches or has(item.name) or has(item.itemID) end
         end
@@ -199,56 +210,158 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
             end
         end
         row.icon=self:GatherNodeIcon(row.kind,row.name,row.itemID and {[row.itemID]=row.count} or catches,row.itemID or (ref and ref.itemID))
-        row.summary=row.itemID and ("Fishing | "..row.count.." confirmed caught"..(row.referenceWaters and " | Catalog" or "")) or labels[row.kind].." | "..(row.minimum and "At least " or "")..row.count.." personal gathers"
+        row.summary=ref and ref.material and (ref.materialType.." | Item "..tostring(ref.itemID or "Unknown")) or
+            (row.itemID and ("Fishing | "..row.count.." confirmed caught"..(row.referenceWaters and " | Catalog" or "")) or
+             labels[row.kind].." | "..(row.minimum and "At least " or "")..row.count.." personal gathers")
         row.detail=function()
-            local lines={(row.icon and ("|T"..tostring(row.icon)..":20:20|t ") or "")..row.name,row.summary}
-            for _,line in ipairs(self:GatherResourceSkill(row.kind,row.name,ch)) do lines[#lines+1]=line end
+            local blocks={}
+            local function block(title,lines)
+                if #lines>0 then blocks[#blocks+1]=title.."\n"..table.concat(lines,"\n") end
+            end
+            local main={(row.icon and ("|T"..tostring(row.icon)..":24:24|t ") or "")..row.name,
+                row.summary}
+            if ref and ref.environment and not ref.material then main[#main+1]=ref.environment end
+            blocks[#blocks+1]=table.concat(main,"\n")
+            local skillLines={}
+            if ref and ref.material then
+                skillLines[#skillLines+1]="This is a collected material, not a gatherable node."
+                skillLines[#skillLines+1]="Required skill: Depends on source node"
+                skillLines[#skillLines+1]="Can gather: See each source below"
+                skillLines[#skillLines+1]="Skill-up: Determined by source node"
+            elseif row.kind=="fishing" then
+                local effective=self:GatherEffectiveFishingSkill(ch)
+                skillLines[#skillLines+1]="Your effective Fishing: "..tostring(effective or "Unknown")
+                skillLines[#skillLines+1]="Minimum and no-escape skill depend on the water."
+                skillLines[#skillLines+1]="RED: below minimum | YELLOW: escapes possible"
+                skillLines[#skillLines+1]="GREEN: no escapes expected | UNKNOWN: unverified"
+                skillLines[#skillLines+1]="Fishing skill-up chance is separate from escape risk."
+            else
+                local _,state,info=self:GatherResourceSkill(row.kind,row.name,ch)
+                info=info or {}
+                skillLines[#skillLines+1]="Required skill: "..tostring(info.required or "Unknown")
+                skillLines[#skillLines+1]="Your "..labels[row.kind]..": "..tostring(info.current or "Unknown")..
+                    ((info.current and (not info.age or info.age<0 or info.age>86400)) and " (stale)" or "")
+                local can=info.can=="Yes" and "YES" or (info.can=="No" and "NO" or "UNKNOWN")
+                local gain=info.ups=="Possible" and "YES - possible" or (info.ups=="Not expected" and "NO" or "UNKNOWN")
+                skillLines[#skillLines+1]="Can gather: "..can
+                skillLines[#skillLines+1]="Can gain skill: "..gain
+                local refSkill=info.ref
+                if refSkill then
+                    skillLines[#skillLines+1]="Orange: "..tostring(refSkill.orange or "Unknown")..
+                        "   Yellow: "..tostring(refSkill.yellow or "Unknown")
+                    skillLines[#skillLines+1]="Green: "..tostring(refSkill.green or "Unknown")..
+                        "   Gray: "..tostring(refSkill.gray or "Unknown")
+                end
+                skillLines[#skillLines+1]="Current difficulty: |cff"..(colors[state] or colors.UNKNOWN)..tostring(state).."|r"
+            end
+            block("PROFESSION SKILL",skillLines)
+            if ref and ref.material then
+                local sources={}
+                local seen={}
+                for _,name in ipairs(ref.materialSources or {}) do
+                    if not seen[name] then
+                        seen[name]=true
+                        local source=referenceByName[row.kind..":"..name:lower()]
+                        local _,_,info=self:GatherResourceSkill(row.kind,name,ch)
+                        local required=source and (source.minimumSkill or source.orange) or nil
+                        local eligibility=info and info.can or "Unknown"
+                        sources[#sources+1]=name.." - required "..tostring(required or "Unknown")..
+                            " - Can gather: "..eligibility
+                    end
+                end
+                if #sources==0 then sources[1]="Verified source nodes not yet documented" end
+                block("SOURCE NODES",sources)
+            end
+            local places,seenZones={},{}
+            local function addZone(zone,status)
+                if type(zone)~="string" or zone=="" or seenZones[zone:lower()] then return end
+                seenZones[zone:lower()]=true
+                places[#places+1]=zone..(status=="reported_reference" and " (reported)" or "")
+            end
             if ref then
-                lines[#lines+1]="Reference confidence: "..ref.verificationStatus
-                if ref.environment then lines[#lines+1]=ref.environment end
-                if #(ref.locations or {})==0 then lines[#lines+1]="Reference zones: Unknown" end
-                if ref.reportedObjectIDs then lines[#lines+1]="Reported object IDs: "..table.concat(ref.reportedObjectIDs,", ") end
-                for _,sid in ipairs(ref.sourceIDs or {}) do lines[#lines+1]=sourceNames[sid] or sid end
-                for _,loot in ipairs(ref.loot or {}) do
-                    lines[#lines+1]="Reference association: "..loot.name.." (item "..(loot.itemID or "Unknown")..")"
-                end
-                if ref.objectID or ref.itemID then
-                    lines[#lines+1]="Object ID: "..(ref.objectID or "Unknown").." | Item ID: "..(ref.itemID or "Unknown")
-                end
-                for _,place in ipairs(ref.locations or {}) do
-                    lines[#lines+1]=place.zone.." | "..(sourceNames[place.sourceID] or place.sourceID)..(place.sourceID:find("^foreverdb") and " (provider zone; Forever spawn unverified)" or "")
+                for _,place in ipairs(ref.locations or {}) do addZone(place.zone,place.verificationStatus) end
+                if ref.material then
+                    for _,name in ipairs(ref.materialSources or {}) do
+                        local source=referenceByName[row.kind..":"..name:lower()]
+                        for _,place in ipairs(source and source.locations or {}) do
+                            addZone(place.zone,place.verificationStatus)
+                        end
+                    end
                 end
             end
             if row.referenceWaters then
-                lines[#lines+1]="Reference waters (no personal catches or map coordinates)"
+                for _,water in ipairs(row.referenceWaters) do
+                    for _,place in ipairs(water.water.locations or {}) do addZone(place.zone,place.verificationStatus) end
+                end
+            end
+            table.sort(places)
+            if #places==0 then places[1]="No independently verified zone list yet" end
+            block(row.kind=="fishing" and "KNOWN WATERS AND ZONES" or "KNOWN ZONES",places)
+            if ref and ref.material and ref.environment then
+                block("HOW IT IS OBTAINED",{ref.environment})
+            end
+            if row.referenceWaters then
+                local waters,seenWater={},{}
+                local effective=self:GatherEffectiveFishingSkill(ch)
                 for _,entry in ipairs(row.referenceWaters) do
                     local water=entry.water
-                    local zones={}
-                    for _,place in ipairs(water.locations or {}) do zones[#zones+1]=place.zone end
-                    local zoneText=#zones>0 and table.concat(zones,", ") or "Unknown zone"
-                    lines[#lines+1]=zoneText.." | "..water.name..
-                        " | "..entry.type:gsub("_"," ").." | Minimum / no escape: "..
-                        (water.fishingMinimum and tostring(water.fishingMinimum) or "Unknown").." / "..
-                        (water.fishingNoGetAways and tostring(water.fishingNoGetAways) or "Unknown")..
-                        " (provider water thresholds; Forever verification unknown)"
-                    lines[#lines+1]=sourceNames[entry.sourceID] or entry.sourceID
+                    local key=water.name..":"..tostring(entry.type)
+                    if not seenWater[key] then
+                        seenWater[key]=true
+                        local min,noEscape=water.fishingMinimum,water.fishingNoGetAways
+                        local status="UNKNOWN"
+                        if effective and min and noEscape and noEscape>=min then
+                            status=effective<min and "RED" or (effective<noEscape and "YELLOW" or "GREEN")
+                        end
+                        waters[#waters+1]=water.name.." ("..(entry.type or "unknown"):gsub("_"," ")..")"..
+                            "\n  Min: "..tostring(min or "Unknown")..
+                            " | No escape: "..tostring(noEscape or "Unknown")..
+                            "\n  Your status: |cff"..(colors[status] or colors.UNKNOWN)..status.."|r"..
+                            " (reference; Forever water verification pending)"
+                    end
                 end
+                block("FISHING SOURCES",waters)
             end
+            if ref and not ref.material and #((ref.loot) or {})>0 then
+                local yields={}
+                for _,loot in ipairs(ref.loot) do
+                    yields[#yields+1]=loot.name.." (item "..tostring(loot.itemID or "Unknown")..")"
+                end
+                block("POSSIBLE YIELDS",yields)
+            end
+            local observations={}
             for _,point in ipairs(row.locations) do
                 if row.itemID then
-                    lines[#lines+1]=string.format("%s %.2f, %.2f | %s (%s) | x%d",
-                        self:GatherZoneLabel(point.mapID),point.x/100,point.y/100,point.name,(point.sourceType or "unknown"):gsub("_"," "),point.quantity)
+                    observations[#observations+1]=string.format(
+                        "%s - %.2f, %.2f | %s | x%d",
+                        self:GatherZoneLabel(point.mapID),point.x/100,point.y/100,
+                        point.name,point.quantity)
                 else
-                lines[#lines+1]=string.format("%s %.2f, %.2f | %s | %s",
-                    self:GatherZoneLabel(point.mapID),point.x/100,point.y/100,point.source or "Unknown source",self:GatherCountLabel(point))
-                for _,line in ipairs(self:GatherCatchLines(point.catches)) do lines[#lines+1]=line end
+                    observations[#observations+1]=string.format(
+                        "%s - %.2f, %.2f | %s",
+                        self:GatherZoneLabel(point.mapID),point.x/100,point.y/100,
+                        self:GatherCountLabel(point))
                 end
             end
-            if row.unattributed then
-                lines[#lines+1]="Confirmed catch, pool and location unverified: x"..row.unattributed
+            if row.unattributed then observations[#observations+1]="Catch with no verified pool or location: x"..row.unattributed end
+            if #observations==0 then observations[1]="No personal discoveries recorded" end
+            block("YOUR GATHERING HISTORY",observations)
+            if row.kind=="fishing" and #row.locations>0 then
+                blocks[#blocks+1]="Map coordinates show the player's standing position, not the pool."
             end
-            if row.kind=="fishing" and #row.locations>0 then lines[#lines+1]="Saved coordinates are the player's standing location." end
-            return table.concat(lines,"\n")
+            local refsOut,seenRef={},{}
+            local function addRef(id)
+                local name=sourceNames[id] or id
+                if name and not seenRef[name] then seenRef[name]=true;refsOut[#refsOut+1]=name end
+            end
+            for _,id in ipairs(ref and ref.sourceIDs or {}) do addRef(id) end
+            for _,entry in ipairs(row.referenceWaters or {}) do addRef(entry.sourceID) end
+            if #refsOut>0 then
+                table.sort(refsOut)
+                block("REFERENCE INFORMATION",{"Sources: "..table.concat(refsOut,", "),
+                    "Reference locations do not create personal map pins."})
+            end
+            return table.concat(blocks,"\n\n")
         end
     end
     return entries

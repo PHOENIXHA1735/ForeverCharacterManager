@@ -11,6 +11,7 @@ Core.lua
 QATracker.lua
 Gathering.lua
 GatheringReferenceData.lua
+GatheringExtras.lua
 GatherBrowser.lua
 CommunityGathering.generated.lua
 Scan.lua

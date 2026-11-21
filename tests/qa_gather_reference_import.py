@@ -32,7 +32,7 @@ class ImportTests(unittest.TestCase):
     def test_gather_toolbar_bounds(self):
         ui=(ROOT/'ForeverCharacterManager/UI.lua').read_text(encoding='utf8')
         first=('Distance','Pins','Rim','Size')
-        second=('World','Category','Skill')
+        second=('World','Category')
         for buttons, y in ((first,109),(second,138)):
             self.assertIn(f'self.gather{buttons[0]}Button:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-{y})',ui)
             for previous,button in zip(buttons,buttons[1:]):
