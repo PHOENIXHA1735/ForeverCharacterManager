@@ -693,6 +693,20 @@ assert(model and model.itemID==2835 and model.name=='Rough Stone','read-only mat
 eq(model.required,'1','identical candidate node requirements are summarized')
 eq(model.current,'Unknown','missing character profession never gets an invented skill')
 eq(model.canGather,'Unknown','candidate source must not imply a verified Forever drop')
+assert(model.dropStatus and model.dropStatus~='Verified',
+    'source listings must never be upgraded to independently Verified by implication')
+local copperReference
+for _,r in ipairs(catalog.gatheringReference.resources) do
+    if r.category=='mining' and r.name=='Copper Vein' then copperReference=r;break end
+end
+assert(copperReference)
+local simulatedMiningEvidence={name='Rough Stone',itemID=2835,
+    sourceID='foreverdb-mining',verificationStatus='forever_observed'}
+copperReference.loot[#copperReference.loot+1]=simulatedMiningEvidence
+local observedModel=catalog:GatherMaterialDetailModel(ore,{professions={}},false)
+eq(observedModel.dropStatus,'ForeverDB observed','item-specific provider observation updates material status')
+eq(observedModel.canGather,'Unknown','item evidence does not establish player gathering eligibility')
+copperReference.loot[#copperReference.loot]=nil
 eq(#model.sources,2,'Rough Stone retains both candidate deposits')
 eq(model.sources[1].name,'Copper Vein','ordered candidate source')
 eq(model.sources[2].name,'Poor Copper Vein','ordered second candidate source')
@@ -787,6 +801,44 @@ assert(not detailsSection(winterDetail,'FISHING SOURCES'),
 local winterExpanded=catalog:GatherDetailModel(winter,nil,true)
 assert(detailsSection(winterExpanded,'CLASSIC REFERENCE'):find('WoW Forever',1,true),
        'expanded view retains Classic attribution and Forever uncertainty')
+
+-- An explicit provider update changes exactly the facts it supplies.
+-- A Forever zone catch alone must not infer a specific pool or season.
+local winterReference
+for _,entry in ipairs(catalog.gatheringReference.resources) do
+    if entry.category=='fishing' and entry.name=='Zone fishing reference: Azshara' then
+        winterReference=entry;break
+    end
+end
+assert(winterReference and type(winterReference.loot)=='table')
+local observedWinter={itemID=13755,name='Raw Winter Squid',
+    sourceID='foreverdb-fishing-observed',verificationStatus='forever_observed',
+    waterType='ocean',seasonWindow={start='09-23',['end']='03-19'}}
+winterReference.loot[#winterReference.loot+1]=observedWinter
+local updatedWinter
+for _,entry in ipairs(catalog:GatherResourceRows('Winter Squid','fishing',nil,'fish')) do
+    if entry.itemID==13755 then updatedWinter=entry;break end
+end
+assert(updatedWinter,'imported item remains searchable')
+local updatedModel=catalog:GatherDetailModel(updatedWinter,nil,false)
+local updatedWater=detailsSection(updatedModel,'WATER TYPE & SEASON')
+assert(updatedWater:find('Water (ForeverDB reported): Ocean',1,true),
+    'new explicit ForeverDB water type supersedes Classic water note')
+assert(updatedWater:find('Season (ForeverDB reference; not verified): September 23 - March 19',1,true),
+    'an observed catch does not independently verify a seasonal restriction')
+assert(updatedWater:find('ForeverDB reports a WoW Forever catch (zone-level only).',1,true),
+    'Forever catch evidence and exact water-source attribution are separate')
+assert(not detailsSection(updatedModel,'Fishing Sources'):find('Azshara School',1,true),
+    'zone-level observed catch does not fabricate a named fish school')
+-- Evidence reverts on a future snapshot that no longer contains the field;
+-- never persist or invent a sticky "verified" flag in SavedVariables.
+winterReference.loot[#winterReference.loot]=nil
+local revertedWinter
+for _,entry in ipairs(catalog:GatherResourceRows('Winter Squid','fishing',nil,'fish')) do
+    if entry.itemID==13755 then revertedWinter=entry;break end
+end
+assert(detailsSection(catalog:GatherDetailModel(revertedWinter,nil,false),'WATER TYPE & SEASON'):
+    find('Water (Classic):',1,true),'removed provider water fact falls back to Classic')
 assert(detailsSection(winterExpanded,'YOUR GATHERING HISTORY'),
        'personal catch history remains visible in expanded fish details')
 
@@ -911,5 +963,6 @@ catalog.UI.gatherMaterialFrames=nil
 assert(catalog.UI:RenderGatherMaterialPanel(mined,skilled,false))
 eq(catalog.UI.gatherMaterialFrames[2].title.text,'|cffddb27a1|r','exact WoW skill color bytes')
 eq(catalog.UI.gatherMaterialFrames[3].title.text,'|cffb7e4c4121/150|r','exact WoW character color bytes')
-eq(catalog.UI.gatherMaterialFrames[4].title.text,'|cffffc77bUnverified|r','exact WoW drop color bytes')
+eq(catalog.UI.gatherMaterialFrames[4].title.text,
+    '|cffffc77b'..model2.dropStatus..'|r','exact WoW drop color bytes with provenance')
 CreateFrame=originalCreate

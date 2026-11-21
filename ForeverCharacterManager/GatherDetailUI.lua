@@ -162,8 +162,13 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
         for _,src in ipairs(model.sources) do
             sources[#sources+1]="|cffffe4b5"..src.name.."|r  (Req: "..tostring(src.required)..
                 ")\nMeets reference node skill: "..tostring(src.eligibility)
+            if src.dropStatus and src.dropStatus~="Unverified" then
+                sources[#sources+1]="  Item evidence: "..src.dropStatus
+            end
         end
-        sources[#sources+1]="|cffffc77bWoW Forever material drops are not confirmed.|r"
+        sources[#sources+1]=model.dropStatus=="Unverified" and
+            "|cffffc77bWoW Forever material drops are not confirmed.|r" or
+            "|cffffc77bForeverDB evidence is not personal confirmation.|r"
         section(model.sourceHeading,sources)
 
         local places={}

@@ -1,6 +1,8 @@
 from pathlib import Path
-import json, re, subprocess, sys, tempfile, unittest
+import copy, json, re, subprocess, sys, tempfile, unittest
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'ForeverCharacterManager/FCM-Companion'))
+from build_gather_reference import validate
 
 class ImportTests(unittest.TestCase):
     def test_staging_replay_and_failure(self):
@@ -13,6 +15,11 @@ class ImportTests(unittest.TestCase):
                     nodes=[dict(name='Fixture Resource',objectIds=[123],skill=1,alsoGives=[],topZones=[])],pools=['Fixture Pool'],
                     url='https://foreverdb.net/profession/'+kind),
                     meta=dict(build='1.60.1.70959',attribution='ForeverDB',client='invented-client'))
+                if kind=='fishing':
+                    document['data']['zones'][0]['loot']=[dict(name='Raw Winter Squid',itemId=13755,
+                        waterType='freshwater')]
+                    document['data']['zones'][0]['caughtInForever']=[dict(name='Raw Winter Squid',
+                        itemId=13755,waterType='ocean',seasonWindow=dict(start='09-23',end='03-19'))]
                 (incoming/(kind+'.json')).write_text(json.dumps(document))
             importer=ROOT/'ForeverCharacterManager/FCM-Companion/import_foreverdb_gathering.py'
             output=base/'staged'
@@ -22,6 +29,35 @@ class ImportTests(unittest.TestCase):
             self.assertEqual(run(output).returncode,0)
             old=(output/'GatheringReferenceData.lua').read_bytes()
             self.assertNotIn(b'invented-client',old)
+            normalized=json.loads((output/'gathering-reference.json').read_text(encoding='utf8'))
+            zone=next(r for r in normalized['resources']
+                if r['category']=='fishing' and r['name']=='Zone fishing reference: Fixture Zone')
+            by_source={item['sourceID']:item for item in zone['loot']
+                if item['itemID']==13755}
+            self.assertEqual(by_source['foreverdb-fishing-classic']['verificationStatus'],
+                'classic_reference')
+            observed=by_source['foreverdb-fishing-observed']
+            self.assertEqual(observed['verificationStatus'],'forever_observed')
+            self.assertEqual(observed['waterType'],'ocean')
+            self.assertEqual(observed['seasonWindow'],
+                dict(start='09-23',end='03-19'))
+            # A season of observed catches is not evidence of seasonal
+            # exclusivity; the UI must keep any season rule qualified.
+            source_input={k:v for k,v in normalized.items()
+                if k not in ('contentSHA256','recordCount','categoryCounts')}
+            self.assertEqual(validate(source_input)['recordCount'],len(normalized['resources']))
+            for bad_field,bad_value in (
+                ('waterType','arbitrary ocean from zone name'),
+                ('verificationStatus','verified because it has a loot table'),
+                ('seasonWindow',dict(start='13-10',end='03-19')),
+            ):
+                changed=copy.deepcopy(source_input)
+                entry=next(r for r in changed['resources']
+                    if r['category']=='fishing' and r['name']=='Zone fishing reference: Fixture Zone')
+                target=next(item for item in entry['loot']
+                    if item['sourceID']=='foreverdb-fishing-observed')
+                target[bad_field]=bad_value
+                with self.assertRaises(ValueError):validate(changed)
             self.assertIn('Unchanged',run(output).stdout)
             (incoming/'mining.json').write_text('{')
             invalid=base/'invalid'

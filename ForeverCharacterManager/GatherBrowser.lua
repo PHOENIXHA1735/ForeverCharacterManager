@@ -142,7 +142,11 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType, skillRange)
                     if item.itemID then
                         local species=addFishingItem(item.itemID,item.name)
                         species.referenceWaters=species.referenceWaters or {}
-                        species.referenceWaters[#species.referenceWaters+1]={water=ref,sourceID=item.sourceID,type=typ}
+                        -- Retain the item-level evidence so display updates when the
+                        -- normalized ForeverDB snapshot gains explicit water/season facts.
+                        -- A zone-level catch still does not establish an exact pool.
+                        species.referenceWaters[#species.referenceWaters+1]={
+                            water=ref,sourceID=item.sourceID,type=typ,itemEvidence=item}
                     end
                 end
             else

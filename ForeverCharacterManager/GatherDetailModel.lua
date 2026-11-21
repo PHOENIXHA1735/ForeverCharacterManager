@@ -40,6 +40,24 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
     }
     local firstThreshold,consistent,hasThreshold=nil,true,false
     local current,cap
+    -- A referenced source-node item is not automatically an observed Forever
+    -- drop. Keep provenance and distinguish provider listing from observation.
+    local dropRank=0
+    local function materialDropEvidence(source,itemID)
+        local rank=0
+        for _,item in ipairs(source and source.loot or {}) do
+            if tonumber(item.itemID)==tonumber(itemID) and
+                type(item.sourceID)=="string" and item.sourceID:match("^foreverdb%-") then
+                if item.verificationStatus=="forever_observed" then
+                    rank=math.max(rank,2)
+                elseif item.verificationStatus~="classic_reference" then
+                    rank=math.max(rank,1)
+                end
+            end
+        end
+        return rank==2 and "ForeverDB observed" or
+            rank==1 and "ForeverDB listed" or "Unverified",rank
+    end
     local seenSources={}
     for _,sourceName in ipairs(ref.materialSources or {}) do
         local normalized=sourceName:lower()
@@ -69,10 +87,12 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
                     end
                 end)()
             end
+            local status,rank=materialDropEvidence(source,model.itemID)
+            dropRank=math.max(dropRank,rank)
             model.sources[#model.sources+1]={
                 name=sourceName,required=threshold or "Unknown",
                 eligibility=recent and info.can or "Unknown",
-                verified=false
+                dropStatus=status
             }
             local list,remaining,total=zonesFor(source,expanded)
             model.zoneGroups[#model.zoneGroups+1]={
@@ -86,9 +106,11 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
         model.current=tostring(current)
         model.cap=cap
     end
-    -- Candidate Classic item drops are not the same as a validated Forever
-    -- gathering rule. Never infer a material drop from the player's Mining skill.
+    -- Candidate source-node skill does not prove the specific item drops.
+    -- These labels are recalculated from every refreshed provider snapshot.
     model.canGather="Unknown"
+    model.dropStatus=dropRank==2 and "ForeverDB observed" or
+        dropRank==1 and "ForeverDB listed" or "Unverified"
     if #model.sources==0 then
         model.sources[1]={name="No verified candidate source documented",required="Unknown",eligibility="Unknown"}
     end
@@ -102,7 +124,11 @@ function FCM:GatherMaterialDetailModel(row,ch,expanded)
         end
     end
     if #model.history==0 then model.history[1]="No personal discoveries recorded." end
-    model.verificationNote="These source nodes are candidates. A character meeting the node skill does not verify the specific WoW Forever item drop."
+    model.verificationNote=dropRank==2 and
+        "ForeverDB reports an observed item drop at a named source. Verify the report in game." or
+        dropRank==1 and
+        "ForeverDB lists this item at a candidate source; this is not a confirmed personal drop." or
+        "No ForeverDB item-specific source evidence yet. Meeting the node skill does not prove the item drops."
     return model
 end
 
@@ -131,22 +157,90 @@ local fishingMethodLabels={
 }
 local fishingMethodOrder={"open_water","school","pool","oil_spill","wreckage","unknown"}
 
+local waterLabels={ocean="Ocean",coastal="Coastal / ocean",freshwater="Freshwater",
+    lake="Lake (freshwater)",river="River (freshwater)"}
+local months={"January","February","March","April","May","June","July","August",
+    "September","October","November","December"}
+local function seasonLabel(window)
+    if type(window)~="table" or type(window.start)~="string" or
+        type(window["end"])~="string" then return nil end
+    local function day(value)
+        local month,date=value:match("^(%d%d)%-(%d%d)$")
+        month,date=tonumber(month),tonumber(date)
+        if not month or not months[month] or not date or date<1 or date>31 then return nil end
+        return months[month].." "..date
+    end
+    local first,last=day(window.start),day(window["end"])
+    return first and last and (first.." - "..last) or nil
+end
+
+local function fishEvidence(row)
+    local observedCount=0
+    local observedWaters,referenceWaters,observedSeasons,referenceSeasons={},{},{},{}
+    for _,entry in ipairs(row.referenceWaters or {}) do
+        local item=entry.itemEvidence or {}
+        local observed=item.verificationStatus=="forever_observed" or
+            entry.sourceID=="foreverdb-fishing-observed"
+        if observed then observedCount=observedCount+1 end
+        local water=waterLabels[item.waterType]
+        if water then
+            local target=observed and observedWaters or referenceWaters
+            target[water]=true
+        end
+        local season=seasonLabel(item.seasonWindow)
+        if season then
+            -- Even an observed catch does not independently verify an
+            -- exclusive annual season. Treat seasonal windows as references.
+            local target=observed and observedSeasons or referenceSeasons
+            target[season]=true
+        end
+    end
+    local function choose(verified,other)
+        local names={}
+        for value in pairs(verified) do names[#names+1]=value end
+        if #names>1 then return "Conflicting ForeverDB evidence - review","conflict" end
+        if #names==1 then return names[1],"forever" end
+        names={}
+        for value in pairs(other) do names[#names+1]=value end
+        if #names>1 then return "Conflicting reference values - review","conflict" end
+        if #names==1 then return names[1],"reference" end
+        return nil,nil
+    end
+    local water,waterOrigin=choose(observedWaters,referenceWaters)
+    local season,seasonOrigin=choose(observedSeasons,referenceSeasons)
+    return {observed=observedCount,water=water,waterOrigin=waterOrigin,
+        season=season,seasonOrigin=seasonOrigin}
+end
+
 function FCM:GatherFishCatchSections(row,expanded)
     if not row or row.kind~="fishing" or not row.itemID or
         not tostring(row.summary or ""):find("^Fish |",1) then return nil end
     local notes=classicFishNotes[tonumber(row.itemID)]
+    local evidence=fishEvidence(row)
     local details={}
     local waterAndSeason={}
-    if notes then
+    if evidence.water then
+        waterAndSeason[#waterAndSeason+1]=(evidence.waterOrigin=="forever" and
+            "Water (ForeverDB reported): " or "Water (reference): ")..evidence.water
+    elseif notes then
         waterAndSeason[#waterAndSeason+1]="Water (Classic): "..notes.water
-        if notes.season then
-            waterAndSeason[#waterAndSeason+1]="Season (Classic): "..notes.season
-        end
-        waterAndSeason[#waterAndSeason+1]="WoW Forever water/season rules: unverified."
     else
         waterAndSeason[#waterAndSeason+1]="Ocean / freshwater: not established by current references."
+    end
+    if evidence.season then
+        -- A listed season is not proven by one successful catch.
+        waterAndSeason[#waterAndSeason+1]="Season (ForeverDB reference; not verified): "..evidence.season
+    elseif notes and notes.season then
+        waterAndSeason[#waterAndSeason+1]="Season (Classic): "..notes.season
+    else
         waterAndSeason[#waterAndSeason+1]="No verified seasonal restriction documented."
     end
+    if evidence.observed>0 then
+        waterAndSeason[#waterAndSeason+1]="ForeverDB reports a WoW Forever catch (zone-level only)."
+    else
+        waterAndSeason[#waterAndSeason+1]="ForeverDB catch verification: not documented."
+    end
+    waterAndSeason[#waterAndSeason+1]="Exact Forever water/method and seasonal rules require separate evidence."
     details[#details+1]={title="WATER TYPE & SEASON",lines=waterAndSeason}
     local groups={}
     local function addGroup(method)
@@ -250,7 +344,7 @@ function FCM:GatherDetailModel(row,ch,expanded)
     local sections=row.detail(expanded,true)
     if material then
         model.metrics={{"Source node skill",model.required},{"Your skill",model.current..(model.cap and ("/"..model.cap) or "")},
-            {"Forever drop","Unverified"}}
+            {"Forever drop",model.dropStatus}}
         if expanded then
             for _,section in ipairs(sections) do
                 if section.title=="REFERENCE SOURCES" then model.referenceSection=section end

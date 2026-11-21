@@ -13,6 +13,8 @@ MAX_RECORDS=20000
 MAX_LOCATIONS=200
 CATEGORIES={'herbalism','mining','fishing','treasure'}
 FISHING={'pool','school','wreckage','oil_spill','open_water','lake','river','coast','unknown'}
+WATER_TYPES={'ocean','coastal','freshwater','lake','river','unknown'}
+LOOT_EVIDENCE={'classic_reference','provider_reference','forever_observed'}
 FIELDS={'id','name','category','objectID','itemID','iconID','profession','minimumSkill',
         'orange','yellow','green','gray','locations','environment','loot','fishingSourceType',
         'fishingMinimum','fishingNoGetAways','sourceIDs','verificationStatus',
@@ -76,9 +78,30 @@ def validate(document):
             if loc.get('continent') is not None:text(loc['continent'])
         if not isinstance(r.get('loot'),list) or len(r['loot'])>100:raise ValueError('Loot budget')
         for item in r['loot']:
-            if not isinstance(item,dict) or set(item)-{'name','itemID','sourceID'}:raise ValueError('Unsupported loot field')
+            allowed={'name','itemID','sourceID','verificationStatus','waterType','seasonWindow'}
+            if not isinstance(item,dict) or set(item)-allowed:raise ValueError('Unsupported loot field')
             text(item['name']);integer(item.get('itemID'))
             if item.get('sourceID') not in sources:raise ValueError('Unattributed loot')
+            if item.get('verificationStatus') is not None and item['verificationStatus'] not in LOOT_EVIDENCE:
+                raise ValueError('Unsupported loot evidence status')
+            # These are facts about the identified fish item; never infer them
+            # from its zone name, pool proximity or date of a single catch.
+            if item.get('waterType') is not None:
+                if kind!='fishing' or item['waterType'] not in WATER_TYPES:
+                    raise ValueError('Invalid item water type')
+            if item.get('seasonWindow') is not None:
+                season=item['seasonWindow']
+                if kind!='fishing' or not isinstance(season,dict) or set(season)!={'start','end'}:
+                    raise ValueError('Invalid item season')
+                for boundary in ('start','end'):
+                    date=season[boundary]
+                    if (not isinstance(date,str) or len(date)!=5 or date[2]!='-' or
+                        not date[:2].isdigit() or not date[3:].isdigit()):
+                        raise ValueError('Invalid seasonal date')
+                    month,day=int(date[:2]),int(date[3:])
+                    days=(31,29,31,30,31,30,31,31,30,31,30,31)
+                    if month<1 or month>12 or day<1 or day>days[month-1]:
+                        raise ValueError('Invalid seasonal date')
     d['resources'].sort(key=lambda r:r['id'])
     d['sources'].sort(key=lambda s:s['id'])
     d['contentSHA256']=hashlib.sha256(json.dumps(d['resources'],sort_keys=True,separators=(',',':')).encode()).hexdigest()
