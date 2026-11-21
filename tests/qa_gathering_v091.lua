@@ -627,3 +627,40 @@ FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 FCM:GatherEvent('LOOT_CLOSED')
 eq(#FCM:GatherNodes('fishing'),before,'pre-cast tooltip cannot identify generic loot')
 eq(FCM:GatherDistance(1438,0/0,0),nil,'invalid distance refused')
+
+-- Pre-cast-only tooltips cannot identify a pool. Independent fishing evidence
+-- still preserves the cleared item, without creating a pool or map point.
+local startLocations=#FCM:GatherNodes('fishing')
+local startSpecies=FCM:GatherResourceRows('6358','fishing')[1].count
+IsFishingLoot=function() return true end
+FCM:RememberFishingHover('Oil Spill')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'precast-only',7620)
+FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','precast-only',7620)
+local getLink=GetLootSlotLink
+GetLootSlotLink=function() return nil end
+FCM:GatherEvent('LOOT_READY')
+GetLootSlotLink=getLink
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+eq(#FCM:GatherNodes('fishing'),startLocations,'unattributed catch cannot create a pool')
+local preOnly=FCM:GatherResourceRows('6358','fishing')[1]
+eq(preOnly.count,startSpecies+2,'pre-cast-only verified catch retained once')
+eq(preOnly.unattributed,2,'fallback counted independently')
+assert(preOnly.detail():find('pool and location unverified',1,true))
+eq(FCM:GatherResourceRows('6358','fishing',nil,'oil_spill')[1].count,2,'unattributed catch excluded from pool filter')
+FCM:RememberFishingHover('Oil Spill')
+fishNow=fishNow+9
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'stale-tooltip',7620)
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+FCM:RememberFishingHover('Oil Spill')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'non-fishing-loot',7620)
+IsFishingLoot=function() return false end
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+IsFishingLoot=nil
+eq(FCM:GatherResourceRows('6358','fishing')[1].unattributed,2,'stale hover and unrelated loot rejected')

@@ -3883,6 +3883,18 @@ function UI:Refresh()
         self.craftQuantityLabel:SetShown(crafting)
         self.craftQuantityEdit:SetShown(crafting)
         local gathering=(tab=="Gathering")
+        local requests=tab=="Requests"
+        -- A second toolbar (including Gold settings) needs its own row below the common filters.
+        local hasSecondToolbar=browsing or crafting or requests or tab=="Gold"
+        local contentTop=gathering and -170 or hasSecondToolbar and -143 or -107
+        self.listPanel:ClearAllPoints()
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,contentTop)
+        self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
+        self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
+        self.detailPanel:ClearAllPoints()
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,contentTop)
+        self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
+            tab=="Talents" and 104 or 68)
         self.gatherDistanceButton:SetShown(gathering)
         self.gatherPinsButton:SetShown(gathering)
         self.gatherRimButton:SetShown(gathering)
@@ -3931,21 +3943,10 @@ function UI:Refresh()
         self.backSearchButton:SetShown(not crafting)
         self.backSearchButton:SetText(tab=="Global Search" and "Back" or "All")
         self.searchLabel:SetText(tab=="Global Search" and "Search all items or recipes" or "Search this list")
-        local requests=tab=="Requests"
         self.requestViewButton:SetShown(requests)
         local requestView=FCM.db.settings.requestView or "all"
         local requestViewNames={all="All",mine="For Me",craftable="Can Craft",missing="Needs Mats"}
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
-        -- A second toolbar (including Gold settings) needs its own row below the common filters.
-        local hasSecondToolbar=browsing or crafting or gathering or requests or tab=="Gold"
-        self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,gathering and -170 or hasSecondToolbar and -143 or -107)
-        self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
-        self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
-        self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,gathering and -170 or hasSecondToolbar and -143 or -107)
-        self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
-            tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
         self.dungeonViewButton:SetShown(dungeonBrowsing)
         self.dungeonLevelButton:SetShown(dungeonBrowsing)

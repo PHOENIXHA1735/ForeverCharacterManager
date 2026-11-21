@@ -98,6 +98,18 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType)
             end
         end
     end
+    local db=not sourceType and (not kind or kind=="fishing") and self:GatherDB()
+    local unattributed=db and db.unattributedFishing
+    for id,qty in pairs(type(unattributed)=="table" and unattributed or {}) do
+        id,qty=tonumber(id),tonumber(qty)
+        if id and id>=1 and id<=10000000 and id==math.floor(id) and qty and qty>=1 and qty<=1000000000 and qty==math.floor(qty) then
+            local name=(type(GetItemInfo)=="function" and self:Try(GetItemInfo,id)) or ("Item "..id)
+            local species=add("fishing",name,"item:"..id)
+            species.itemID=id
+            species.unattributed=qty
+            species.count=species.count+qty
+        end
+    end
     local filtered={}
     for _,row in ipairs(entries) do
         local matches=row.name:lower():find(q,1,true) or (row.itemID and tostring(row.itemID)==q)
@@ -149,7 +161,10 @@ function FCM:GatherResourceRows(search, kind, ch, sourceType)
                 for _,line in ipairs(self:GatherCatchLines(point.catches)) do lines[#lines+1]=line end
                 end
             end
-            if row.kind=="fishing" then lines[#lines+1]="Saved coordinates are the player's standing location." end
+            if row.unattributed then
+                lines[#lines+1]="Confirmed catch, pool and location unverified: x"..row.unattributed
+            end
+            if row.kind=="fishing" and #row.locations>0 then lines[#lines+1]="Saved coordinates are the player's standing location." end
             return table.concat(lines,"\n")
         end
     end

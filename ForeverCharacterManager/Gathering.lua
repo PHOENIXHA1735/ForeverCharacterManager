@@ -942,9 +942,6 @@ function FCM:FishingStatus()
     else
         lines[#lines+1]="Tooltip: no verified named school"
     end
-    if self._fishingCast and self._fishingCast.name then
-        lines[#lines+1]="Cast: "..self._fishingCast.name
-    end
     if self._fishingLastSpellID then
         lines[#lines+1]="Last spell ID: "..tostring(self._fishingLastSpellID)
     end
@@ -984,24 +981,26 @@ function FCM:RecordFishingSchoolLoot()
         self._fishingLastResult="Fishing cast expired; no school recorded"
         return
     end
-    if not lootObjectEvidence or lootObjectEvidence()~=true or
-       (type(IsFishingLoot)=="function" and self:Try(IsFishingLoot)~=true) then
-        self._fishingLastResult="Creature loot; no fishing school recorded"
-        return
-    end
-    if not cast.mapID or not cast.x or not cast.y then
-        self._fishingLastResult="Fishing map position unavailable; no marker recorded"
+    local fishingConfirmed=type(IsFishingLoot)=="function" and self:Try(IsFishingLoot)==true
+    if lootObjectEvidence()~=true or (type(IsFishingLoot)=="function" and not fishingConfirmed) then
+        self._fishingLastResult="Loot source could not be verified as fishing"
         return
     end
     local loot=self._fishingLoot
     if not loot then
         local hover=self._fishingHover
         local age=hover and self:Now()-hover.at
-        -- A pre-cast tooltip alone cannot identify the source of open-water loot.
-        if not hover or hover.cast~=cast or not age or age<0 or age>8 or
-           (cast.name and hover.name:lower()~=cast.name:lower()) then return end
-        cast.name=hover.name
-        loot={cast=cast,slots={},cleared={}}
+        local named=hover and hover.cast==cast and age>=0 and age<=8
+        if not named and not (cast.preCastPoolSeen and fishingConfirmed) then
+            self._fishingLastResult="No current pool evidence; no pool observation recorded"
+            return
+        end
+        local pool=named and cast.mapID and cast.x and cast.y and hover.name or nil
+        if not pool and not fishingConfirmed then
+            self._fishingLastResult="Pool position unavailable; no observation recorded"
+            return
+        end
+        loot={cast=cast,pool=pool,slots={},cleared={}}
         self._fishingLoot=loot
     end
     if type(GetLootSlotLink)=="function" and type(GetLootSlotInfo)=="function" and type(GetNumLootItems)=="function" then
@@ -1028,10 +1027,20 @@ function FCM:ConfirmFishingLootSlot(slot)
     if self:Now()-loot.cast.at>120 then self._fishingLoot=nil;return end
     loot.slots[slot]=nil
     loot.cleared[slot]=true
+    if not loot.pool then
+        local gathering=self:GatherDB()
+        if not gathering then return end
+        if type(gathering.unattributedFishing)~="table" then gathering.unattributedFishing={} end
+        local counts=gathering.unattributedFishing
+        counts[catch.item]=math.min(1000000000,(tonumber(counts[catch.item]) or 0)+catch.count)
+        self._fishingLastResult="Catch saved; pool attribution unavailable"
+        if self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
+        return
+    end
     local cast=loot.cast
     local catches={[catch.item]=catch.count}
     if not loot.node then
-        local _,node=self:AddGatherNode("fishing",cast.mapID,cast.x,cast.y,cast.name,"personal",nil,catches)
+        local _,node=self:AddGatherNode("fishing",cast.mapID,cast.x,cast.y,loot.pool,"personal",nil,catches)
         loot.node=node
     else
         local counts=loot.node.catches
@@ -1039,7 +1048,7 @@ function FCM:ConfirmFishingLootSlot(slot)
         self._gatherMinimapDirty=true
         self._gatherWorldMapDirty=true
     end
-    self._fishingLastResult="Recorded "..cast.name.." at player standing location"
+    self._fishingLastResult="Recorded "..loot.pool.." at player standing location"
     if self.Refresh and self.window and self.window:IsShown() then self:Refresh() end
 end
 
@@ -1196,9 +1205,12 @@ function FCM:GatherEvent(event,...)
             self._fishingLastSpellID=spellID
             self._fishingCast=nil
             self._fishingLoot=nil
+            local hover=self._fishingHover
+            local age=hover and self:Now()-hover.at
+            local preCastPoolSeen=hover and not hover.cast and age>=0 and age<=8
             self._fishingHover=nil
             local mapID,x,y=playerGatherPosition()
-            self._fishingCast={at=self:Now(),guid=castGUID,spellID=spellID,mapID=mapID,x=x,y=y}
+            self._fishingCast={at=self:Now(),guid=castGUID,spellID=spellID,mapID=mapID,x=x,y=y,preCastPoolSeen=preCastPoolSeen}
             self._fishingLastResult="Fishing cast; awaiting named object and loot"
             return
         end

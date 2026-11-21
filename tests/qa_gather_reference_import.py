@@ -41,7 +41,9 @@ class ImportTests(unittest.TestCase):
                     for button in buttons]
             for window in (1000,1010,1500):
                 self.assertLess(14+sum(widths)+8*(len(widths)-1),window-171-22)
-        self.assertEqual(ui.count('gathering and -170 or hasSecondToolbar'),2)
+        self.assertEqual(ui.count('gathering and -170 or hasSecondToolbar'),1)
+        self.assertLess(ui.index('14,contentTop)'),ui.index('self.gatherWorldButton:SetShown(gathering)'))
+        self.assertLess(ui.index('-15,contentTop)'),ui.index('self.gatherWorldButton:SetShown(gathering)'))
         self.assertLess(138+25,170)
 
 
