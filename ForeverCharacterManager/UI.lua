@@ -1998,8 +1998,9 @@ function UI:MakeMenu(anchor, options, width, above, page)
     options=options or {}
     width=math.min(tonumber(width) or 200,300)
     page=math.max(1,tonumber(page) or 1)
-    -- Limit the menu to 9 rows per page: no popover taller than the FCM window.
-    local perPage=8
+    -- Keep the nine Gathering categories together. Other menus retain their
+    -- eight-option pages (plus at most one navigation row).
+    local perPage=(anchor==self.gatherCategoryButton) and 9 or 8
     local pages=math.max(1,math.ceil(#options/perPage))
     page=math.min(page,pages)
     local visible={}
