@@ -102,7 +102,7 @@ function P:Shortlist(ch,assessed,opts)
                 type(row.sources)=="table" and #row.sources>0 and
                 tonumber(row.requiredLevel) and tonumber(row.targetLevel) and
                 row.requiredLevel>ch.level and row.requiredLevel<=row.targetLevel and
-                row.eligibility~="blocked" then
+                (row.eligibility=="compatible" or row.eligibility=="verify") then
             local weapon=isWeapon(row)
             if weapon and not verifiedWeapon(row,ch) then
                 result.withheldWeapons=result.withheldWeapons+1
