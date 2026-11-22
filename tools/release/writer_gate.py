@@ -48,9 +48,11 @@ def writer(root, name):
         yield
 
 
-def transact(root, recovery, task_inventory, payload=None, baseline=None, hook=lambda _: None):
+def transact(root, recovery, task_inventory, payload=None, baseline=None, hook=lambda _: None, *,
+             guard=overlay.rehearsal_guard, prepare=lambda: None, finish=lambda phase: None,
+             identity=None, security=None):
     """Apply or recover while denying all participating writers."""
-    require_fixture(root)
+    guard(root, lambda: {"complete": True, "writers": [], "unfenced": []})
     recovery = recovery.absolute()
     if recovery.is_relative_to(root) or not recovery.is_relative_to(root.parent):
         raise ValueError("Recovery must stay within the disposable parent directory")
@@ -59,13 +61,18 @@ def transact(root, recovery, task_inventory, payload=None, baseline=None, hook=l
     with lease(root):
         fence = overlay.location(root, FENCE)
         if payload is None:
+            if not fence.exists():
+                journal = json.loads(overlay.location(recovery, "journal.json").read_bytes())
+                if identity is None or journal["phase"] != "committed":
+                    raise ValueError("No verified activation to roll back")
+                overlay.record(fence, {"recovery": str(recovery), "tasks": task_inventory(), "identity": identity})
             state = json.loads(fence.read_bytes())
-            if state["recovery"] != str(recovery) or state["tasks"] != task_inventory():
+            if state["recovery"] != str(recovery) or state["tasks"] != task_inventory() or state.get("identity") != identity:
                 raise ValueError("Recovery identity or task definitions changed")
         else:
             if fence.exists() or recovery.exists():
                 raise Busy("An unfinished transaction requires recovery")
-            state = {"recovery": str(recovery), "tasks": task_inventory()}
+            state = {"recovery": str(recovery), "tasks": task_inventory(), "identity": identity}
             if set(state["tasks"]) != TASKS:
                 raise ValueError("Task inventory is incomplete")
             overlay.record(fence, state)
@@ -81,9 +88,11 @@ def transact(root, recovery, task_inventory, payload=None, baseline=None, hook=l
                 if journal["phase"] == "restored":
                     overlay.check(root, journal["original"])
                 else:
-                    overlay.restore(root, recovery, probe)
+                    overlay.restore(root, recovery, probe, guard=guard, security=security)
             else:
-                overlay.apply(root, payload, baseline, recovery, probe, hook)
+                prepare()
+                overlay.apply(root, payload, baseline, recovery, probe, hook, guard=guard,
+                              verify=lambda: finish("committed"), security=security)
             complete = True
         finally:
             # A failed verification, absent journal, or failed rollback keeps the durable fence.
@@ -96,4 +105,5 @@ def transact(root, recovery, task_inventory, payload=None, baseline=None, hook=l
                     if journal["phase"] == "committed":
                         expected.update({key: value["after"] for key, value in journal["operations"].items()})
                     overlay.check(root, expected)
+                    finish(journal["phase"])
                     fence.unlink()

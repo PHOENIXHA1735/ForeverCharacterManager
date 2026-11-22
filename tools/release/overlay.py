@@ -10,6 +10,8 @@ import stat
 import tempfile
 from zipfile import ZipFile
 
+import fcm_security
+
 ADDON = "Interface/AddOns/ForeverCharacterManager/"
 GENERATED = {
     "ExternalData.generated.lua", "AHPrices.generated.lua", "AHHistory.generated.lua",
@@ -55,8 +57,18 @@ def fingerprint(path):
     return digest(data) if data is not None else None
 
 
-def atomic_write(path, data):
+def atomic_write(path, data, *, expected_acl=None, read_acl=fcm_security.acl,
+                 write_acl=fcm_security.set_acl, replace_file=fcm_security.replace_file):
+    """Write bytes atomically with ACL4 owner/group preservation on temp files.
+
+    Any security mismatch raises instead of silently changing file permissions.
+    Unpinned writes are used only for separate journal, fence and evidence files.
+    """
+    if expected_acl is not None and not path.parent.is_dir():
+        raise ValueError(f"Approved security replacement directory does not exist: {path.parent}")
     path.parent.mkdir(parents=True, exist_ok=True)
+    if expected_acl is not None and path.exists() and read_acl(path) != expected_acl:
+        raise ValueError(f"Pre-write security changed: {path}")
     with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".fcm-overlay-", delete=False) as handle:
         temporary = Path(handle.name)
         try:
@@ -64,7 +76,18 @@ def atomic_write(path, data):
             handle.flush()
             os.fsync(handle.fileno())
             handle.close()
-            temporary.replace(path)
+            if expected_acl is not None:
+                if read_acl(temporary) != expected_acl:
+                    write_acl(temporary, expected_acl)
+                if read_acl(temporary) != expected_acl:
+                    raise ValueError(f"Replacement cannot preserve owner/group/DACL: {path}")
+            if expected_acl is not None:
+                # Checked same-volume rename, including paths that did not exist.
+                replace_file(path, temporary)
+            else:
+                temporary.replace(path)
+            if expected_acl is not None and read_acl(path) != expected_acl:
+                raise ValueError(f"Installed owner/group/DACL differ: {path}")
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -185,8 +208,8 @@ def record(path, state):
     atomic_write(path, json.dumps(state, indent=2).encode())
 
 
-def restore_locked(root, recovery, state, probe):
-    rehearsal_guard(root, probe)
+def restore_locked(root, recovery, state, probe, guard=rehearsal_guard, security=None):
+    guard(root, probe)
     if state["root"] != str(root):
         raise ValueError("Recovery root mismatch")
     if state["phase"] not in {"pending", "committed", "restoring"}:
@@ -212,28 +235,35 @@ def restore_locked(root, recovery, state, probe):
     record(recovery / "journal.json", state)
     for key in sorted(restore_keys):
         before = state["original"][key]
-        rehearsal_guard(root, probe)
+        guard(root, probe)
         target = location(root, key)
         if fingerprint(target) == before:
             continue
         if before is None:
+            if security is not None and target.exists():
+                if key not in security or fcm_security.acl(target) != security[key]:
+                    raise ValueError(f"Rollback deletion security changed: {key}")
             target.unlink(missing_ok=True)
         else:
-            atomic_write(target, location(backup, key).read_bytes())
+            if security is not None and key not in security:
+                raise ValueError(f"Missing rollback ACL evidence: {key}")
+            atomic_write(target, location(backup, key).read_bytes(),
+                         expected_acl=None if security is None else security[key])
     check(root, state["original"])
     state["phase"] = "restored"
     record(recovery / "journal.json", state)
 
 
-def restore(root, recovery, probe):
-    rehearsal_guard(root, probe)
+def restore(root, recovery, probe, *, guard=rehearsal_guard, security=None):
+    guard(root, probe)
     with lock(root):
         state = json.loads(location(recovery, "journal.json").read_bytes())
-        restore_locked(root, recovery, state, probe)
+        restore_locked(root, recovery, state, probe, guard, security)
 
 
-def apply(root, payload, baseline, recovery, probe, hook=lambda _: None):
-    rehearsal_guard(root, probe)
+def apply(root, payload, baseline, recovery, probe, hook=lambda _: None, *,
+          guard=rehearsal_guard, verify=lambda: None, security=None):
+    guard(root, probe)
     if recovery.is_relative_to(root) or not recovery.parent.exists():
         raise ValueError("Recovery must be outside the client in an existing directory")
     recovery.mkdir()
@@ -253,23 +283,30 @@ def apply(root, payload, baseline, recovery, probe, hook=lambda _: None):
         record(journal, state)
         try:
             for key in operations:
-                rehearsal_guard(root, probe)
+                guard(root, probe)
                 target = location(root, key)
                 if fingerprint(target) != operations[key]["before"]:
                     raise ValueError("Target changed after backup")
                 if key in payload:
-                    atomic_write(target, payload[key])
+                    if security is not None and key not in security:
+                        raise ValueError(f"Missing upgrade ACL evidence: {key}")
+                    atomic_write(target, payload[key],
+                                 expected_acl=None if security is None else security[key])
                 else:
+                    if security is not None and (key not in security or
+                            fcm_security.acl(target) != security[key]):
+                        raise ValueError(f"Retirement security changed: {key}")
                     target.unlink()
                 hook(key)
                 state["completed"].append(key)
                 record(journal, state)
-            rehearsal_guard(root, probe)
+            guard(root, probe)
             check(root, {**original, **{key: item["after"] for key, item in operations.items()}})
+            verify()
             state["phase"] = "committed"
             record(journal, state)
         except Exception:
-            restore_locked(root, recovery, state, probe)
+            restore_locked(root, recovery, state, probe, guard, security)
             raise
 
 
