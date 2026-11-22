@@ -1,0 +1,114 @@
+name: Publish FCM v0.9.4 after Windows deployment qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      windows_qualification:
+        description: "Type PRODUCTION_WINDOWS_QUALIFIED_V0.9.4 only after the separate offline-NTFS, writer-gate, task, ACL and rollback qualification passes."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'PHOENIXHA1735/ForeverCharacterManager' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require explicit external Windows qualification attestation
+        env:
+          QUALIFICATION: ${{ inputs.windows_qualification }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$QUALIFICATION" != 'PRODUCTION_WINDOWS_QUALIFIED_V0.9.4' ]]; then
+            echo "::error::Production Windows qualification has not been attested."
+            exit 1
+          fi
+
+      - name: Check out release instructions from main
+        uses: actions/checkout@v4
+        with:
+          path: release-metadata
+          persist-credentials: false
+
+      - name: Check out exact reviewed source commit
+        uses: actions/checkout@v4
+        with:
+          ref: 1cf3f733b8132e565b0418f318de90a84a128d50
+          path: source
+          persist-credentials: false
+
+      - name: Install Python 3.12 and Lua 5.1
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.1
+
+      - name: Verify source, tests and reproducible package
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1cf3f733b8132e565b0418f318de90a84a128d50"
+          sha256sum -c SOURCE_MANIFEST_SHA256.txt
+          python3 tests/check_private_paths.py
+          python3 tests/qa_release_overlay.py
+          python3 tests/qa_writer_gate.py
+          find ForeverCharacterManager -name '*.lua' -type f -print0 | xargs -0 -r luac5.1 -p
+          for suite in tests/qa_*.lua; do lua5.1 "$suite"; done
+          python3 tools/release/build_candidate.py "$RUNNER_TEMP/fcm-v094" --ref 1cf3f733b8132e565b0418f318de90a84a128d50
+          cd "$RUNNER_TEMP/fcm-v094"
+          sha256sum -c FCM-v0.9.4.zip.sha256
+          printf '%s  %s\n' \
+            '2ddb8f081a37f227d561c5c45dd27e03f27bfa50545fcbd0e724a85468296d06' \
+            'FCM-v0.9.4.zip' | sha256sum -c -
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from zipfile import ZipFile
+          expected = dict(
+              line.split('  ', 1)
+              for line in Path('PACKAGE-SHA256.txt').read_text().splitlines()
+          )
+          expected = {name: digest for digest, name in expected.items()}
+          assert len(expected) == 89
+          with ZipFile('FCM-v0.9.4.zip') as archive:
+              names = [n for n in archive.namelist() if not n.endswith('/')]
+              assert archive.testzip() is None
+              assert len(names) == len(set(names)) == 89
+              assert set(names) == set(expected)
+              for name in names:
+                  assert hashlib.sha256(archive.read(name)).hexdigest() == expected[name], name
+              assert b'## Version: 0.9.4' in archive.read('ForeverCharacterManager/ForeverCharacterManager.toc')
+              assert b'FCM.version = "0.9.4"' in archive.read('ForeverCharacterManager/Core.lua')
+              assert not any(name.lower().endswith(('.sqlite3','.dpapi','settings.json')) for name in names)
+          PY
+
+      - name: Refuse to replace an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.9.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release v0.9.4 already exists. Refusing overwrite."
+            exit 1
+          fi
+
+      - name: Publish exact reviewed v0.9.4 package and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create v0.9.4 \
+            "$RUNNER_TEMP/fcm-v094/FCM-v0.9.4.zip" \
+            "$RUNNER_TEMP/fcm-v094/FCM-v0.9.4.zip.sha256" \
+            "$RUNNER_TEMP/fcm-v094/PACKAGE-SHA256.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 1cf3f733b8132e565b0418f318de90a84a128d50 \
+            --latest \
+            --title 'Forever Character Manager v0.9.4 — Gathering Browser, Planner and History' \
+            --notes-file release-metadata/FCM_v094_RELEASE_NOTES.md
