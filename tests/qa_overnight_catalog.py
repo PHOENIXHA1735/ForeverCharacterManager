@@ -54,7 +54,7 @@ assert "if (-not $script:OvernightCatalogMode)" in provider
 assert "overnight-catalog-status.json" in docs
 assert "foreverdb-request-budget.json" in docs
 assert "%LOCALAPPDATA%\\ForeverCharacterManager" in docs
-assert "ENABLE-FCM-OVERNIGHT.cmd" in updater
+assert (Path("ForeverCharacterManager/FCM-Companion") / "ENABLE-FCM-OVERNIGHT.cmd").is_file()
 assert "foreverdb-key.dpapi" not in installer.split("$args=")[1].split("$action=")[0]
 assert "Sync-AuctionPrices" not in updater.split("function Invoke-FCMOvernightCatalog")[1].split("function Action")[0]
 
