@@ -1,0 +1,63 @@
+name: Build FCM v0.9.4 candidate from reviewed main (no publication)
+
+on:
+  push:
+    branches: [v094-release-candidate-build]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.repository == 'PHOENIXHA1735/ForeverCharacterManager'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact reviewed main merge
+        uses: actions/checkout@v4
+        with:
+          ref: 1cf3f733b8132e565b0418f318de90a84a128d50
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify source and build reproducible candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '1cf3f733b8132e565b0418f318de90a84a128d50'
+          sha256sum -c SOURCE_MANIFEST_SHA256.txt
+          python3 tests/check_private_paths.py
+          python3 tools/release/build_candidate.py "$RUNNER_TEMP/fcm-v094" --ref '1cf3f733b8132e565b0418f318de90a84a128d50'
+          cd "$RUNNER_TEMP/fcm-v094"
+          sha256sum -c FCM-v0.9.4.zip.sha256
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import hashlib
+          root = Path('.')
+          expected = {}
+          for row in (root / 'PACKAGE-SHA256.txt').read_text().splitlines():
+              digest, name = row.split('  ', 1)
+              expected[name] = digest
+          with ZipFile(root / 'FCM-v0.9.4.zip') as z:
+              names = [n for n in z.namelist() if not n.endswith('/')]
+              assert len(names) == len(expected) and set(names) == set(expected)
+              assert z.testzip() is None
+              for name in names:
+                  assert hashlib.sha256(z.read(name)).hexdigest() == expected[name]
+          print('Candidate file count:', len(expected))
+          print('ZIP SHA-256:', hashlib.sha256((root / 'FCM-v0.9.4.zip').read_bytes()).hexdigest())
+          print('Manifest SHA-256:', hashlib.sha256((root / 'PACKAGE-SHA256.txt').read_bytes()).hexdigest())
+          PY
+
+      - name: Upload candidate for private qualification only
+        uses: actions/upload-artifact@v4
+        with:
+          name: FCM-v0.9.4-main-1cf3f73
+          path: |
+            ${{ runner.temp }}/fcm-v094/FCM-v0.9.4.zip
+            ${{ runner.temp }}/fcm-v094/FCM-v0.9.4.zip.sha256
+            ${{ runner.temp }}/fcm-v094/PACKAGE-SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
