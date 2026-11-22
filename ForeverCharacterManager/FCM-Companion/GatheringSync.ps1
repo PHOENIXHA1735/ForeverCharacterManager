@@ -94,3 +94,81 @@ function Export-FCMGatheringContributions {
     [IO.File]::WriteAllText($path,($export | ConvertTo-Json -Depth 6),(New-Object System.Text.UTF8Encoding($false)))
     Log "Exported $($nodes.Count) anonymous personal locations to $path. Review the file before sharing via GitHub issue/PR. Nothing was uploaded."
 }
+
+# Manual reference refresh. Use the same credentialed request path, pacing,
+# quota ledger, and Retry-After handling as the rest of the companion.
+function Sync-FCMGatheringReference {
+    if (Game-Is-Running) { throw 'Close WoW before refreshing Gathering reference files.' }
+    $addon=Target-Addon
+    $target=Join-Path $addon 'GatheringReferenceData.lua'
+    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw 'Install the Gathering browser before its reference refresh.' }
+    $pythonConfig=Join-Path $script:Base 'python-path.local.txt'
+    $python=if(Test-Path -LiteralPath $pythonConfig){([IO.File]::ReadAllText($pythonConfig)).Trim()}else{
+        $command=Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if($command){$command.Source}
+    }
+    if(!$python -or $python -match '[\x00-\x1f]' -or ![IO.Path]::IsPathRooted($python) -or !(Test-Path -LiteralPath $python -PathType Leaf)){
+        throw 'Configure a working absolute Python path before refreshing Gathering.'
+    }
+    $lock=Enter-FCMCatalogLock
+    try {
+        $script:ForeverDBRequests=0
+        $meta=Fetch-ForeverDB '/meta'
+        $build=[string](FDB-Data $meta).build
+        if($build -notmatch '^\d+(\.\d+){2,3}$'){throw 'ForeverDB did not report a usable build.'}
+        $receiptPath=Join-Path $addon 'GatheringReference.local.json'
+        $receipt=$null
+        if(Test-Path -LiteralPath $receiptPath){
+            try {$receipt=Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json -ErrorAction Stop} catch {}
+        }
+        $publishedHash=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+        $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $verifiedAt=0L
+        $recent=$receipt -and [long]::TryParse([string]$receipt.verifiedAt,[ref]$verifiedAt) -and
+            $verifiedAt -le $now -and $verifiedAt -gt ($now-86400)
+        if($recent -and $receipt.build -ceq $build -and $receipt.sha256 -eq $publishedHash){
+            Log 'Gathering reference is current for the verified build. Endpoint downloads skipped.'
+            return
+        }
+        $work=Join-Path ([IO.Path]::GetTempPath()) ('fcm-gather-reference-'+[guid]::NewGuid())
+        New-Item -ItemType Directory -Path $work -ErrorAction Stop | Out-Null
+        $generation=Join-Path $work 'generation'
+        $receiptTemp=$receiptPath+'.'+[guid]::NewGuid().ToString('N')+'.pending'
+        $kinds=@('herbalism','mining','fishing')
+        try {
+            foreach($kind in $kinds){
+                $response=Fetch-ForeverDB ('/gathering/'+$kind)
+                if([string]$response.meta.build -cne $build){throw 'Provider build changed during refresh.'}
+                foreach($member in 'next','nextPage','nextOffset','hasMore'){
+                    if($response.meta.$member -or $response.data.$member){throw 'Provider returned an incomplete page.'}
+                }
+                $safe=[ordered]@{data=$response.data;meta=[ordered]@{build=$build;attribution=$response.meta.attribution}}
+                [IO.File]::WriteAllText((Join-Path $work "$kind.json"),($safe | ConvertTo-Json -Depth 64),[Text.UTF8Encoding]::new($false))
+            }
+            $null=& $python -B (Join-Path $script:Base 'import_foreverdb_gathering.py') $work $generation 2>&1
+            if($LASTEXITCODE -ne 0){throw 'Gathering provider response could not be validated. Previous reference retained.'}
+            if(Game-Is-Running){throw 'WoW opened during refresh. Previous reference retained.'}
+            $null=& $python -B (Join-Path $script:Base 'build_gather_reference.py') (Join-Path $generation 'gathering-reference.json') $target 2>&1
+            if($LASTEXITCODE -ne 0){throw 'Gathering publication failed. Previous reference retained.'}
+            $hash=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+            $checkpoint=@{build=$build;sha256=$hash;verifiedAt=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
+            [IO.File]::WriteAllText($receiptTemp,($checkpoint | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+            if(Test-Path -LiteralPath $receiptPath){[IO.File]::Replace($receiptTemp,$receiptPath,[NullString]::Value)}
+            else{[IO.File]::Move($receiptTemp,$receiptPath)}
+            Log 'Verified ForeverDB Gathering reference published.'
+        } finally {
+            foreach($kind in $kinds){[IO.File]::Delete((Join-Path $work "$kind.json"))}
+            if(Test-Path -LiteralPath $generation){
+                foreach($name in 'audit.json','gathering-reference.json','GatheringReferenceData.lua'){
+                    [IO.File]::Delete((Join-Path $generation $name))
+                }
+                [IO.Directory]::Delete($generation)
+            }
+            [IO.File]::Delete($receiptTemp)
+            [IO.Directory]::Delete($work)
+        }
+    } finally {
+        $lock.ReleaseMutex()
+        $lock.Dispose()
+    }
+}

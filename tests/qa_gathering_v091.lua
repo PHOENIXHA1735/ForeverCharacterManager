@@ -272,13 +272,18 @@ eq(FCM:FishingStatus():find('Oily Blackmouth School',1,true)~=nil,true,
 GameTooltip.IsShown=function()return false end
 GetNumLootItems=function()return 1 end
 GetLootSourceInfo=function()return 'GameObject-0-0-0-0-99999-00001',1 end
+GetLootSlotLink=function(slot)return "|Hitem:"..(slot==1 and 6289 or 6291)..":|h" end
+GetLootSlotInfo=function()return nil,nil,2 end
 local priorFish=FCM:GatherCounts().fishing
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish1',7620)
+FCM:RememberFishingHover('Oily Blackmouth School')
 FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','fish1',7620)
 eq(FCM:GatherCounts().fishing,priorFish,'fishing cast alone does not save a pool')
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,'pool named via tooltip saved after real loot')
 FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,'loot ready and opened not duplicated')
 local savedSchool
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
@@ -293,6 +298,7 @@ eq(FCM_GatherExport['FCMG1|fishing|1438|5440|4640|Oily Blackmouth School']~=nil,
 fishNow=fishNow+10
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player','Fishing','fish2',7620)
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,
     'stale tooltip plus open-water loot cannot create a false school')
 GameTooltip.IsShown=function()return true end
@@ -300,21 +306,25 @@ tooltipTitle='Oily Blackmouth School'
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish3',7620)
+FCM:RememberFishingHover('Oily Blackmouth School')
 GetLootSourceInfo=function()return 'Creature-0-0-0-0-111-00001',1 end
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
 end
 eq(savedSchool.gatherCount,1,'creature loot cannot count as fishing pool')
 fishNow=fishNow+1
-GetLootSourceInfo=nil -- Forever older client fallback: tooltip + cast + loot.
+GetLootSourceInfo=function()return 'GameObject-0-0-0-0-99999-00001',1 end
 GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish4',7620)
-eq(FCM:FishingStatus():find('Cast: Oily Blackmouth School',1,true)~=nil,true,
+FCM:RememberFishingHover('Oily Blackmouth School')
+eq(FCM:FishingStatus():find('awaiting named object',1,true)~=nil,true,
     'tooltip-derived pool is armed for the repeat cast')
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:GatherCounts().fishing,priorFish+1,'repeat school stays a single saved node')
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
@@ -328,7 +338,9 @@ GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish5',999999)
+FCM:RememberFishingHover('Oily Blackmouth School')
 FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 eq(FCM:FishingStatus():find('Last spell ID: 999999',1,true)~=nil,true,
     'Forever fishing override ID is recognized by the Fishing spell name')
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
@@ -341,8 +353,10 @@ GameTooltip.IsShown=function()return true end
 GameTooltip.hooks.OnShow(GameTooltip)
 GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish6',7620)
+FCM:RememberFishingHover('Oily Blackmouth School')
 FCM:GatherEvent('UNIT_SPELLCAST_INTERRUPTED','player','fish6',7620)
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
 end
@@ -354,6 +368,7 @@ GameTooltip.IsShown=function()return false end
 FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish7',7620)
 FCM:GatherEvent('UNIT_SPELLCAST_FAILED','player','fish7',7620)
 FCM:GatherEvent('LOOT_READY')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
 for _,node in ipairs(FCM:GatherNodes('fishing')) do
     if node.name=='Oily Blackmouth School' then savedSchool=node end
 end
@@ -552,3 +567,166 @@ FCM.db.settings.gatherWorldMapPins=false
 FCM:UpdateGatherWorldMap()
 eq(FCM._gatherWorldPins[1]:IsShown(),false,'independent world-map setting hides only full-map pins')
 print('PASS: FCM gathering counts, circular icons, adjustable sizes, treasure, rim and world-map overlay')
+
+-- Resource-level grouping and actual item quantities stay separate from reference loot.
+assert(loadfile('ForeverCharacterManager/GatherBrowser.lua'))('FCM',FCM)
+FCM.gatheringReference={resources={{category='herbalism', name='Silverleaf',
+    verificationStatus='reference_reviewed', orange=1,yellow=25,green=65,gray=100}}}
+for _,example in ipairs({{0,'RED'},{1,'ORANGE'},{25,'YELLOW'},{65,'GREEN'},{100,'GRAY'}}) do
+    local _,state=FCM:GatherResourceSkill('herbalism','Silverleaf',
+        {professions={Herbalism={skill=example[1],scan=FCM:Now()}}})
+    eq(state,example[2],'verified skill boundary')
+end
+local _,unknown=FCM:GatherResourceSkill('herbalism','Silverleaf',{professions={Herbalism={skill=100}}})
+eq(unknown,'UNKNOWN','undated profession data remains unknown')
+FCM:AddGatherNode('herbalism',37,2345,3456,'Silverleaf','personal')
+FCM:AddGatherNode('herbalism',1438,3456,4567,'Silverleaf','personal')
+local grouped
+for _,row in ipairs(FCM:GatherResourceRows('silverleaf','herbalism')) do
+    if row.name=='Silverleaf' then assert(not grouped);grouped=row end
+end
+eq(#grouped.locations>=2,true,'resource groups saved locations')
+eq(grouped.count>=2,true,'resource totals preserve all personal counts')
+assert(grouped.detail():find('Required skill:',1,true))
+GetNumLootItems=function() return 2 end
+GetLootSlotLink=function(slot)return "|Hitem:"..(slot==1 and 6358 or 6359)..":|h" end
+GetLootSourceInfo=function() return 'GameObject-0-0-0-0-99999-00001',1 end
+GetItemIcon=function(id)return id+100000 end
+for _,name in ipairs({'Oil Spill','Floating Wreckage'}) do
+    FCM:RememberFishingHover(name)
+    FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'fish-'..name,7620)
+    FCM:RememberFishingHover(name)
+    local getLink=GetLootSlotLink
+    GetLootSlotLink=function() return nil end
+    FCM:GatherEvent('LOOT_READY')
+    eq(FCM._fishingCast~=nil,true,'early loot preserves cast')
+    GetLootSlotLink=getLink
+    FCM:GatherEvent('LOOT_OPENED')
+    FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+    FCM:GatherEvent('LOOT_OPENED')
+    FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+    FCM:GatherEvent('LOOT_SLOT_CLEARED',2)
+    FCM:GatherEvent('LOOT_CLOSED')
+    local rows=FCM:GatherResourceRows(name,'fishing')
+    eq(#rows,2,'pool search finds two species')
+    eq(rows[1].itemID,6358,'stable species identifier')
+    eq(rows[1].locations[#rows[1].locations].quantity,2,'duplicate ready and cleared do not inflate first species')
+    eq(rows[2].locations[#rows[2].locations].quantity,2,'second species preserved independently')
+    eq(rows[1].icon,106358,'icon belongs to actual species')
+    assert(rows[1].detail():find(name,1,true),'real source pool is visible')
+end
+local species=FCM:GatherResourceRows('6359','fishing')[1]
+eq(species.count,4,'same species aggregates across two source types')
+eq(#species.locations,2,'both confirmed source types retained')
+eq(FCM:GatherResourceRows('6359','fishing',nil,'wreckage')[1].count,2,'wreckage filter')
+local before=#FCM:GatherNodes('fishing')
+FCM:RememberFishingHover('Oil Spill')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'open-water',7620)
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+eq(#FCM:GatherNodes('fishing'),before,'pre-cast tooltip cannot identify generic loot')
+eq(FCM:GatherDistance(1438,0/0,0),nil,'invalid distance refused')
+
+-- Pre-cast-only tooltips cannot identify a pool. Independent fishing evidence
+-- still preserves the cleared item, without creating a pool or map point.
+local startLocations=#FCM:GatherNodes('fishing')
+local startSpecies=FCM:GatherResourceRows('6358','fishing')[1].count
+IsFishingLoot=function() return true end
+FCM:RememberFishingHover('Oil Spill')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'precast-only',7620)
+FCM:GatherEvent('UNIT_SPELLCAST_SUCCEEDED','player','precast-only',7620)
+local getLink=GetLootSlotLink
+GetLootSlotLink=function() return nil end
+FCM:GatherEvent('LOOT_READY')
+GetLootSlotLink=getLink
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+eq(#FCM:GatherNodes('fishing'),startLocations,'unattributed catch cannot create a pool')
+local preOnly=FCM:GatherResourceRows('6358','fishing')[1]
+eq(preOnly.count,startSpecies+2,'pre-cast-only verified catch retained once')
+eq(preOnly.unattributed,2,'fallback counted independently')
+assert(preOnly.detail():find('pool and location unverified',1,true))
+eq(FCM:GatherResourceRows('6358','fishing',nil,'oil_spill')[1].count,2,'unattributed catch excluded from pool filter')
+FCM:RememberFishingHover('Oil Spill')
+fishNow=fishNow+9
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'stale-tooltip',7620)
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+FCM:RememberFishingHover('Oil Spill')
+FCM:GatherEvent('UNIT_SPELLCAST_SENT','player',nil,'non-fishing-loot',7620)
+IsFishingLoot=function() return false end
+FCM:GatherEvent('LOOT_OPENED')
+FCM:GatherEvent('LOOT_SLOT_CLEARED',1)
+FCM:GatherEvent('LOOT_CLOSED')
+IsFishingLoot=nil
+eq(FCM:GatherResourceRows('6358','fishing')[1].unattributed,2,'stale hover and unrelated loot rejected')
+
+-- The stock catalog is loaded from the TOC and can be rebuilt after restart
+-- without an importer, a discovered location or any live API calls.
+local function freshCatalog(db)
+    local addon={db=db,Now=function() return 1800000000 end,Try=function(_,fn,...) if fn then return fn(...) end end}
+    for _,file in ipairs({'Gathering.lua','GatheringReferenceData.lua','GatheringExtras.lua','GatherBrowser.lua'}) do
+        assert(loadfile('ForeverCharacterManager/'..file))('FCM',addon)
+    end
+    return addon
+end
+local catalogDB={gathering={schema=1,nodes={},stats={}}}
+local catalog=freshCatalog(catalogDB)
+local herb=catalog:GatherResourceRows('Black Lotus','herbalism')[1]
+assert(herb and herb.count==0 and herb.detail():find('Required skill: 300',1,true))
+local ore=catalog:GatherResourceRows('Rough Stone','mining')[1]
+assert(ore and ore.count==0 and ore.detail():find('Copper Vein',1,true))
+assert(catalog:GatherResourceRows('Coarse Stone','mining')[1])
+assert(catalog:GatherResourceRows('Heavy Stone','mining')[1])
+assert(catalog:GatherResourceRows('Solid Stone','mining')[1])
+assert(catalog:GatherResourceRows('Dense Stone','mining')[1])
+local function findNamedCatalogItem(name,profession)
+    for _,entry in ipairs(catalog:GatherResourceRows(name,profession)) do
+        if entry.name==name then return entry end
+    end
+end
+for _,name in ipairs({'Malachite','Tigerseye','Jade','Citrine','Arcane Crystal'}) do
+    local mat=findNamedCatalogItem(name,'mining')
+    assert(mat and mat.detail():find('SOURCE NODES',1,true),'mining material catalog entry: '..name)
+end
+local swift=findNamedCatalogItem('Swiftthistle','herbalism')
+assert(swift and swift.detail():find('Mageroyal',1,true))
+local lichen=findNamedCatalogItem('Frilled Lichen','herbalism')
+assert(lichen and lichen.detail():find('Earthroot',1,true))
+local seeds=findNamedCatalogItem('Commonplace Herb Seeds','herbalism')
+assert(seeds and seeds.count==0 and seeds.detail():find('Peacebloom',1,true))
+assert(seeds.detail():find('POTENTIAL SOURCE-HERB ZONES',1,true))
+assert(seeds.detail():find('Show All Details',1,true))
+assert(seeds.detail(true):find('REFERENCE SOURCES',1,true))
+assert(not seeds.detail():find('Sources: ForeverDB',1,true))
+local commonFish=findNamedCatalogItem('Raw Brilliant Smallfish','fishing')
+assert(commonFish and commonFish.summary:find('Fish |',1,true))
+local footwearPattern=findNamedCatalogItem('Pattern: Red Woolen Boots','fishing')
+assert(footwearPattern and footwearPattern.summary:find('Fishing loot',1,true))
+local waterSource=findNamedCatalogItem('Patch of Elemental Water','fishing')
+assert(waterSource and waterSource.summary:find('Fishing source',1,true))
+assert(#catalog:GatherNodes()==0,'reference materials never produce personal map pins')
+local fish=catalog:GatherResourceRows('251524','fishing')[1]
+assert(fish and fish.name=='Whimsyfin' and fish.count==0 and fish.detail():find('Redridge Mountains',1,true))
+assert(catalog:GatherResourceRows('21150','fishing',nil,'wreckage')[1])
+assert(catalog:GatherResourceRows('raw slitherskin mackerel','fishing',nil,'open_water')[1])
+assert(catalog:GatherResourceRows('Black Lotus','herbalism',nil,nil,{300,10000})[1])
+assert(not catalog:GatherResourceRows('Black Lotus','herbalism',nil,nil,{1,74})[1])
+eq(#catalog:GatherNodes(),0,'bundled catalogs never make a map point')
+catalog:AddGatherNode('herbalism',1438,1234,2345,'Black Lotus','personal')
+catalog:AddGatherNode('mining',1438,1234,2345,'Copper Vein','personal')
+catalog:AddGatherNode('fishing',1438,1234,2345,'Oil Spill','personal',nil,{[251524]=2})
+catalog=freshCatalog(catalogDB)
+eq(catalog:GatherResourceRows('Black Lotus','herbalism')[1].count,1,'herb observations survive reload')
+local mining=catalog:GatherResourceRows('Copper Vein','mining')
+local copper
+for _,r in ipairs(mining) do if r.name=='Copper Vein' then copper=r end end
+assert(copper and copper.count==1)
+local caught=catalog:GatherResourceRows('251524','fishing')[1]
+eq(caught.count,2,'fish count only includes personal observations after restart')
+eq(#caught.locations,1,'reference zone does not increase personal fishing locations')
+eq(#catalog:GatherNodes(),3,'only personal observations are saved')

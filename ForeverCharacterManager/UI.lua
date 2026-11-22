@@ -82,6 +82,10 @@ function UI:DecorateDetail(content,tab)
             not line:find("https:",1,true) then
             if header then
                 line=color(line,accent)
+            elseif raw:match("^Can gather:") or raw:match("^Can gain skill:") then
+                if raw:find(": YES",1,true) then line=color(line,"7be6a4")
+                elseif raw:find(": NO",1,true) then line=color(line,"ff8080")
+                else line=color(line,"ffcb76") end
             elseif lower:find("unknown",1,true) or lower:find("unverified",1,true) or
                 lower:find("not verified",1,true) or lower:find("missing ",1,true) or
                 lower:match("^still needed: [1-9]") or
@@ -1323,8 +1327,38 @@ function UI:Create()
         end
         self:Refresh()
     end)
-    self.gatherWorldButton:SetPoint("LEFT",self.gatherSizeButton,"RIGHT",8,0)
+    self.gatherWorldButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-138)
     self.gatherWorldButton:Hide()
+    self.gatherCategoryButton=button(panel,"Gathering Filters",200,25,function()
+        local entries={}
+        local choices={
+            {"All Resources"},
+            {"Herbalism","herbalism"},
+            {"Mining","mining"},
+            {"Fishing - All","fishing"},
+            {"Fishing - Schools & Pools","fishing","school_pool"},
+            {"Fishing - Oil Spills & Wreckage","fishing","spill_wreckage"},
+            {"Fishing - Open Water","fishing","open_water"},
+            {"Treasure","treasure"}
+        }
+        for _,entry in ipairs(choices) do
+            local selected=entry
+            entries[#entries+1]={label=selected[1],run=function()
+                self.gatherCategory=selected[2]
+                self.gatherPoolType=selected[3]
+                self.gatherSkillRange=nil
+                self.gatherShowAllDetails=false
+                if self.detailScroll and self.detailScroll.SetVerticalScroll then
+                    self.detailScroll:SetVerticalScroll(0)
+                end
+                self.gatherCategoryButton:SetText(selected[1])
+                self:Refresh()
+            end}
+        end
+        self:MakeMenu(self.gatherCategoryButton,entries,270,false)
+    end)
+    self.gatherCategoryButton:SetPoint("LEFT",self.gatherWorldButton,"RIGHT",8,0)
+    self.gatherCategoryButton:Hide()
 
     self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
     self.goldFeesButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-109)
@@ -1451,6 +1485,15 @@ function UI:Create()
     end)
     self.cancelRequestButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
     self.cancelRequestButton:Hide()
+    self.gatherMoreButton=button(panel,"Show All Details",155,29,function()
+        self.gatherShowAllDetails=not self.gatherShowAllDetails
+        if self.detailScroll and self.detailScroll.SetVerticalScroll then
+            self.detailScroll:SetVerticalScroll(0)
+        end
+        self:Refresh()
+    end)
+    self.gatherMoreButton:SetPoint("LEFT",self.action,"RIGHT",7,0)
+    self.gatherMoreButton:Hide()
     self.status = text(panel,"", "GameFontHighlightSmall",14,-501,285,20)
     self.status:ClearAllPoints()
     self.status:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",14,13)
@@ -2412,51 +2455,11 @@ local function buildRows(ui)
         if #rows==0 or (#rows==1 and rows[1].id=='scoring-source') then add("no-upgrades","No actionable upgrades found","A matching numerical model and recorded equipment are required.",
             "Upgrades are derived only from known recipes and loaded item stats. Unlearned, raid and dungeon items require a verified database; no guesses are made.") end
     elseif tab=="Gathering" then
-        local count=FCM:GatherCounts()
-        local total=count.herbalism+count.mining+count.fishing+count.treasure
-        add("gather-guide","Gathering database (account-wide)",
-            total.." locations | "..count.personal.." personally confirmed",
-            "SAVED LOCATIONS\n"..
-            count.herbalism.." herbalism | "..count.mining.." mining\n"..
-            count.fishing.." fishing | "..count.treasure.." treasure\n"..
-            "Sources: personal "..count.personal..", GatherMate2 "..count.gathermate..
-                ", community "..count.community..".\n\n"..
-            "AUTOMATIC RECORDING\n"..
-            "FCM records named herbs or ore when the client confirms a successful gathering cast. "..
-            "Fishing requires a named school/pool. Unnamed targets are skipped to avoid false locations.\n\n"..
-            "COMMUNITY AND IMPORTS\n"..
-            "Click Import GatherMate2 below, or use /fcm gather import. "..
-            "The Windows companion can merge published GitHub locations locally. "..
-            "Character data is not uploaded; contributions are manual.\n\n"..
-            "WORLD MAP AND MINIMAP\n"..
-            "World Map: On/Off controls the full-map overlay, including distant saved nodes. "..
-            "Pins: On/Off controls the nearby minimap markers. Hover a pin to see FCM's recorded gather count.\n\n"..
-            "DISTANCE AND SIZE\n"..
-            "Hide within: 15 yd avoids covering live tracking dots. Rim beyond: 45 yd groups distant "..
-            "markers by direction with counts. Size: 16 px, adjustable 8-32. "..
-            "Set either distance to 0 to disable that behavior.\n\n"..
-            "COMMANDS\n"..
-            "/fcm gatherpins near <0-50>\n"..
-            "/fcm gatherpins rim <0-100>\n"..
-            "/fcm gatherpins size <8-32>\n"..
-            "/fcm gatherpins on|off\n"..
-            "/fcm gatherpins world on|off\n\n"..
-            "IMPORTANT: Saved pins show reported locations, not live spawn indicators.")
-        local categories={"herbalism","mining","fishing","treasure"}
-        for _,kind in ipairs(categories) do
-            -- Show all nodes up to the global list limit instead of hiding
-            -- five herbs at the old 70-per-category cap.
-            local nodes=FCM:GatherNodes(kind,nil,200)
-            for _,point in ipairs(nodes) do
-                local place=string.format("Map %d at %.2f, %.2f",point.mapID or 0,point.x/100,point.y/100)
-                add("gather:"..kind..":"..point.mapID..":"..point.x..":"..point.y..":"..point.name,
-                    point.name,kind.." | "..place,
-                    "|cffffd983"..point.name.."|r\n\n"..place.."\n"..
-                    "Gathering: "..kind.."\nSource: "..(point.personal and "Personally gathered" or
-                        (point.source=="gathermate" and "Imported from GatherMate2" or "Community database"))..
-                    "\n"..FCM:GatherCountLabel(point)..
-                    "\n\nThis is a previously reported location, not a live spawn indicator.")
-            end
+        for _,resource in ipairs(FCM:GatherResourceRows(ui.appliedSearch,
+                ui.gatherCategory,ch,ui.gatherPoolType)) do
+            add(resource.id,resource.name,resource.summary,resource.detail)
+            rows[#rows].gatherIcon=resource.icon
+            rows[#rows].gatherHasExtraDetails=resource.hasExtraDetails
         end
     elseif tab=="Shopping" then
         local list,unresolved=FCM:ShoppingList(FCM:FactionView())
@@ -3698,7 +3701,7 @@ function UI:Refresh()
     local tab=self.tab or "Overview"
     self:HideDetailCards()
     self.detailCardSource=nil
-    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or 340) end
+    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or (tab=="Gathering" and 405 or 340)) end
     self.heading:SetText(tab)
     self.factionButton:SetText(FCM:FactionView()=="all" and "All" or FCM:FactionView())
     local ch=self:GetCharacter()
@@ -3752,7 +3755,7 @@ function UI:Refresh()
     local q=string.lower(self.appliedSearch or "")
     local entries={}
     for _,r in ipairs(all) do
-        if tab=="Global Search" or q=="" or FCM:SearchMatches(r.title,q) or
+        if tab=="Global Search" or tab=="Gathering" or q=="" or FCM:SearchMatches(r.title,q) or
                 FCM:SearchMatches(r.summary,q) or
                 (tab=="Item Explorer" and FCM:SearchMatches(r.id,q)) then
             local filter=FCM.db.settings.advisorFilter or "all"
@@ -3787,7 +3790,7 @@ function UI:Refresh()
         end
     end
     local matchedCount=#entries
-    while #entries>200 do table.remove(entries) end
+    if tab~="Gathering" then while #entries>200 do table.remove(entries) end end
     local hasSelected=false
     for _,r in ipairs(entries) do if r.id==self.selectedRow then hasSelected=true end end
     if not hasSelected then
@@ -3799,6 +3802,13 @@ function UI:Refresh()
             end
         end
         self.selectedRow = foundCharacter and selectedID or entries[1].id
+    end
+    if tab=="Gathering" and self.gatherDetailSelection~=self.selectedRow then
+        self.gatherDetailSelection=self.selectedRow
+        self.gatherShowAllDetails=false
+        if self.detailScroll and self.detailScroll.SetVerticalScroll then
+            self.detailScroll:SetVerticalScroll(0)
+        end
     end
     self.activeRecipe=nil
     self.activeCrafters=nil
@@ -3818,7 +3828,8 @@ function UI:Refresh()
         end
         widget:ClearAllPoints()
         widget:SetPoint("TOPLEFT",self.scrollChild,"TOPLEFT",2,-((i-1)*47))
-        widget.label:SetText(short(row.title,63))
+        local icon=row.gatherIcon and ("|T"..tostring(row.gatherIcon)..":16:16|t ") or ""
+        widget.label:SetText(icon..short(row.title,63))
         widget.desc:SetText(short(row.summary,80))
         local shade=row.id==self.selectedRow and palette.selected or palette.row
         widget.bg:SetColorTexture(shade[1],shade[2],shade[3],0.9)
@@ -3909,11 +3920,24 @@ function UI:Refresh()
         self.craftQuantityLabel:SetShown(crafting)
         self.craftQuantityEdit:SetShown(crafting)
         local gathering=(tab=="Gathering")
+        local requests=tab=="Requests"
+        -- A second toolbar (including Gold settings) needs its own row below the common filters.
+        local hasSecondToolbar=browsing or crafting or requests or tab=="Gold"
+        local contentTop=gathering and -170 or hasSecondToolbar and -143 or -107
+        self.listPanel:ClearAllPoints()
+        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,contentTop)
+        self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
+        self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
+        self.detailPanel:ClearAllPoints()
+        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,contentTop)
+        self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
+            tab=="Talents" and 104 or 68)
         self.gatherDistanceButton:SetShown(gathering)
         self.gatherPinsButton:SetShown(gathering)
         self.gatherRimButton:SetShown(gathering)
         self.gatherSizeButton:SetShown(gathering)
         self.gatherWorldButton:SetShown(gathering)
+        self.gatherCategoryButton:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or
@@ -3956,21 +3980,10 @@ function UI:Refresh()
         self.backSearchButton:SetShown(not crafting)
         self.backSearchButton:SetText(tab=="Global Search" and "Back" or "All")
         self.searchLabel:SetText(tab=="Global Search" and "Search all items or recipes" or "Search this list")
-        local requests=tab=="Requests"
         self.requestViewButton:SetShown(requests)
         local requestView=FCM.db.settings.requestView or "all"
         local requestViewNames={all="All",mine="For Me",craftable="Can Craft",missing="Needs Mats"}
         self.requestViewButton:SetText("Requests: "..(requestViewNames[requestView] or "All"))
-        -- A second toolbar (including Gold settings) needs its own row below the common filters.
-        local hasSecondToolbar=browsing or crafting or gathering or requests or tab=="Gold"
-        self.listPanel:ClearAllPoints()
-        self.listPanel:SetPoint("TOPLEFT",self.panel,"TOPLEFT",14,hasSecondToolbar and -143 or -107)
-        self.listPanel:SetPoint("BOTTOMLEFT",self.panel,"BOTTOMLEFT",14,64)
-        self.listPanel:SetPoint("RIGHT",self.detailPanel,"LEFT",-12,0)
-        self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPRIGHT",self.panel,"TOPRIGHT",-15,hasSecondToolbar and -143 or -107)
-        self.detailPanel:SetPoint("BOTTOMRIGHT",self.panel,"BOTTOMRIGHT",-15,
-            tab=="Talents" and 104 or 68)
         local dungeonBrowsing=(tab=="Dungeons")
         self.dungeonViewButton:SetShown(dungeonBrowsing)
         self.dungeonLevelButton:SetShown(dungeonBrowsing)
@@ -4069,7 +4082,8 @@ function UI:Refresh()
         self:ResetDungeonWidgets()
         self.detailText:Show()
         local previewHeight=self:RenderItemPreview(selected)
-        local content=type(selected.detail)=="function" and selected.detail() or selected.detail or ""
+        local content=type(selected.detail)=="function" and
+            (tab=="Gathering" and selected.detail(self.gatherShowAllDetails) or selected.detail()) or selected.detail or ""
         -- The same quick red/green comparison appears wherever a real item is
         -- selected. Non-equipment rows simply retain their existing details.
         local itemID=previewItemID(selected)
@@ -4082,6 +4096,10 @@ function UI:Refresh()
         end
         self.detailText:SetText(self:DecorateDetail(content,tab))
         self:RenderDetailCards(content,tab,previewHeight)
+        if self.gatherMoreButton then
+            self.gatherMoreButton:SetShown(tab=="Gathering" and selected.gatherHasExtraDetails==true)
+            self.gatherMoreButton:SetText(self.gatherShowAllDetails and "Show Less Details" or "Show All Details")
+        end
         if selected.request then
             self.activeRequest=selected.request
             self.action:SetWidth(170)
@@ -4114,6 +4132,7 @@ function UI:Refresh()
             self.action:Show()
         end
     else
+        if self.gatherMoreButton then self.gatherMoreButton:Hide() end
         self:ResetDungeonWidgets()
         self:ResetItemPreview()
         self.detailText:Show()
