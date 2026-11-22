@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 import hashlib
 import json
@@ -16,6 +17,27 @@ NOW = 1800000000
 
 
 class HistoryTests(unittest.TestCase):
+    def test_blocked_history_publication_retains_active_and_complete_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            active = Path(directory) / 'AHHistory.generated.lua'
+            pending = active.with_name(active.name + '.pending')
+            active.write_bytes(b'old\n')
+            replace = Path.replace
+
+            def refuse_active(source, destination):
+                if destination == active:
+                    raise PermissionError('simulated reader denies replacement')
+                return replace(source, destination)
+
+            with patch.object(Path, 'replace', refuse_active):
+                with self.assertRaises(PermissionError):
+                    h.atomic(active, 'new\n')
+            self.assertEqual(active.read_bytes(), b'old\n')
+            self.assertEqual(pending.read_bytes(), b'new\n')
+            h.atomic(active, 'new\n')
+            self.assertEqual(active.read_bytes(), b'new\n')
+            self.assertFalse(pending.exists())
+
     def test_literal_safety(self):
         self.assertEqual(h.LuaData('AHledgerDB = { ["scans"] = {}, n = 4, a=true }').database()['n'], 4)
         for text in ('AHledgerDB = os.execute("bad")', 'AHledgerDB={} os.execute("bad")'):

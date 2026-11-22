@@ -26,6 +26,9 @@ if ($Mode -eq 'Run') {
     & (Join-Path $companion 'FCM-AHHistory.ps1') -AddonRoot $addon
     return
 }
+. (Join-Path $companion 'WriterLease.ps1')
+$writerLease=Enter-FCMWriterLease $addon
+try {
 function Say([string]$message) { if (-not $Quiet) { Write-Host ('[FCM AH] ' + $message) } }
 function Save-Status($obj) {
     # No character names, game account data, raw price tables, or credentials are logged.
@@ -182,3 +185,4 @@ $marketCounts=@{}
 foreach ($market in $markets) {$marketCounts[$market]=$results[$market].count}
 Save-Status ([ordered]@{runAt=$now.ToString('o');result='success';source='AHledger';credit=$credit;markets=$marketCounts;cacheExpiresAt=[DateTimeOffset]::FromUnixTimeSeconds($expires).ToString('o');note='Current listings only. No long-term AH price archive. Reload WoW to view refreshed data.'})
 Say ('Current-price cache updated; source cache expires at '+[DateTimeOffset]::FromUnixTimeSeconds($expires).ToLocalTime().ToString('g'))
+} finally { $writerLease.Dispose() }

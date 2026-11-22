@@ -6,6 +6,9 @@ param([switch]$Quiet)
 
 $ErrorActionPreference='Stop'
 $base=Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $base 'WriterLease.ps1')
+$writerLease=Enter-FCMWriterLease (Split-Path -Parent $base)
+try {
 $script:Base=$base
 . (Join-Path $base 'ForeverDB.Quota.ps1')
 $keyFile=Join-Path $base 'foreverdb-key.dpapi'
@@ -97,3 +100,4 @@ try {
     Write-Status ([ordered]@{checkedAt=$at;status=$reason;changed=$false;source='ForeverDB';note='Old reference data retained. No API credentials logged.'})
     Say ('Build check '+$reason+'; no data overwritten.')
 }
+} finally { $writerLease.Dispose() }

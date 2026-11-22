@@ -13,8 +13,10 @@ foreach($name in 'build_gather_reference.py','import_foreverdb_gathering.py','ga
 }
 $target=Join-Path $script:addon 'GatheringReferenceData.lua'
 Set-Content -LiteralPath $target -Value '-- original'
+foreach($toc in 'ForeverCharacterManager.toc','ForeverCharacterManager_Camelot.toc'){Set-Content -LiteralPath (Join-Path $script:addon $toc) -Value 'GatheringReferenceData.lua'}
+. (Join-Path $source 'ReferencePublication.ps1')
 . (Join-Path $source 'GatheringSync.ps1')
-function Game-Is-Running { return $false }
+function Game-Is-Running { return $true }
 function Target-Addon { return $script:addon }
 function Log($text) { Write-Host $text }
 function Enter-FCMCatalogLock {

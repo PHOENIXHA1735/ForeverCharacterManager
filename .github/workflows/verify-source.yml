@@ -10,6 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify release candidate and source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c SOURCE_MANIFEST_SHA256.txt
+          python3 tools/release/build_candidate.py "$RUNNER_TEMP/fcm-v094"
+          python3 tests/qa_release_overlay.py
+          python3 tests/qa_writer_gate.py
       - name: Install Lua 5.1 compiler
         run: |
           sudo apt-get update -qq
@@ -48,6 +58,8 @@ jobs:
       - name: Validate offline Gathering reference staging
         if: success() || failure()
         run: python3 tests/qa_gather_reference_import.py
+      - name: Validate the Public30 publisher through Gold Advisor
+        run: python3 tests/qa_public30_pipeline.py
       - name: Validate public gathering snapshot schema
         if: success() || failure()
         shell: python
@@ -95,6 +107,26 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify selective overlay and interrupted recovery
+        run: |
+          python tests/qa_release_overlay.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tests/qa_writer_gate.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\tests\qa_legacy_update_disabled.ps1
+          .\tests\qa_writer_entrypoints.ps1 -Python (Get-Command python.exe).Source
       - name: Verify Gathering reference refresh (PowerShell 5.1)
         shell: powershell
         run: .\tests\qa_gather_sync.ps1
+      - name: Verify transactional reference publication (PowerShell 5.1)
+        shell: powershell
+        run: .\tests\qa_reference_publication.ps1
+      - name: Verify Dungeon source and loot mapping (PowerShell 5.1)
+        shell: powershell
+        run: .\ForeverCharacterManager\FCM-Companion\Test-FCMDungeonSourceMapping.ps1
+      - name: Verify Public30 publication (PowerShell 5.1)
+        shell: powershell
+        run: |
+          python -m pip install tzdata==2025.2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tests/qa_public30_pipeline.py PublisherTests.test_windows_publication_and_preservation

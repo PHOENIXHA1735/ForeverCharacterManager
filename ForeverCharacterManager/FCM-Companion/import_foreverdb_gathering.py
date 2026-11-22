@@ -25,14 +25,26 @@ def add(kind,name):
 def location(row,z):
     if not any(x['sourceID']==source and x['zone']==z for x in row['locations']):
         row['locations'].append(dict(sourceID=source,zone=z,verificationStatus='reported_reference'))
-def loot(row,items,source_id=None):
+def loot(row,items,source_id=None,evidence='provider_reference'):
     source_id=source_id or source
     if items and source_id not in row['sourceIDs']:row['sourceIDs'].append(source_id)
     for item in items:
         name,ident=item['name'],item['itemId']
         assert type(ident) is int and ident>0
-        if not any(i['itemID']==ident and i['sourceID']==source_id for i in row['loot']):
-            row['loot'].append(dict(name=name,itemID=ident,sourceID=source_id))
+        # The provider's zone-level caughtInForever list establishes a
+        # reported fish catch in a zone, NOT its exact water, pool or season.
+        candidate=dict(name=name,itemID=ident,sourceID=source_id,
+                       verificationStatus=evidence)
+        if item.get('waterType') is not None:
+            candidate['waterType']=item['waterType']
+        if item.get('seasonWindow') is not None:
+            candidate['seasonWindow']=item['seasonWindow']
+        prior=next((i for i in row['loot']
+                    if i['itemID']==ident and i['sourceID']==source_id),None)
+        if prior is None:
+            row['loot'].append(candidate)
+        else:
+            prior.update(candidate)
 for kind in ('herbalism','mining','fishing'):
     with (incoming/(kind+'.json')).open('rb') as stream:
         raw=stream.read(MAX_INPUT+1)
@@ -102,8 +114,8 @@ for kind in ('herbalism','mining','fishing'):
             row.update(fishingSourceType='unknown',fishingMinimum=max(z['skill'] or 0,0) or None,
                        fishingNoGetAways=max(z['noEscapeSkill'] or 0,0) or None)
             location(row,z['name'])
-            loot(row,z['loot'],source+'-classic')
-            loot(row,z['caughtInForever'],source+'-observed')
+            loot(row,z['loot'],source+'-classic','classic_reference')
+            loot(row,z['caughtInForever'],source+'-observed','forever_observed')
             for name in z['pools']:
                 row=add(kind,name)
                 row.setdefault('fishingSourceType',pool_type(name))

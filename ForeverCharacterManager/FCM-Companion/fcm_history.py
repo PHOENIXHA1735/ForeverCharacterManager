@@ -305,8 +305,37 @@ def lua(value):
 
 
 def atomic(path, text):
-    temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(text, encoding='utf-8'); temp.replace(path)
+    # Keep one complete candidate beside the active file. The archive driver
+    # already serializes writers with its Index/archive.lock.
+    import hashlib
+    import os
+    import tempfile
+    payload = text.encode('utf-8')
+    expected = hashlib.sha256(payload).digest()
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name+'.',
+                                     suffix='.writing', delete=False) as stream:
+        temp = Path(stream.name)
+        try:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        except BaseException:
+            stream.close()
+            temp.unlink()
+            raise
+    pending = path.with_name(path.name+'.pending')
+    try:
+        with temp.open('rb') as stream:
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(chunk)
+            if digest.digest() != expected:
+                raise ValueError('Staged history hash mismatch')
+        temp.replace(pending)
+        pending.replace(path)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def compact(data, allowed):
@@ -334,6 +363,12 @@ def main():
     parser.add_argument('--timezone', default='America/Los_Angeles')
     parser.add_argument('--market', help='Export this market and opposite faction; never mixes regions/rulesets')
     args = parser.parse_args()
+    from fcm_writer_lease import writer
+    with writer(args.addon):
+        process(args)
+
+
+def process(args):
     zone = ZoneInfo(args.timezone)
     history = args.addon / 'AHHistory'
     if not (args.addon / 'ForeverCharacterManager.toc').is_file(): raise ValueError('FCM missing')

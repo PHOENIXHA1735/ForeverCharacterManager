@@ -339,6 +339,11 @@ function FDB-ReadFarmDrops($item,$record) {
     }
 }
 
+function FDB-DropEvidenceRank($drop) {
+    if($drop.evidence -eq 'forever-observed'){return 2}
+    if($drop.evidence -eq 'classic'){return 1}
+    return 0
+}
 function FDB-MergeBossRecords($fresh,$cached) {
     # Merge by stable NPC ID or boss name, not array index. Preserve old loot if
     # a partial API response omits a boss or a particular linked item.
@@ -351,7 +356,7 @@ function FDB-MergeBossRecords($fresh,$cached) {
             $previous=@($cached)[$i]
             if ($null -eq $previous) {continue}
             $sameID=([int]$b.id -gt 0 -and [int]$b.id -eq [int]$previous.id)
-            $sameName=($b.name -and $previous.name -and
+            $sameName=(([int]$b.id -le 0 -or [int]$previous.id -le 0) -and $b.name -and $previous.name -and
                 [string]$b.name -notmatch 'name not supplied|name unavailable' -and
                 [string]$previous.name -notmatch 'name not supplied|name unavailable' -and
                 [string]$b.name -ieq [string]$previous.name)
@@ -365,14 +370,20 @@ function FDB-MergeBossRecords($fresh,$cached) {
             if ($name -match 'name not supplied|name unavailable' -and $oldMatch.name -and
                     [string]$oldMatch.name -notmatch 'name not supplied|name unavailable') {$name=[string]$oldMatch.name}
             $seen=@{}
-            foreach ($drop in $drops) {$seen[[string]$drop.id]=$true}
+            for($j=0;$j -lt $drops.Count;$j++){$seen[[string]$drops[$j].id]=$j}
             foreach ($drop in @($oldMatch.loot | Where-Object { $_ -and [int]$_.id -gt 0 })) {
-                if (-not $seen.ContainsKey([string]$drop.id) -and $drops.Count -lt 65) {
-                    $drops+= $drop; $seen[[string]$drop.id]=$true
+                $key=[string]$drop.id
+                if($seen.ContainsKey($key)){
+                    $index=$seen[$key]
+                    if((FDB-DropEvidenceRank $drop) -gt (FDB-DropEvidenceRank $drops[$index])){$drops[$index]=$drop}
+                } elseif ($drops.Count -lt 65) {
+                    $seen[$key]=$drops.Count; $drops+= $drop
                 }
             }
         }
-        $merged.Add(@{id=$id;name=$name;loot=@($drops)})
+        $npcId=[int]$b.npcId
+        if($npcId -le 0 -and $oldMatch){$npcId=[int]$oldMatch.npcId}
+        $merged.Add(@{id=$id;npcId=$npcId;name=$name;loot=@($drops)})
         if ($merged.Count -ge 90) {break}
     }
     for ($i=0;$i -lt @($cached).Count;$i++) {
@@ -696,7 +707,16 @@ function FDB-DropEntry($drop,[string]$sourceType='dungeon-associated') {
     if ($itemId -le 0) {return $null}
     $name=FDB-ItemName $drop
     if (-not $name) {$name='Item #'+$itemId}
-    return @{id=$itemId;name=$name;sourceType=$sourceType}
+    $source=$drop.source
+    if($source -and $source -isnot [string]){$source=$source.type}
+    $evidence='unknown'
+    if($source -in @('classic','cmangos','classic data')){$evidence='classic'}
+    elseif($drop.seenInForever -eq $true -or $source -in @('forever-observed','seen in forever')){$evidence='forever-observed'}
+    $count=FDB-Int $drop.observedCount
+    $sample=FDB-Int $drop.sampleKills
+    if($evidence -ne 'forever-observed' -or $count -le 0){$count=0;$sample=0}
+    if($sample -lt $count){$sample=0}
+    return @{id=$itemId;name=$name;sourceType=$sourceType;evidence=$evidence;observedCount=$count;sampleKills=$sample}
 }
 function FDB-RecordDungeonItem([int]$itemId,[string]$itemName,[string]$dungeon,[string]$bossName) {
     $ref=FDB-CacheItem ([string]$itemId)
@@ -734,7 +754,8 @@ function FDB-SaveDungeon($detail) {
             [void]$lootIDs.Add([int]$entry.id)
             FDB-RecordDungeonItem $entry.id $entry.name $dungeonName $bossName
         }
-        $bossRecords+=@{id=$bossId;name=$bossName;loot=@($drops)}
+        $npcId=FDB-ResourceId $boss @('npcId','creatureId')
+        $bossRecords+=@{id=$bossId;npcId=$npcId;name=$bossName;loot=@($drops)}
         $lines+='Boss: '+$bossName+' ('+$drops.Count+' attributed loot records)'
     }
     $dungeonSeen=@{}
@@ -752,15 +773,25 @@ function FDB-SaveDungeon($detail) {
                 if ($bossRecords[$i].id -gt 0 -and $bossRecords[$i].id -eq $sourceId) {$matched=$i;break}
             }
         }
-        if ($matched -lt 0 -and $sourceName) {
+        if ($sourceId -le 0 -and $sourceName) {
             for ($i=0;$i -lt $bossRecords.Count;$i++) {
-                if ($bossRecords[$i].name -ieq $sourceName) {$matched=$i;break}
+                if ($bossRecords[$i].name -ieq $sourceName) {
+                    if($matched -ge 0){$matched=-1;break}
+                    $matched=$i
+                }
             }
         }
         if ($matched -ge 0) {
             $entry.sourceType='boss-explicit'
-            $seen=@($bossRecords[$matched].loot | Where-Object {[int]$_.id -eq [int]$entry.id})
-            if ($seen.Count -eq 0 -and $bossRecords[$matched].loot.Count -lt 65) {
+            $existingIndex=-1
+            for($i=0;$i -lt $bossRecords[$matched].loot.Count;$i++){
+                if([int]$bossRecords[$matched].loot[$i].id -eq [int]$entry.id){$existingIndex=$i;break}
+            }
+            if($existingIndex -ge 0){
+                if((FDB-DropEvidenceRank $entry) -gt (FDB-DropEvidenceRank $bossRecords[$matched].loot[$existingIndex])){
+                    $bossRecords[$matched].loot[$existingIndex]=$entry
+                }
+            } elseif ($bossRecords[$matched].loot.Count -lt 65) {
                 $bossRecords[$matched].loot+= $entry
             }
             FDB-RecordDungeonItem $entry.id $entry.name $dungeonName $bossRecords[$matched].name

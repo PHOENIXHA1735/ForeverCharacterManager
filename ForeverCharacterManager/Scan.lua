@@ -193,17 +193,38 @@ end
 
 function FCM:ScanGear()
     local ch = self:Current()
-    if not ch or type(GetInventoryItemLink)~="function" then return end
+    if not ch then return end
+    local key=self.currentKey
+    local function fail(reason)
+        self.gearScanFailedFor=ch
+        if self.RecordError then self:RecordError("Gear",reason) end
+    end
+    if type(GetInventoryItemLink)~="function" then return fail("Equipment link API unavailable.") end
     local gear = {}
     for slot = 1, 19 do
-        local link = safe(GetInventoryItemLink, "player", slot)
-        if link then
-            local id = tonumber(link:match("item:(%d+)"))
+        local ok,link=pcall(GetInventoryItemLink,"player",slot)
+        local id=type(link)=="string" and tonumber(link:match("item:(%d+)")) or nil
+        if not ok or (link~=nil and (not id or id<=0)) then
+            return fail("Equipment slot "..slot.." could not be read.")
+        end
+        if type(GetInventoryItemID)=="function" then
+            local read,actual=pcall(GetInventoryItemID,"player",slot)
+            if not read or actual~=id then return fail("Equipment slot "..slot.." returned incomplete item information.") end
+        elseif not id then
+            return fail("Equipment slot "..slot.." could not be confirmed empty.")
+        end
+        if id then
             gear[slot] = { itemID = id, link = link, slot = slot }
         end
     end
+    if self.currentKey~=key or self:Current()~=ch then return fail("Equipment scan interrupted by a character change.") end
+    if type(key)=="string" and key:match("^Player%-") and type(UnitGUID)=="function" then
+        local ok,guid=pcall(UnitGUID,"player")
+        if not ok or guid~=key then return fail("Equipment scan player identity could not be verified.") end
+    end
     ch.gear = gear
     ch.gearStamp = self:Now()
+    self.gearScanFailedFor=nil
 end
 
 function FCM:ScanProfessions()

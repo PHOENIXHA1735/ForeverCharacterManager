@@ -44,6 +44,9 @@ FCM.dungeonDirectorySource = source
 FCM.dungeonDirectory = directory
 local aliases = {
     ["thedeadmines"]="deadmines",
+    ["thetempleofatalhakkar"]="sunkentemple",
+    ["templeofatalhakkar"]="sunkentemple",
+    ["theblackfathomdeeps"]="blackfathomdeeps",
     ["thehallofthanes"]="hallofthanes",
     ["thestockade"]="stormwindstockades",
     ["thestockades"]="stormwindstockades",
@@ -69,6 +72,47 @@ local raids = {
 local function normalized(name)
     local key=string.lower(tostring(name or "")):gsub("[^%w]", "")
     return aliases[key] or key
+end
+
+function FCM:DungeonReferenceCounts(row)
+    local named, linked = 0, 0
+    for _, boss in ipairs(row.bosses or {}) do
+        local name = (boss.name or ""):lower()
+        if name ~= "" and not name:find("name not supplied",1,true) and
+            not name:find("name unavailable",1,true) then named=named+1 end
+        local seen={}
+        for _, drop in ipairs(boss.loot or {}) do
+            local id=tonumber(drop.id)
+            if id and id>0 and not seen[id] then seen[id]=true; linked=linked+1 end
+        end
+    end
+    return named, linked, #self:DungeonAssociatedDrops(row)
+end
+
+function FCM:DungeonDropEvidence(drop)
+    if drop.evidence=="classic" then return "Classic reference" end
+    if drop.evidence~="forever-observed" then return "Source evidence unknown" end
+    local count,sample=tonumber(drop.observedCount),tonumber(drop.sampleKills)
+    if count and count>0 then
+        if sample and sample>=count then return "Seen in Forever: "..count.." of "..sample.." sampled kills" end
+        return "Seen in Forever: "..count.." observations"
+    end
+    return "Seen in Forever"
+end
+
+function FCM:SetDungeonBossPortrait(texture,boss)
+    texture:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+    local npc=tonumber(boss.npcId)
+    if not npc or npc<=0 or type(UnitGUID)~="function" or type(SetPortraitTexture)~="function" then return false end
+    for _,unit in ipairs({"boss1","boss2","boss3","boss4","boss5","target"}) do
+        local ok,guid=pcall(UnitGUID,unit)
+        local id=ok and type(guid)=="string" and guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+        if tonumber(id)==npc then
+            if pcall(SetPortraitTexture,texture,unit) then return true end
+            texture:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        end
+    end
+    return false
 end
 local function recordKind(rec, normalizedName)
     local declared=string.lower(tostring(rec.kind or rec.type or rec.instanceType or ""))
@@ -105,6 +149,8 @@ function FCM:BrowseDungeons(view,levelFilter,playerLevel)
             lines=entry and entry.lines or nil,lootIDs=entry and entry.lootIDs or nil,
             bosses=entry and entry.bosses or nil,
             dungeonLoot=entry and entry.dungeonLoot or nil,
+            sourceProvider=entry and entry.sourceProvider or nil,
+            referenceCheckedAt=entry and entry.referenceCheckedAt or nil,
             imported=entry~=nil,referenceOnly=entry==nil}
         if (view=="dungeons" or view=="all") and
             (levelFilter~="current" or (playerLevel and playerLevel>=ref.low and playerLevel<=ref.high)) then
@@ -124,7 +170,8 @@ function FCM:BrowseDungeons(view,levelFilter,playerLevel)
                     low=low,high=high,levels=rec.levels or "Not supplied",
                     bossCount=tonumber(rec.bossCount),lines=rec.lines,lootIDs=rec.lootIDs,
                     bosses=rec.bosses,dungeonLoot=rec.dungeonLoot,
-                    imported=true,source="https://foreverdb.net",referenceOnly=false}
+                    imported=true,source="https://foreverdb.net",sourceProvider=rec.sourceProvider,
+                    referenceCheckedAt=rec.referenceCheckedAt,referenceOnly=false}
             end
         end
     end
@@ -147,8 +194,12 @@ function FCM:DungeonItemEligibility(itemID, ch)
     if not id or id<=0 then return "unknown","item ID unavailable" end
     local imported=self.externalData and self.externalData.items and self.externalData.items[id] or {}
     local info=(self.Gear and self.Gear:Info(id)) or nil
-    local classID=tonumber(imported.classID) or (info and info.classID)
+    local classID=(info and tonumber(info.classID)) or tonumber(imported.classID)
     local subID=(info and tonumber(info.subclassID)) or tonumber(imported.subclassID)
+    if self.Gear and self.Gear.WeaponClassRestriction then
+        local restriction=self.Gear:WeaponClassRestriction(classID,subID,ch.class)
+        if restriction then return "other",restriction end
+    end
     if classID==4 then
         local armor=(subID and subID>=1 and subID<=4) and subID or armorNames[string.lower(tostring(imported.subclass or ""))]
         if armor and armor>(maxArmor[ch.class] or 4) then
@@ -164,8 +215,17 @@ function FCM:DungeonItemEligibility(itemID, ch)
     if classID and classID~=2 and classID~=4 then
         return "other","not equipment (reference loot)"
     end
-    local required=tonumber(imported.requiredLevel) or (info and tonumber(info.level))
-    if required and required>0 and required>(tonumber(ch.level) or 0) then
+    local required=(info and tonumber(info.level)) or tonumber(imported.requiredLevel)
+    local future=required and required>0 and required>(tonumber(ch.level) or 0)
+    if info and self.Gear.IsPotentiallyWearable then
+        local wearer=future and {class=ch.class,level=required} or ch
+        local eligible,reason=self.Gear:IsPotentiallyWearable(info,wearer,ch)
+        if eligible==false then return "other",reason end
+        if eligible==nil then return "unknown",reason end
+    elseif classID==2 then
+        return "unknown","Weapon proficiency is not verified."
+    end
+    if future then
         return "future","future: requires level "..required
     end
     if not info and not imported.equipLoc and not imported.slotID then
@@ -194,7 +254,7 @@ local physicalSpecs={
 function FCM:DungeonSpecFit(itemID,ch)
     if not ch then return "unknown","select a character" end
     local eligibility=self:DungeonItemEligibility(itemID,ch)
-    if eligibility=="other" or eligibility=="future" then
+    if eligibility~="candidate" then
         return "unknown","not currently eligible equipment"
     end
     local st=self.Gear and self.Gear.StatValues and self.Gear:StatValues(tonumber(itemID))

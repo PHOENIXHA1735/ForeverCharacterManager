@@ -65,7 +65,7 @@ end
 local function makePlan(recipe,recipient,crafter,crafts,excludeKey)
     local plan={recipe=recipe,recipient=recipient,crafter=crafter,
         requestedCrafts=crafts,steps={},missing={},transfers={},warnings={},blockers={},
-        used={},reserved={},uncertain=false,ready=false,stockReady=false,complete=false,
+        used={},reserved={},withdrawals={},uncertain=false,ready=false,stockReady=false,complete=false,
         totalMissing=0,generated={},snapshots={},source="Recorded character scans (not live inventory)"}
     local warnSeen,blockSeen={},{ }
     local function warn(msg) addUnique(plan.warnings,warnSeen,msg) end
@@ -151,12 +151,14 @@ local function makePlan(recipe,recipient,crafter,crafts,excludeKey)
                     plan.transfers[entry]=row
                 end
                 row.count=row.count+n
+            elseif src.where=="bank" then
+                plan.withdrawals[#plan.withdrawals+1]={itemID=id,count=n,owner=src.owner,where=src.where}
             end
             local stamp=tonumber(src.stamp)
-            if not stamp then
+            if not stamp or stamp<=0 then
                 warn("An inventory snapshot used by the plan has no scan time; refresh before crafting.")
-            elseif FCM.Now and FCM:Now()>0 and FCM:Now()-stamp>172800 then
-                warn("Some inventory snapshots used by this plan are older than 48 hours.")
+            elseif FCM.Now and FCM:Now()>0 and (FCM:Now()-stamp>172800 or FCM:Now()<stamp) then
+                warn("Some inventory snapshots used by this plan are stale or have invalid timestamps.")
             end
         end
         -- Previously planned surplus is available before real inventory.
@@ -260,13 +262,12 @@ local function makePlan(recipe,recipient,crafter,crafts,excludeKey)
     plan.stockReady=(plan.totalMissing==0 and #plan.blockers==0)
     plan.uncertain=#plan.warnings>0 or #plan.blockers>0
     plan.complete=#plan.blockers==0
-    plan.ready=plan.stockReady and not plan.uncertain
-    if not plan.ready then
-        plan.status=(#plan.blockers>0 and "Blocked") or
-            (plan.totalMissing>0 and "Missing ingredients") or "Verification needed"
-    else
-        plan.status="Recorded stock ready"
-    end
+    plan.ready=plan.stockReady and not plan.uncertain and #plan.transfers==0 and #plan.withdrawals==0
+    plan.status=(#plan.blockers>0 and "Blocked") or
+        (plan.uncertain and "Verification required") or
+        (plan.totalMissing>0 and "Missing ingredients") or
+        (#plan.transfers>0 and "Materials available after transfer") or
+        (#plan.withdrawals>0 and "Bank withdrawal required") or "Recorded bags ready"
     return plan
 end
 
@@ -304,6 +305,9 @@ function FCM:SmartCraftingPlanLines(plan)
     if #plan.blockers>0 then
         out[#out+1]="Blocks:"
         for _,b in ipairs(plan.blockers) do out[#out+1]="  "..b end
+    end
+    for _,row in ipairs(plan.withdrawals or {}) do
+        out[#out+1]="Withdraw "..row.count.." x "..FCM.ItemName(row.itemID).." from "..display(row.owner).."'s bank"
     end
     if #plan.steps>0 then
         out[#out+1]="Crafting sequence (materials first):"

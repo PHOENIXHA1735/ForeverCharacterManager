@@ -5,14 +5,19 @@ function FCM.Gear:Info(id) return {bindType=id==999 and 1 or 2} end
 function FCM:AllRecipes() return {} end
 function FCM.ItemName(id) return 'Synthetic '..tostring(id) end
 time=function() return 1800000000 end
+assert(loadfile('ForeverCharacterManager/ExternalData.lua'))('FCM',FCM)
 assert(loadfile('ForeverCharacterManager/GoldAdvisor.lua'))('FCM',FCM)
+function FCM:Now()return time()end
+date=os.date
+assert(loadfile('ForeverCharacterManager/HistoryProvider.lua'))('FCM',FCM)
 local G=FCM.GoldAdvisor
 assert(G:ConfigureFees('5 100') and FCM.db.settings.goldAdvisorFees.deposit==100,'fee controls')
 assert(not G:ConfigureFees('100 0'),'invalid fee controls')
 assert(G:ConfigureFarm('1|Herbalism|20|1000|100'),'farm controls')
-local ch={ruleset='Normal',faction='Alliance',region='us',bags={},bank={},recipes={},professions={Alchemy={}}}
+local ch={key='Player-A',ruleset='Normal',faction='Alliance',region='us',bags={},bank={},recipes={},professions={Alchemy={}}}
+FCM.db.characters={[ch.key]=ch}
 local function quote(low)
-    return {current=low,low=low,stamp=time(),days=60,observations=120,demand=5,supply=10,volatility=.1,trend=5,confidence='moderate',averages={[365]=1000,[30]=1000},coverage={[30]=20}}
+    return {baseline=365,windows={7,30,90,180,365},current=low,low=low,stamp=time(),days=60,observations=120,demand=5,demandStamp=time()-60,supply=10,volatility=.1,trend=5,confidence='moderate',averages={[365]=1000,[30]=1000},coverage={[30]=20}}
 end
 local buy=G:Item(1,quote(700),ch)
 assert(buy.action=='BUY NOW' and buy.profit==250,'buy estimate')
@@ -48,7 +53,7 @@ local farm=G:Farm(1,quote(1000),ch,{profession='Herbalism',unitsPerHour=20,alter
 assert(farm.action=='FARM' and farm.profit==17900,'farming net opportunity cost')
 assert(G:Farm(1,quote(1000),ch,{}).action=='NO CLEAR RECOMMENDATION','unknown effort')
 FCM_AHHistory={schema=1,generatedUtc=time(),timezone='America/Los_Angeles',packed={['forever/normal/alliance/us']='1,700,1800000000,650,4,2,800,900,1000,1000,1000,7,14,14,14,14,500,1500,-30,14,40,0.1,5,2'},timing={}}
-assert(G:Prices(ch)[1].current==700,'compact summary decode')
+assert(next((G:Prices(ch)))==nil,'legacy schema-1 must remain untrusted')
 ch.faction='Horde';assert(next((G:Prices(ch)))==nil,'no faction fallback')
 ch.faction='Alliance';ch.region='eu';assert(next((G:Prices(ch)))==nil,'no region fallback')
 ch.region='us'
@@ -56,5 +61,5 @@ local rows=G:Rows(ch)
 assert(#rows>8,'Gold rows and sections')
 assert(G:Details(buy,ch):find('No supported best buying/selling day or hour',1,true),'weak timing withheld')
 FCM_AHHistory.timing['forever/normal/alliance/us']={['1']={weekday={['0']={adequate=true,relative=.8,observations=20,days=5},['1']={adequate=true,relative=1.2,observations=20,days=5}}}}
-assert(G:Details(buy,ch):find('Lower observed prices: Monday',1,true),'supported timing comparison')
+assert(not G:Details(buy,ch):find('Lower observed prices: Monday',1,true),'unvalidated legacy timing must remain untrusted')
 print('PASS: Gold Advisor actions, eligibility, fees, opportunity cost, missing data, freshness, market separation and row generation (synthetic)')

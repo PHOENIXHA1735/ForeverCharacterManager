@@ -14,7 +14,8 @@ end
 local function availableFor(recipe, crafter, excludeKey, requestedQuantity)
     local reservations=FCM:ReservedMaterials(excludeKey,crafter)
     local runs=FCM:CraftRuns(recipe,requestedQuantity)
-    local rows,transfers,complete={}, {}, true
+    local rows,transfers,withdrawals,complete={}, {}, {}, true
+    local stale=false
     if not recipe or recipe.complex or not recipe.reagents or #recipe.reagents==0 then
         return {ready=false,uncertain=true,lines={},transfers={},missing=0,reason="Incomplete, optional or unresolved recipe ingredients"}
     end
@@ -34,25 +35,25 @@ local function availableFor(recipe, crafter, excludeKey, requestedQuantity)
             rows[#rows+1]={id=id,name=FCM.ItemName and FCM.ItemName(id) or ("Item #"..id),
                 required=requested,total=total,usable=usable,unreserved=usableUnreserved,
                 reserved=reserved,missing=missing,locations=locations}
-            -- Transfer quantities are capped by the needed quantity, never by total stored.
             local need=requested
-            -- Consume the crafter's own stock first; a transfer is only needed for the remainder.
-            for _,loc in ipairs(locations) do
-                if crafter and loc.usable and loc.ownerKey==crafter.key then
-                    need=math.max(0,need-math.max(0,num(loc.count)-reserved))
-                    reserved=math.max(0,reserved-num(loc.count))
-                end
-            end
-            for _,loc in ipairs(locations) do
-                if need<=0 then break end
-                if loc.usable and crafter and loc.ownerKey~=crafter.key then
-                    local count=math.min(need,math.max(0,num(loc.count)-reserved))
-                    if count>0 then
-                        transfers[#transfers+1]={itemID=id,name=FCM.ItemName and FCM.ItemName(id) or ("Item #"..id),
-                            count=count,from=loc.name,where=loc.where,scan=loc.lastScan}
-                        need=need-count
+            -- Allocate bags, bank, then other characters using one reservation deduction.
+            for pass=1,3 do
+                for _,loc in ipairs(locations) do
+                    local own=crafter and loc.ownerKey==crafter.key
+                    local priority=own and (loc.where=="bank" and 2 or 1) or 3
+                    if need>0 and loc.usable and crafter and priority==pass then
+                        local count=math.min(need,math.max(0,num(loc.count)-reserved))
+                        reserved=math.max(0,reserved-num(loc.count))
+                        if count>0 then
+                            need=need-count
+                            local stamp=tonumber(loc.lastScan)
+                            local now=FCM.Now and FCM:Now()
+                            if now and (not stamp or stamp<=0 or stamp>now or now-stamp>172800) then stale=true end
+                            local action=priority==2 and withdrawals or (priority==3 and transfers or nil)
+                            if action then action[#action+1]={itemID=id,name=rows[#rows].name,
+                                count=count,from=loc.name,where=loc.where,scan=loc.lastScan} end
+                        end
                     end
-                    reserved=math.max(0,reserved-num(loc.count))
                 end
             end
         end
@@ -62,11 +63,15 @@ local function availableFor(recipe, crafter, excludeKey, requestedQuantity)
         skillState,skillDetail=FCM:RecipeSkillStatus(recipe,crafter)
         if skillState=="blocked" then complete=false end
     end
-    return {ready=complete,uncertain=(not complete and totalMissing==0) or skillState=="verify",
+    local uncertain=stale or (not complete and totalMissing==0) or skillState=="verify"
+    local status=(skillState=="blocked" and "Blocked") or (uncertain and "Verification required") or
+        (totalMissing>0 and "Missing ingredients") or (#transfers>0 and "Materials available after transfer") or
+        (#withdrawals>0 and "Bank withdrawal required") or "Recorded bags ready"
+    return {ready=complete and not uncertain and #transfers==0 and #withdrawals==0,
+        uncertain=uncertain,status=status,
         skillStatus=skillState,skillDetail=skillDetail,lines=rows,
-        transfers=transfers,missing=totalMissing,
-        reason=skillState=="blocked" and skillDetail or
-            (complete and "Recorded materials are sufficient, subject to snapshot/trade restrictions" or "Shortages or unverified ingredients")}
+        transfers=transfers,withdrawals=withdrawals,missing=totalMissing,
+        reason=skillState=="blocked" and skillDetail or status}
 end
 
 function FCM:CraftAvailability(recipe, crafter, excludeKey, requestedQuantity)
@@ -94,8 +99,7 @@ function FCM:SmartUpgradeRows(ch)
                 rows[#rows+1]={kind="crafted",candidate=candidate,recipient=ch,recipe=candidate.recipe,
                     itemID=candidate.recipe.outputID,crafter=best.crafter,plan=best.plan,
                     score=candidate.delta,ready=best.plan.ready,
-                    status=best.plan.ready and "Recorded materials ready" or
-                        (best.plan.uncertain and "Check recipe data" or ("Missing "..best.plan.missing.." reagents"))}
+                    status=best.plan.status or best.plan.reason}
             end
         end
     end

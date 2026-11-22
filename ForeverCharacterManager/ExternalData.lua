@@ -181,6 +181,41 @@ end
 -- A Horde character must not receive an Alliance price merely because the
 -- item ID matches. If multiple rule-set markets match and the rule set cannot
 -- be established from the character record, the price is considered unknown.
+local function marketKey(value,legacy)
+    if type(value)~='string' then return nil end
+    local key=value:lower()
+    if legacy then key=key:gsub('%.','/') end
+    local rule,faction,region=key:match('^forever/([%w]+)/([%w]+)/([%w]+)$')
+    if not ({normal=true,pvp=true,rp=true,rppvp=true})[rule] or
+        not ({alliance=true,horde=true})[faction] or not ({us=true,eu=true,cn=true})[region] then return nil end
+    return key
+end
+function FCM:AuctionMarketFor(ch)
+    ch=ch or (self.db and self.db.characters and self.db.characters[self.currentKey or ''])
+    if type(ch)~='table' or type(ch.key)~='string' or not ch.key:match('^Player%-%w[%w%-]*$') or
+        not self.db or not self.db.characters or self.db.characters[ch.key]~=ch then return nil end
+    local rule=({Normal='normal',PvP='pvp',RP='rp',['RP-PvP']='rppvp'})[self:NormalizeRuleset(ch.ruleset)]
+    local faction=self:NormalizeFaction(ch.faction)
+    local region=type(ch.region)=='string' and ch.region:lower() or nil
+    if not rule or not faction or not region then return nil end
+    local key=marketKey('forever/'..rule..'/'..faction:lower()..'/'..region)
+    if not key then return nil end
+    -- Optional saved metadata is corroboration, never a substitute for identity.
+    for _,field in ipairs({'market','marketID','marketId','marketKey'}) do
+        if ch[field]~=nil and marketKey(ch[field],true)~=key then return nil end
+    end
+    if ch.key==self.currentKey then
+        local ok,guid=pcall(function()return UnitGUID('player')end)
+        if not ok or guid~=ch.key then return nil end
+        local liveFaction=self:Try(UnitFactionGroup,'player')
+        if liveFaction and self:NormalizeFaction(liveFaction)~=faction then return nil end
+        local liveRule=self.CurrentRuleset and self:CurrentRuleset()
+        local liveRegion=self.CurrentRegion and self:CurrentRegion()
+        if (liveRule and liveRule~=self:NormalizeRuleset(ch.ruleset)) or
+            (liveRegion and liveRegion:lower()~=region) then return nil end
+    end
+    return key
+end
 function FCM:MarketPricesFor(ch)
     local data=self.externalData or {}
     ch=ch or (self.UI and self.UI.GetCharacter and self.UI:GetCharacter()) or
