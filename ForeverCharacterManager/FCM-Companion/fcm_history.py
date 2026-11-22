@@ -363,6 +363,12 @@ def main():
     parser.add_argument('--timezone', default='America/Los_Angeles')
     parser.add_argument('--market', help='Export this market and opposite faction; never mixes regions/rulesets')
     args = parser.parse_args()
+    from fcm_writer_lease import writer
+    with writer(args.addon):
+        process(args)
+
+
+def process(args):
     zone = ZoneInfo(args.timezone)
     history = args.addon / 'AHHistory'
     if not (args.addon / 'ForeverCharacterManager.toc').is_file(): raise ValueError('FCM missing')

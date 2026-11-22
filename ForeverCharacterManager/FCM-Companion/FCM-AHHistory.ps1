@@ -36,6 +36,9 @@ if ($Mode -eq 'Enable') {
     if ($legacy) { Disable-ScheduledTask -TaskName $legacy.TaskName -ErrorAction Stop | Out-Null }
     return
 }
+. (Join-Path $companion 'WriterLease.ps1')
+$writerLease=Enter-FCMWriterLease $AddonRoot
+try {
 foreach ($part in @('Incoming','RawScans','MarketTables','Index','Logs','Parsed','Quarantine')) {
     $folder = Join-Path $history $part
     if (Test-Path -LiteralPath $folder) {
@@ -99,6 +102,13 @@ try {
         } catch { $failed++; Log-Event ('error '+$_.Exception.Message); Write-Warning $_.Exception.Message }
         finally { if ($temp -and (Test-Path -LiteralPath $temp)) { Remove-Item -LiteralPath $temp } }
     }
+    $status = @{utc=[DateTime]::UtcNow.ToString('o');copied=$copied;unchanged=$unchanged;failed=$failed}
+    $status | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $history 'Index\status.json') -Encoding UTF8
+    $status | ConvertTo-Json -Compress | Write-Output
+    if ($failed) { throw ('Archival errors: '+$failed) }
+} finally { $lock.Dispose() }
+} finally { $writerLease.Dispose() }
+
     if (-not $SkipAnalysis) {
         $processor = Join-Path $companion 'fcm_history.py'
         if (Test-Path -LiteralPath $processor) {
@@ -109,8 +119,3 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'History processor failed' }
         }
     }
-    $status = @{utc=[DateTime]::UtcNow.ToString('o');copied=$copied;unchanged=$unchanged;failed=$failed}
-    $status | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $history 'Index\status.json') -Encoding UTF8
-    $status | ConvertTo-Json -Compress | Write-Output
-    if ($failed) { throw ('Archival errors: '+$failed) }
-} finally { $lock.Dispose() }

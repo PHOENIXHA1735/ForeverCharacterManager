@@ -1,14 +1,19 @@
-# Forever Character Manager - Windows Data Companion v0.9.1
+﻿# Forever Character Manager - Windows Data Companion v0.9.1
 # Open-source PowerShell 5.1 Windows Forms tool; no installation, modules, or
 # administrator privileges required. Internet requests are GET only.
 # Reads FCM's SavedVariables locally for item IDs. Never uploads them.
 param([switch]$OvernightCatalog)
+$ErrorActionPreference = 'Stop'
+$script:Base = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $script:Base 'WriterLease.ps1')
+$script:WriterLeases=@{}
+$sourceRoot=(Get-Item -LiteralPath (Split-Path -Parent $script:Base)).FullName
+$script:WriterLeases[$sourceRoot]=Enter-FCMWriterLease $sourceRoot
+try {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Net.Http
 [System.Windows.Forms.Application]::EnableVisualStyles()
-$ErrorActionPreference = 'Stop'
-$script:Base = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ConfigPath = Join-Path $script:Base 'settings.json'
 $script:CachePath = Join-Path $script:Base 'reference-cache.json'
 $script:ReportPath = Join-Path $script:Base 'last-sync-report.json'
@@ -242,72 +247,16 @@ function Target-Addon {
     if (-not (Test-Path -LiteralPath (Join-Path $root 'Interface\AddOns'))) {
         throw 'Select the WoW Forever game folder (the _forever_ directory) first.'
     }
-    return (Join-Path $root 'Interface\AddOns\ForeverCharacterManager')
-}
-function Backup-Addon($path) {
-    if (Test-Path -LiteralPath $path) {
-        $backup = "$path.backup.$(Get-Date -Format yyyyMMdd-HHmmss)"
-        Copy-Item -LiteralPath $path -Destination $backup -Recurse -Force
-        Log "Backed up previous addon to: $backup"
+    $addon=(Get-Item -LiteralPath (Join-Path $root 'Interface\AddOns\ForeverCharacterManager') -ErrorAction Stop).FullName
+    if (!$script:WriterLeases.ContainsKey($addon)) {
+        $script:WriterLeases[$addon]=Enter-FCMWriterLease $addon
     }
-}
-function Ensure-GeneratedReferenceFile([string]$dest) {
-    # Never reset previously downloaded ForeverDB/AHledger reference data.
-    $generated = Join-Path $dest 'ExternalData.generated.lua'
-    if (Test-Path -LiteralPath $generated) { return }
-    $template = Join-Path $script:Base 'ExternalData.generated.template.lua'
-    if (Test-Path -LiteralPath $template) {
-        Copy-Item -LiteralPath $template -Destination $generated -Force
-        Log 'Initialized missing generated reference file; existing data is preserved.'
-    }
+    return $addon
 }
 function Install-Addon {
-    if (Game-Is-Running) { throw 'Exit World of Warcraft fully before installing or updating the addon.' }
-    if (-not (Test-Path -LiteralPath (Join-Path $script:SourceAddon 'ForeverCharacterManager.toc'))) {
-        throw 'The addon source folder could not be found. Keep the FCM-Companion folder beside or inside ForeverCharacterManager.'
-    }
-    $dest = Target-Addon
-    $sourcePath = [IO.Path]::GetFullPath($script:SourceAddon).TrimEnd([char[]]@([char]92,[char]47))
-    $destPath = [IO.Path]::GetFullPath($dest).TrimEnd([char[]]@([char]92,[char]47))
-    if ([string]::Equals($sourcePath,$destPath,[StringComparison]::OrdinalIgnoreCase)) {
-        # Installed directly under Interface\AddOns: do not copy files over themselves.
-        Ensure-GeneratedReferenceFile $dest
-        Save-Config
-        Log 'FCM addon already installed in this game directory. Skipped self-copy; character saves and cached data were not modified.'
-        return
-    }
-    Backup-Addon $dest
-    if (-not (Test-Path -LiteralPath $dest)) { New-Item -Path $dest -ItemType Directory | Out-Null }
-    foreach ($src in @(Get-ChildItem -LiteralPath $script:SourceAddon -File)) {
-        # Never overwrite reference data created by an earlier successful update.
-        if ($src.Name -in @('ExternalData.generated.lua','AHPrices.generated.lua','CommunityGathering.generated.lua','GatheringReferenceData.lua') -and
-                (Test-Path -LiteralPath (Join-Path $dest $src.Name))) { continue }
-        Copy-Item -LiteralPath $src.FullName -Destination (Join-Path $dest $src.Name) -Force
-    }
-    # Include the artwork. Earlier updates only copied top-level Lua and TOC files,
-    # leaving custom minimap emblems missing on new installations.
-    $mediaSource = Join-Path $script:SourceAddon 'Media'
-    if (Test-Path -LiteralPath $mediaSource) {
-        $mediaDest = Join-Path $dest 'Media'
-        if (-not (Test-Path -LiteralPath $mediaDest)) { New-Item -Path $mediaDest -ItemType Directory | Out-Null }
-        foreach ($asset in @(Get-ChildItem -LiteralPath $mediaSource -File)) {
-            Copy-Item -LiteralPath $asset.FullName -Destination (Join-Path $mediaDest $asset.Name) -Force
-        }
-        Log 'Installed FCM emblem artwork.'
-    }
-    $destCompanion = Join-Path $dest 'FCM-Companion'
-    if (-not (Test-Path -LiteralPath $destCompanion)) { New-Item -Path $destCompanion -ItemType Directory | Out-Null }
-    # Only copy static scripts and documentation; NEVER copy credentials, settings or caches.
-    foreach ($filename in @('FCMDataUpdater.ps1','ForeverDB.Provider.ps1','ForeverDB.Quota.ps1','ReferenceAudit.ps1','OPEN-FCM-DATA-UPDATER.cmd','ABOUT_DATA_SOURCES.txt','ExternalData.generated.template.lua','GitHubUpdates.ps1','GatheringSync.ps1','ReferencePublication.ps1','build_gather_reference.py','import_foreverdb_gathering.py','gathering-reference.json','FCM-DailyAHSync.ps1','Enable-FCM-DailyAH.ps1','Disable-FCM-DailyAH.ps1','DAILY_AH_SETUP.txt','FCM-ForeverDBBuildCheck.ps1','Enable-FCM-ScheduledRefresh.ps1','Disable-FCM-ScheduledRefresh.ps1','AUTO_REFRESH_SETUP.txt','Enable-FCM-OvernightCatalog.ps1','Disable-FCM-OvernightCatalog.ps1','ENABLE-FCM-OVERNIGHT.cmd','OVERNIGHT_CATALOG_SETUP.txt')) {
-        $companionSource = Join-Path $script:Base $filename
-        if (Test-Path -LiteralPath $companionSource) {
-            Copy-Item -LiteralPath $companionSource -Destination (Join-Path $destCompanion $filename) -Force
-        }
-    }
-    Ensure-GeneratedReferenceFile $dest
-    Save-Config
-    Log 'FCM addon, emblem, and companion installed. Existing WTF character records and downloaded references were preserved.'
+    Log 'Companion installation is disabled. Use the approved selective-overlay deployment procedure.'
 }
+
 function Get-Remote([string]$uri) {
     # Preserve the v0.7.4 public-host allowlist. No private data is uploaded.
     $u = [uri]$uri
@@ -1114,3 +1063,4 @@ if ($OvernightCatalog) {
     exit $exitCode
 }
 [void]$form.ShowDialog()
+} finally { foreach($lease in $script:WriterLeases.Values) { $lease.Dispose() } }

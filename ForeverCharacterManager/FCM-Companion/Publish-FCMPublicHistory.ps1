@@ -10,6 +10,9 @@ $ErrorActionPreference='Stop'
 if(![IO.Path]::IsPathRooted($Python) -or !(Test-Path -LiteralPath $Python -PathType Leaf)){
     throw 'An explicit Python runtime is required.'
 }
+. (Join-Path $PSScriptRoot 'WriterLease.ps1')
+$writerLease=Enter-FCMWriterLease (Split-Path -Parent $PSScriptRoot)
+try {
 . (Join-Path $PSScriptRoot 'ReferencePublication.ps1')
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('fcm-public-'+[guid]::NewGuid().ToString('N')+'.lua')
 try {
@@ -30,3 +33,4 @@ try {
     }
     Publish-FCMReferenceData -Addon (Split-Path -Parent $PSScriptRoot) -Name 'PublicHistory.generated.lua' -Bytes $bytes
 } finally {[IO.File]::Delete($temp)}
+} finally { $writerLease.Dispose() }

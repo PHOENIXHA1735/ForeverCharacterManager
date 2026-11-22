@@ -1,15 +1,20 @@
 """Rehearse a persistent gate with cooperating Windows task and manual launchers."""
 import errno
 import json
-from contextlib import contextmanager
+import sys
+from pathlib import Path
+from contextlib import contextmanager, ExitStack
 
 import overlay
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ForeverCharacterManager/FCM-Companion"))
+from fcm_writer_lease import acquire
 
 TASKS = {
     "FCM Auction House Price Refresh", "FCM ForeverDB Build Check",
     "FCM-AHHistory", "FCM-Private365-Update",
 }
-FENCE = ".fcm-maintenance.json"
+FENCE = overlay.ADDON + ".fcm-maintenance.json"
 
 
 class Busy(RuntimeError):
@@ -18,17 +23,9 @@ class Busy(RuntimeError):
 
 @contextmanager
 def lease(root):
-    # Use a different lock from overlay's installer-to-installer lock.
-    path = overlay.location(root, ".fcm-writer.lock")
-    with path.open("a+b") as stream:
-        stream.seek(0)
+    with ExitStack() as stack:
         try:
-            if overlay.os.name == "nt":
-                import msvcrt
-                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            stack.enter_context(acquire(overlay.location(root, overlay.ADDON.rstrip("/"))))
         except OSError as error:
             if error.errno in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
                 raise Busy("An active writer or maintenance process owns the gate") from error

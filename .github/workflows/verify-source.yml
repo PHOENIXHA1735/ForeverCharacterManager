@@ -114,6 +114,7 @@ jobs:
           python tests/qa_writer_gate.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           .\tests\qa_legacy_update_disabled.ps1
+          .\tests\qa_writer_entrypoints.ps1 -Python (Get-Command python.exe).Source
       - name: Verify Gathering reference refresh (PowerShell 5.1)
         shell: powershell
         run: .\tests\qa_gather_sync.ps1
