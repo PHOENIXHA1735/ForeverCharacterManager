@@ -20,6 +20,6 @@ The addon uses `FCM_DB` and `FCM_GatherExport` SavedVariables. Never distribute 
 
 The release maintainer must independently qualify the production Windows deployment with a representative NTFS/ACL layout, task suspension and resumption, approved writer enrollment/exclusion, unchanged saved data and generated files, and verified interrupted-update rollback. Complete the separate Windows PE/offline NTFS rehearsal documented for this candidate. Review the exact installed task identities, including AH Refresh, ForeverDB Build Check, AH History, and Private365. Preserve existing state and resume only those tasks that were enabled beforehand.
 
-The repository's offline tests, checksum verification, and disposable-fxiture success do not replace that live Windows qualification. **Do not install v0.9.4 on a live WoW account merely because a ZIP or GitHub Release exists.**
+The repository's offline tests, checksum verification, and disposable-fixture success do not replace that live Windows qualification. **Do not install v0.9.4 on a live WoW account merely because a ZIP or GitHub Release exists.**
 
 See [v0.9.4 qualification](docs/RELEASE_v0.9.4.md) for the full writer-gate and rollback requirements.
