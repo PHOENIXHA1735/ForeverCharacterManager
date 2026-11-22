@@ -837,7 +837,7 @@ function Action($operation,[bool]$isScan=$false) {
     $script:syncButton.Enabled = $false
     $script:installButton.Enabled = $false
     $script:stopButton.Enabled = $isScan
-    foreach ($ctrl in @($script:githubCheckButton,$script:githubUpdateButton,$script:githubRestoreButton,$script:checkUpdatesBox,$script:auditButton,$script:gatherSyncButton,$script:gatherExportButton,$script:gatherReferenceButton)) {
+    foreach ($ctrl in @($script:githubCheckButton,$script:checkUpdatesBox,$script:auditButton,$script:gatherSyncButton,$script:gatherExportButton,$script:gatherReferenceButton)) {
         if ($null -ne $ctrl) {$ctrl.Enabled=$false}
     }
     $script:stopButton.Text = 'Stop Scan'
@@ -873,8 +873,8 @@ function Action($operation,[bool]$isScan=$false) {
         $script:stopButton.Enabled = $false
         $script:stopButton.Text = 'Stop Scan'
         if ($script:githubCheckButton) {$script:githubCheckButton.Enabled=$true}
-        if ($script:githubUpdateButton) {$script:githubUpdateButton.Enabled=($null -ne $script:LatestFCMAsset)}
-        if ($script:githubRestoreButton) {$script:githubRestoreButton.Enabled=$true}
+        if ($script:githubUpdateButton) {$script:githubUpdateButton.Enabled=$false}
+        if ($script:githubRestoreButton) {$script:githubRestoreButton.Enabled=$false}
         if ($script:checkUpdatesBox) {$script:checkUpdatesBox.Enabled=$true}
         if ($script:auditButton) {$script:auditButton.Enabled=$true}
         if ($script:gatherSyncButton) {$script:gatherSyncButton.Enabled=$true}
@@ -995,17 +995,16 @@ $script:githubCheckButton.Size=New-Object System.Drawing.Size(232,36)
 $script:githubCheckButton.Add_Click({Action {Get-FCMLatestGitHubRelease}})
 $form.Controls.Add($script:githubCheckButton)
 $script:githubUpdateButton=New-Object System.Windows.Forms.Button
-$script:githubUpdateButton.Text='Install GitHub Update'
+$script:githubUpdateButton.Text='Install via protected deployment'
 $script:githubUpdateButton.Location=New-Object System.Drawing.Point(265,376)
 $script:githubUpdateButton.Size=New-Object System.Drawing.Size(240,36)
 $script:githubUpdateButton.Enabled=$false
-$script:githubUpdateButton.Add_Click({Action {Install-FCMLatestGitHubRelease}})
 $form.Controls.Add($script:githubUpdateButton)
 $script:githubRestoreButton=New-Object System.Windows.Forms.Button
-$script:githubRestoreButton.Text='Restore FCM Backup'
+$script:githubRestoreButton.Text='Restore via verified recovery'
 $script:githubRestoreButton.Location=New-Object System.Drawing.Point(518,376)
 $script:githubRestoreButton.Size=New-Object System.Drawing.Size(250,36)
-$script:githubRestoreButton.Add_Click({Action {Restore-FCMLatestBackup}})
+$script:githubRestoreButton.Enabled=$false
 $form.Controls.Add($script:githubRestoreButton)
 $script:checkUpdatesBox=New-Object System.Windows.Forms.CheckBox
 $script:checkUpdatesBox.Text='Check for new FCM releases when the companion opens (no automatic installation)'

@@ -19,6 +19,7 @@ jobs:
           sha256sum -c SOURCE_MANIFEST_SHA256.txt
           python3 tools/release/build_candidate.py "$RUNNER_TEMP/fcm-v094"
           python3 tests/qa_release_overlay.py
+          python3 tests/qa_writer_gate.py
       - name: Install Lua 5.1 compiler
         run: |
           sudo apt-get update -qq
@@ -107,7 +108,12 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify selective overlay and interrupted recovery
-        run: python tests/qa_release_overlay.py
+        run: |
+          python tests/qa_release_overlay.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tests/qa_writer_gate.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\tests\qa_legacy_update_disabled.ps1
       - name: Verify Gathering reference refresh (PowerShell 5.1)
         shell: powershell
         run: .\tests\qa_gather_sync.ps1
