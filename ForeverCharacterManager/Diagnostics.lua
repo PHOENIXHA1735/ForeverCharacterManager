@@ -56,9 +56,11 @@ function FCM:DiagnosticsReport()
         local ok, a,b,c,d=pcall(GetBuildInfo)
         if ok and d then interface=tostring(d) end
     end
-    local rows = {"FCM v" .. tostring(self.version), "Build: " .. tostring(self.build or "unlabeled"), "Interface: " .. interface, ""}
+    local rows = {"SYSTEM INFORMATION", "FCM v" .. tostring(self.version), "Build: " .. tostring(self.build or "unlabeled"), "Interface: " .. interface, ""}
     local count = 0
     for _ in pairs((self.db and self.db.characters) or {}) do count = count + 1 end
+    rows[#rows+1] = ""
+    rows[#rows+1] = "SAVED DATA COVERAGE"
     rows[#rows+1] = "Saved characters: " .. count
     rows[#rows+1] = "Craft requests: " .. #(self.db.craftingQueue or {})
     rows[#rows+1] = "Completed requests: " .. #(self.db.requestHistory or {})
@@ -66,13 +68,14 @@ function FCM:DiagnosticsReport()
     rows[#rows+1] = "Gathering world map: " .. tostring(self._gatherWorldDiagnostic or "Not checked yet")
     local own = self:Current()
     rows[#rows+1] = ""
-    rows[#rows+1] = "Current character data:"
+    rows[#rows+1] = "CURRENT CHARACTER SCAN FRESHNESS"
     for _, item in ipairs(self:DataQuality(own)) do
         rows[#rows+1] = "  " .. item.name .. ": " .. item.label
     end
     local errors = self.db.diagnostics and self.db.diagnostics.errors or {}
     rows[#rows+1] = ""
-    rows[#rows+1] = "Recent API errors: " .. #errors
+    rows[#rows+1] = "RECENT API ERRORS"
+    rows[#rows+1] = "Recorded: " .. #errors
     for i=math.max(1,#errors-9),#errors do
         local e=errors[i]
         rows[#rows+1] = "  " .. self:Age(e.at) .. " [" .. e.area .. "] " .. e.message

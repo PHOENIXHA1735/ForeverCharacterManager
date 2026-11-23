@@ -25,6 +25,13 @@ local function selectedHistory()
     local h=FCM.HistoryProvider
     local ctx=renderSelection
     if not ctx then return h:Selected() end
+    if ctx.public then
+        if not ctx.checkedPublic then
+            ctx.data,ctx.status=h:Selected()
+            ctx.checkedPublic=true
+        end
+        return ctx.data,ctx.status
+    end
     local settings=FCM.db and FCM.db.settings
     local binding=settings and settings.historyProvider
     local stamp=now()
@@ -58,19 +65,19 @@ local function liveAPI()
     local api=AHledgerAPI
     return type(api)=='table' and type(api.GetPrice)=='function' and api or nil
 end
-local function liveQuote(base,id,market,api,info)
-    -- Never mutate the private historical record: live values are an ephemeral overlay.
-    local q={}
-    for key,value in pairs(base) do q[key]=value end
+local function archivedQuote(q)
     q.priceStatus='Archived FCM observation; live AHledger price unavailable.'
-    -- Packed history has no demand timestamp. Its price stamp cannot prove
-    -- when a carried-forward provider estimate was measured.
+    -- A history observation cannot timestamp a carried-forward demand estimate.
     q.archivedDemand=q.demand
     q.demand=nil
-    q.demandStamp=nil
     q.demandSource='unavailable'
     q.demandStatus=q.archivedDemand~=nil and 'Archived demand has no independently verified timestamp; insufficient demand data.' or 'Estimated demand is unavailable.'
-    if not api then return q end
+    return q
+end
+local function liveQuote(base,id,market,api,info)
+    -- Live values are an ephemeral overlay on the decoded history quote.
+    local q={}
+    for key,value in pairs(base) do q[key]=value end
     local ok,p=pcall(api.GetPrice,tonumber(id),market)
     if not ok or type(p)~='table' then return q end
     -- AHledgerAPI expects slash-separated market identifiers. Never use the
@@ -147,10 +154,16 @@ local function demandIssue(q)
     if not recent(q.demandStamp,q.demandMaxAge or DEMAND_MAX_AGE) then return 'Demand timestamp is unverified; insufficient demand data.' end
     if q.demand<=0 then return 'No positive estimated demand; insufficient evidence for a recommendation.' end
 end
+local historyIdentities=setmetatable({},{__mode='k'})
+local function historyIdentity(data)
+    local id=historyIdentities[data]
+    if not id then id={};historyIdentities[data]=id end
+    return id
+end
 local function historyActive(q)
     if not q or not q.providerID then return q~=nil end -- direct arithmetic test inputs
     local d=selectedHistory()
-    return d and d==q.historyData and now()<q.historyValidUntil and d.providerID==q.providerID and
+    return d and historyIdentity(d)==q.historyData and now()<q.historyValidUntil and d.providerID==q.providerID and
         d.rootInstanceID==q.rootInstanceID and d.generation==q.generation and d.asOf==q.historyAsOf
 end
 local function usable(q)
@@ -164,7 +177,10 @@ function G:TrackRecommendation(r)
     return r
 end
 function G:InvalidateHistoryViews(reason)
-    if renderSelection then renderSelection.checked=nil end
+    if renderSelection then
+        renderSelection.checked=nil
+        renderSelection.checkedPublic=nil
+    end
     for result in pairs(self.recommendations or {}) do
         result.action='NO CLEAR RECOMMENDATION';result.profit=nil;result.score=0
         result.reason=reason or 'History authorization/validity expired; refresh required.'
@@ -187,7 +203,9 @@ function G:WatchHistory(data)
         local watch=self.watchData
         if not watch then return end
         local state=FCM.HistoryProvider.authorizationState
-        if now()>=watch.data.validUntil or (watch.data.variant=='with-provider' and
+        local public=FCM.ConfirmedPublicHistory
+        if now()>=watch.data.validUntil or (watch.data.classification=='public30' and
+            (not public or public.selected()~=watch.data)) or (watch.data.variant=='with-provider' and
             (state~=watch.state or not state or now()>=state.validUntil)) then
             self:InvalidateHistoryViews()
         end
@@ -196,7 +214,7 @@ end
 function G:Market(ch)
     return FCM:AuctionMarketFor(ch)
 end
-function G:Prices(ch)
+local function pricesFor(self,ch)
     local data,status=selectedHistory()
     local market=self:Market(ch)
     self.providerStatus=status
@@ -205,23 +223,29 @@ function G:Prices(ch)
     if self.generation~=generation or self.providerData~=data then self.cache={};self.liveCache={};self.generation=generation;self.providerData=data end
     if not self.cache[market] then
         local decoded={}
+        local identity=historyIdentity(data)
         for id,r in pairs(data.markets[market] or {}) do
             local q={current=r.current,stamp=r.currentUtc,low=r.low,supply=r.supply,demand=r.demand,
+                observedPrice=r.current,observedStamp=r.currentUtc,
                 averages={},coverage={},minimum=r.minimum,maximum=r.maximum,comparison=r.comparisonPct,
                 days=r.observedDays,observations=r.observations,volatility=r.volatility,trend=r.trendPct,
                 confidence=r.confidence,currentSource=r.currentSource,
                 providerID=data.providerID,rootInstanceID=data.rootInstanceID,generation=data.generation,
-                historyAsOf=data.asOf,historyValidUntil=data.validUntil,historyData=data,recommendationsAllowed=data.recommendationsAllowed,engineRevision=data.engineRevision,
+                historyAsOf=data.asOf,historyValidUntil=data.validUntil,historyData=identity,recommendationsAllowed=data.recommendationsAllowed,engineRevision=data.engineRevision,
                 classification=data.classification,cutoffDate=data.eligibleCutoffDate,permissionSummary=data.permissionSummary,
                 baseline=data.baselineHorizon,windows=data.windows,demandMaxAge=data.demandMaxAge}
             for _,n in ipairs(data.windows)do q.averages[n]=r.windows[tostring(n)].average;q.coverage[n]=r.windows[tostring(n)].days end
-            decoded[tonumber(id)]=q
+            decoded[tonumber(id)]=archivedQuote(q)
         end
         self.cache[market]=decoded
     end
     self:WatchHistory(data)
     local api=liveAPI()
     self.liveCache=self.liveCache or {}
+    if not api then
+        self.liveCache[market]=nil
+        return self.cache[market],market
+    end
     local entry=self.liveCache[market]
     if entry and entry.api==api and recent(entry.checked,LIVE_CACHE_SECONDS) then return entry.prices,market end
     local tableInfo
@@ -233,6 +257,26 @@ function G:Prices(ch)
     for id,base in pairs(self.cache[market]) do out[id]=liveQuote(base,id,market,api,tableInfo) end
     self.liveCache[market]={api=api,checked=now(),prices=out}
     return out,market
+end
+-- Bulk callers get detached quotes. The Gold render uses pricesFor directly
+-- so a page build never copies the entire result just to read it.
+function G:Prices(ch)
+    local prices,market=pricesFor(self,ch)
+    local result={}
+    for id,q in pairs(prices) do
+        local copy={}
+        for key,value in pairs(q) do
+            if key=='averages' or key=='coverage' or key=='windows' then
+                local values={}
+                for k,v in pairs(value) do values[k]=v end
+                copy[key]=values
+            else
+                copy[key]=value
+            end
+        end
+        result[id]=copy
+    end
+    return result,market
 end
 function G:Item(id,q,ch)
     local r={id=id,action='NO CLEAR RECOMMENDATION',profit=nil,score=0,quote=q,confidence=q and q.confidence or 'low'}
@@ -293,10 +337,12 @@ function G:Farm(id,q,ch,effort)
     else r.reason='Estimated acquisition value does not beat the alternative use of time.' end
     return self:TrackRecommendation(r)
 end
-function G:Opportunities(ch,prices)
-    prices=prices or self:Prices(ch)
+function G:Opportunities(ch,prices,actionableOnly)
+    prices=prices or pricesFor(self,ch)
     local out={}
-    for id,q in pairs(prices) do out[#out+1]=self:Item(id,q,ch) end
+    for id,q in pairs(prices) do
+        if not actionableOnly or usable(q) then out[#out+1]=self:Item(id,q,ch) end
+    end
     local settings=FCM.db and FCM.db.settings or {}
     for _,r in ipairs(FCM.AllRecipes and FCM:AllRecipes() or {}) do
         out[#out+1]=self:Craft(r,ch,prices,settings.goldAdvisorFees)
@@ -312,10 +358,16 @@ function G:Timing(id,ch)
     local market=self:Market(ch)
     local data=selectedHistory()
     local row=data and data.markets[market] and data.markets[market][tostring(id)]
-    return row and row.timing,data and data.timezone or 'unavailable'
+    local function copyTiming(value)
+        if type(value)~='table' then return value end
+        local result={}
+        for k,v in pairs(value) do result[k]=copyTiming(v) end
+        return result
+    end
+    return row and copyTiming(row.timing),data and data.timezone or 'unavailable'
 end
-local function money(n)
-    return type(n)=='number' and string.format('%.2fg',n/10000) or 'unknown'
+local function money(copper)
+    return FCM:MoneyLabel(copper,true)
 end
 local function updatedAt(stamp)
     local formatter=date or (os and os.date)
@@ -325,32 +377,70 @@ local function updatedAt(stamp)
 end
 function G:Details(r,ch)
     local q=r.quote
-    local lines={r.reason or 'Insufficient evidence.', 'Advisory only. Listing observations are not completed sales.'}
-    if not q then return table.concat(lines,'\n') end
-    if q.providerID and not historyActive(q) then return 'History provider changed, expired or unavailable; refresh before any recommendation.' end
-    if q.recommendationsAllowed==false then lines[#lines+1]='Personal-only fallback: provider authorization unavailable; recommendations disabled.' end
-    if q.providerID then
-        lines[#lines+1]='History provider: '..q.providerID..' | '..q.classification..' | engine '..q.engineRevision
-        lines[#lines+1]='History as of: '..updatedAt(q.historyAsOf)..' | eligible dates since '..q.cutoffDate
-        lines[#lines+1]='Source permissions: '..tostring(q.permissionSummary or 'Unavailable')
+    local advice={r.reason or 'Insufficient evidence.', 'Advisory only. Listing observations are not completed sales.'}
+    if not q then return table.concat(advice,'\n') end
+    if q.providerID and not historyActive(q) then
+        return 'History provider changed, expired or unavailable; refresh before any recommendation.'
     end
-    lines[#lines+1]='Current median ('..tostring(q.currentSource or 'snapshot')..'): '..money(q.current)..' | Lowest listing: '..money(q.low)
-    lines[#lines+1]='Quote status: '..tostring(q.priceStatus or 'Historical quote; live status unknown.')
-    lines[#lines+1]='Price updated (local): '..updatedAt(q.stamp)
-    lines[#lines+1]='Observed days: '..q.days..' | Observations: '..q.observations..' | Confidence: '..q.confidence
-    lines[#lines+1]='Age: '..math.floor(math.max(0,now()-q.stamp)/3600)..' hours | Supply: '..tostring(q.supply or 'unknown')
-    lines[#lines+1]='Estimated units/day: '..tostring(q.demand or 'unknown')..' ('..tostring(q.demandSource or 'provider estimate')..'; not confirmed personal sales)'
-    lines[#lines+1]='Demand updated (local): '..updatedAt(q.demandStamp)..' | '..tostring(demandIssue(q) or q.demandStatus or 'Demand freshness unverified.')
-    if q.archivedDemand~=nil then lines[#lines+1]='Archived demand estimate: '..tostring(q.archivedDemand)..' units/day (historical only; timestamp unavailable; excluded from recommendations).' end
+
+    local function show(value) return value~=nil and tostring(value) or 'Unknown' end
+    local blocks={}
+    local function section(heading,...)
+        local lines={heading,...}
+        blocks[#blocks+1]=lines
+        return lines
+    end
+    local source=section('Historical Data Source:',
+        'Provider: '..(q.providerID and (q.providerID..' | '..q.classification) or 'Unavailable'),
+        'History as of: '..updatedAt(q.historyAsOf),
+        'Market: '..(self:Market(ch) or 'Unknown'),
+        'Permissions: '..(q.permissionSummary or 'Unavailable'))
+    if q.cutoffDate then source[#source+1]='Eligible dates since: '..q.cutoffDate end
+    if q.recommendationsAllowed==false then
+        source[#source+1]='Recommendations disabled for this history.'
+    end
+
+    local live=q.currentSource=='AHledger live'
+    section('Current Market Prices:',
+        (live and 'Live median (AHledger): ' or 'Archived FCM median: ')..money(q.current),
+        (live and 'Live lowest listing: ' or 'Archived lowest listing: ')..money(q.low),
+        q.priceStatus or 'Live quote status unknown.',
+        (live and 'Live quote time (local): ' or 'Observed at (local): ')..updatedAt(q.stamp))
+
+    local history={'Historical Price Analysis:',
+        'Most recent FCM observation: '..money(q.observedPrice),
+        'Observation time (local): '..updatedAt(q.observedStamp),
+        'Daily averages and observed range'}
     for _,n in ipairs(q.windows or {}) do
-        lines[#lines+1]='FCM '..n..'-day daily average: '..money(q.averages[n])..' | '..tostring(q.coverage[n] or 0)..' observed days'
+        local coverage=q.coverage and q.coverage[n]
+        history[#history+1]='FCM '..n..'-day daily average: '..money(q.averages and q.averages[n])..
+            (coverage~=nil and (' ('..coverage..' observed days)') or '')
     end
-    lines[#lines+1]=tostring(q.baseline)..'-day observed min/max: '..money(q.minimum)..' / '..money(q.maximum)
-    lines[#lines+1]='Versus historical baseline: '..(q.comparison and string.format('%+.1f%%',q.comparison) or 'unknown')
-    lines[#lines+1]='7-day vs previous 7-day trend: '..(q.trend and string.format('%+.1f%%',q.trend) or 'insufficient data')
-    lines[#lines+1]='Daily volatility: '..(q.volatility and string.format('%.1f%%',q.volatility*100) or 'unknown')
+    history[#history+1]='Observed minimum: '..money(q.minimum)
+    history[#history+1]='Observed maximum: '..money(q.maximum)
+    history[#history+1]='Trend and comparison'
+    history[#history+1]='Versus historical baseline: '..(q.comparison and string.format('%+.1f%%',q.comparison) or 'unknown')
+    history[#history+1]='7-day vs previous 7-day trend: '..(q.trend and string.format('%+.1f%%',q.trend) or 'insufficient data')
+    history[#history+1]='Daily volatility: '..(q.volatility and string.format('%.1f%%',q.volatility*100) or 'unknown')
+    blocks[#blocks+1]=history
+
+    local age=type(q.observedStamp)=='number' and q.observedStamp>0 and q.observedStamp<=now()
+        and (math.floor((now()-q.observedStamp)/3600)..' hours') or 'Unknown'
+    local activity={'Market Activity and Confidence:',
+        'Observations: '..show(q.observations)..' | Observed days: '..show(q.days),
+        'History age: '..age..' | Confidence: '..show(q.confidence),
+        'Supply: '..show(q.supply),
+        'Estimated units/day: '..show(q.demand),
+        'Demand source: '..(q.demandSource or 'Unknown')..' (estimate, not confirmed sales)',
+        'Demand updated (local): '..updatedAt(q.demandStamp),
+        demandIssue(q) or q.demandStatus or 'Demand freshness unverified.'}
+    if q.archivedDemand~=nil then
+        activity[#activity+1]='Archived demand estimate: '..q.archivedDemand..' units/day (timestamp unavailable).'
+    end
+    blocks[#blocks+1]=activity
+
     local timing,zone=self:Timing(r.id,ch)
-    lines[#lines+1]='Days and hours in '..zone..'; UTC timestamps retained.'
+    local lines={'Market Timing:', 'Timezone: '..zone..' | UTC timestamps retained.'}
     local weekdays={'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'}
     local supported=false
     for _,mode in ipairs({'weekday','hour'}) do
@@ -371,17 +461,22 @@ function G:Details(r,ch)
         end
     end
     if not supported then lines[#lines+1]='No supported best buying/selling day or hour yet; more observations needed.' end
-    return table.concat(lines,'\n')
+    blocks[#blocks+1]=lines
+    if r.materialCost~=nil then
+        advice[#advice+1]='Material opportunity cost: '..money(r.materialCost)
+    end
+    section('Recommendation Evidence:',unpack(advice))
+    for i,block in ipairs(blocks) do blocks[i]=table.concat(block,'\n') end
+    return table.concat(blocks,'\n\n')
 end
-local function buildGoldRows(self,ch)
+local function buildGoldRows(self,ch,itemID)
     local rows={}
     local function add(id,title,summary,detail) rows[#rows+1]={id=id,title=title,summary=summary,detail=detail} end
-    local prices,market=self:Prices(ch)
+    local prices,market=pricesFor(self,ch)
     local history=self.providerData
     local historyLabel=history and (history.classification=='public30' and 'Public30 history' or 'Private365 history') or 'History unavailable'
     add('gold-status','Gold Advisor | '..tostring(market or 'market unknown'),'Current AHledger prices when fresh | '..historyLabel,
         'Fresh prices, supply and estimated demand come from the optional in-game AHledgerAPI, never from an extra network request or a new stored provider-table archive. When live data is unavailable, FCM labels the historical fallback.\nFCM calculates daily historical values from timestamped personal archives, not overlapping provider rolling averages. Missing days remain missing. Offline bags/bank are recorded snapshots.\n\nManual Sync / Enable / Disable controls are installed in FCM-Companion. In-game Lua cannot run Windows tasks.\nCrafting net-profit advice requires configured AH fees and transferable output. Farming advice requires measured acquisition effort; unknown inputs stay unknown.')
-    local opportunities=self:Opportunities(ch,prices)
     local function recommendation(r,prefix)
         local id=r.id
         local label=(FCM.ItemName and FCM.ItemName(id)) or ('Item #'..tostring(id))
@@ -390,6 +485,20 @@ local function buildGoldRows(self,ch)
             (r.action=='FARM' and 'Net estimate/hour: ' or (r.recipe and 'Net estimate/batch: ' or 'Potential spread/unit: '))..money(r.profit)..' | Demand/day: '..tostring(q and q.demand or 'unknown')..' | '..r.confidence,
             self:Details(r,ch))
     end
+    -- Exact ID lookup uses the selected market cache before the browse cap.
+    if itemID then
+        local quote=prices[itemID]
+        if quote then
+            recommendation(self:Item(itemID,quote,ch),'market')
+            return {rows[#rows]}
+        end
+        local status=history and ('Item #'..itemID..' is not recorded for '..(market or 'market unknown'))
+            or (self.providerStatus or 'History unavailable')
+        add('gold-item-unavailable','No matching Gold price',status,
+            'This search only checks usable history for the selected market.')
+        return {rows[#rows]}
+    end
+    local opportunities=self:Opportunities(ch,prices,true)
     add('gold-top','Top Gold-Making Opportunities','Ranked eligible actions by estimated value, demand, supply and volatility.','Unknown eligibility and insufficient evidence do not enter this ranking.')
     local ranked=0
     for _,r in ipairs(opportunities) do
@@ -429,10 +538,21 @@ local function buildGoldRows(self,ch)
     return rows
 end
 
-function G:Rows(ch)
+function G:Rows(ch,itemID)
     local previous=renderSelection
-    renderSelection={}
-    local ok,rows=pcall(buildGoldRows,self,ch)
+    local settings=FCM.db and FCM.db.settings
+    local context={public=not settings or settings.historyProvider==nil}
+    renderSelection=context
+    local ok,rows=pcall(buildGoldRows,self,ch,itemID)
+    local public=FCM.ConfirmedPublicHistory
+    if ok and context.public and context.data and (not public or public.selected()~=context.data or
+        (FCM.db and FCM.db.settings and FCM.db.settings.historyProvider~=nil)) then
+        -- A synchronous pricing/UI callback invalidated the selection.
+        -- Discard this build and render the unavailable state without its data.
+        context.data,context.status=nil,'Public30 verification pending or unavailable'
+        context.checkedPublic=true
+        ok,rows=pcall(buildGoldRows,self,ch,itemID)
+    end
     renderSelection=previous
     if not ok then error(rows,0) end
     return rows

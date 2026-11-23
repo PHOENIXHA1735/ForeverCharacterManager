@@ -2,6 +2,7 @@
 -- The rest of FCM continues to use UI:RenderDetailCards unchanged.
 local _,FCM=...
 local UI=FCM.UI
+local theme=UI:TabPalette()
 
 local function fill(frame,r,g,b,a)
     local tex=frame:CreateTexture(nil,"BACKGROUND")
@@ -12,7 +13,7 @@ end
 
 local function line(frame,edge)
     local tex=frame:CreateTexture(nil,"BORDER")
-    tex:SetColorTexture(.49,.35,.15,.90)
+    tex:SetColorTexture(unpack(theme.border))
     if edge=="TOP" then
         tex:SetPoint("TOPLEFT",frame,"TOPLEFT",0,0)
         tex:SetPoint("TOPRIGHT",frame,"TOPRIGHT",0,0)
@@ -60,12 +61,12 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
         local frame=self.gatherMaterialFrames[index]
         if not frame then
             frame=CreateFrame("Frame",nil,host)
-            frame.bg=fill(frame,.065,.09,.105,.96)
+            frame.bg=fill(frame,unpack(theme.card))
             for _,edge in ipairs({"TOP","BOTTOM","LEFT","RIGHT"}) do line(frame,edge) end
-            frame.title=label(frame,"GameFontNormalLarge")
-            frame.subtitle=label(frame,"GameFontHighlightSmall")
+            frame.title=label(frame,theme.fonts.title)
+            frame.subtitle=label(frame,theme.fonts.small)
             frame.icon=frame:CreateTexture(nil,"ARTWORK")
-            frame.body=label(frame,"GameFontHighlight")
+            frame.body=label(frame,theme.fonts.body)
             self.gatherMaterialFrames[index]=frame
         end
         frame:ClearAllPoints()
@@ -79,7 +80,7 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
         return frame
     end
     local header=card(width,69,3,y)
-    header.bg:SetColorTexture(.06,.11,.115,.97)
+    header.bg:SetColorTexture(unpack(theme.panel))
     header.icon:SetSize(42,42)
     header.icon:ClearAllPoints()
     header.icon:SetPoint("TOPLEFT",header,"TOPLEFT",9,-10)
@@ -88,7 +89,7 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
     header.title:ClearAllPoints()
     header.title:SetPoint("TOPLEFT",header,"TOPLEFT",59,-9)
     header.title:SetWidth(width-72)
-    header.title:SetText("|cffffd17b"..tostring(model.name).."|r")
+    header.title:SetText("|cff"..theme.accent..tostring(model.name).."|r")
     header.title:Show()
     header.subtitle:ClearAllPoints()
     local titleHeight=math.max(20,math.ceil(header.title:GetStringHeight()))
@@ -111,7 +112,7 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
     for n,entry in ipairs(metrics) do
         local x=inline and 3+(n-1)*(tileW+spacing) or 3
         local box=card(tileW,56,x,y)
-        box.bg:SetColorTexture(.08,.105,.105,.98)
+        box.bg:SetColorTexture(unpack(theme.row))
         box.subtitle:ClearAllPoints()
         box.subtitle:SetPoint("TOPLEFT",box,"TOPLEFT",9,-8)
         box.subtitle:SetWidth(tileW-18)
@@ -139,11 +140,11 @@ function UI:RenderGatherMaterialPanel(resource,ch,expanded)
 
     local function section(title,lines)
         local box=card(width,50,3,y)
-        box.bg:SetColorTexture(.065,.105,.095,.97)
+        box.bg:SetColorTexture(unpack(theme.card))
         box.title:ClearAllPoints()
         box.title:SetPoint("TOPLEFT",box,"TOPLEFT",10,-8)
         box.title:SetWidth(width-20)
-        box.title:SetText("|cffffcf75"..title.."|r")
+        box.title:SetText("|cff"..theme.accent..title.."|r")
         box.title:Show()
         box.body:ClearAllPoints()
         local bodyTop=21+math.ceil(box.title:GetStringHeight())

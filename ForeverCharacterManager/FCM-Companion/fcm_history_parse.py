@@ -146,11 +146,38 @@ def tables(text):
                 yield (market, item, int(ts), 'table', price, low, supply, pace)
 
 
+def scan_market_ruleset(scan):
+    """Resolve AHLedger market identity without guessing an unknown realm.
+
+    With AHLedger 0.15.1 the client may not return a realm name. In that
+    case require both an explicit supported ruleset and a positive server ID.
+    Older unidentified scans stay unclassified; conflicting identities fail.
+    """
+    realm = scan.get('realm', '')
+    if not isinstance(realm, str):
+        return None
+    explicit = scan.get('ruleset')
+    supported = {'normal', 'pvp', 'rp', 'rppvp'}
+    if realm.strip():
+        derived = ruleset(realm)
+        if explicit is not None and (
+            type(explicit) is not str or explicit not in supported or explicit != derived
+        ):
+            raise ValueError('Conflicting or invalid scan ruleset')
+        return derived
+    server = scan.get('server')
+    if type(server) is not int or server <= 0:
+        return None
+    if type(explicit) is not str or explicit not in supported:
+        return None
+    return explicit
+
+
 def scans(text):
     db = LuaData(text).database()
     for scan in db.get('scans', {}).values():
         if not isinstance(scan, dict) or scan.get('full') is not True: continue
-        rule = ruleset(str(scan.get('realm', '')))
+        rule = scan_market_ruleset(scan)
         faction = str(scan.get('faction', '')).lower()
         region = str(scan.get('region', '')).lower()
         market = f'forever/{rule}/{faction}/{region}'

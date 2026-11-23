@@ -407,9 +407,25 @@ function FCM:CraftPriceEstimate(recipe,ch)
     if not result or result.market~=market then result=nil end
     return {materialCost=total,unknown=missing,market=market,resultMedian=result and tonumber(result.median) or nil}
 end
-function FCM:MoneyLabel(copper)
+local coinColors={g="ffffd36b",s="ffdce4ed",c="ffffad77"}
+function FCM:MoneyLabel(copper,colored)
     copper=tonumber(copper)
-    if not copper then return "not priced" end
-    copper=math.floor(copper+0.5)
-    return string.format("%dg %ds %dc",math.floor(copper/10000),math.floor((copper%10000)/100),copper%100)
+    if not copper or copper~=copper or math.abs(copper)==math.huge then return "not priced" end
+    local sign=copper<0 and "-" or ""
+    local amount=math.abs(copper)
+    local gold=math.floor(amount/10000)
+    local silver=math.floor(math.fmod(amount,10000)/100)
+    local coins=math.fmod(amount,100)
+    local parts={}
+    if gold>0 then parts[#parts+1]=string.format("%.0fg",gold) end
+    if silver>0 then parts[#parts+1]=silver.."s" end
+    -- Averages and fee estimates can contain fractional copper.
+    if coins>0 or #parts==0 then parts[#parts+1]=tostring(coins).."c" end
+    parts[1]=sign..parts[1]
+    if colored then
+        for i,part in ipairs(parts) do
+            parts[i]="|c"..coinColors[part:sub(-1)]..part.."|r"
+        end
+    end
+    return table.concat(parts," ")
 end

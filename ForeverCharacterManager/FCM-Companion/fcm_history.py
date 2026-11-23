@@ -1,7 +1,7 @@
 """Private local AH observations. Parses data, never executes Lua or contacts a server."""
 import argparse
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import hashlib
 import json
 import math
@@ -154,7 +154,7 @@ def scans(text):
         faction = str(scan.get('faction', '')).lower()
         region = str(scan.get('region', '')).lower()
         market = f'forever/{rule}/{faction}/{region}'
-        if not MARKET.fullmatch(market): continue
+        if not MARKET.fullmatch(market): raise ValueError('Unresolved scan market')
         ts = int(scan.get('ts', 0))
         data = scan.get('data', '')
         if not isinstance(data, str): continue
@@ -204,9 +204,20 @@ def import_sales(db, history, now):
             continue
 
 
+def local_date(timestamp, zone):
+    """Calendar date in the configured zone; stored UTC timestamps stay intact."""
+    return datetime.fromtimestamp(timestamp, UTC).astimezone(zone).date()
+
+
+def window_start(now, days, zone):
+    """Inclusive local midnight for N dates including today (23/25h DST safe)."""
+    first = local_date(now, zone) - timedelta(days=days - 1)
+    return int(datetime.combine(first, datetime.min.time(), tzinfo=zone).timestamp())
+
+
 def personal_sales(db, now, zone):
     result={}
-    for item,events,qty,gross,cut,deposit,latest in db.execute('SELECT item,COUNT(*),SUM(qty),SUM(gross),SUM(cut),SUM(deposit),MAX(ts) FROM sales WHERE ts>? AND ts<=? GROUP BY item',(now-365*DAY,now)):
+    for item,events,qty,gross,cut,deposit,latest in db.execute('SELECT item,COUNT(*),SUM(qty),SUM(gross),SUM(cut),SUM(deposit),MAX(ts) FROM sales WHERE ts>=? AND ts<=? GROUP BY item',(window_start(now,365,zone),now)):
         result[str(item)]=dict(events=events,units=qty,gross=gross,cut=cut,netProceeds=gross-cut,refundedDeposits=deposit,latestRecordedUtc=latest,latestRecordedLocal=datetime.fromtimestamp(latest,UTC).astimezone(zone).isoformat())
     return result
 
@@ -244,7 +255,7 @@ def timing(rows, daily, zone):
         for row in rows:
             local = datetime.fromtimestamp(row[2], UTC).astimezone(zone)
             key = local.weekday() if mode == 'weekday' else local.hour
-            day = row[2] // DAY
+            day = local.date()
             buckets[key].append((row[4] / daily[day], local.date().isoformat()))
         result[mode] = {str(k): {'relative': statistics.mean(v[0] for v in values), 'observations': len(values), 'days': len(set(v[1] for v in values)), 'adequate': len(values) >= 10 and len(set(v[1] for v in values)) >= (4 if mode == 'weekday' else 5)} for k, values in buckets.items()}
     return result
@@ -253,23 +264,21 @@ def timing(rows, daily, zone):
 def summarize(db, now, zone):
     grouped = defaultdict(list)
     # Prefer a personal scan when the exact same market/item/timestamp is present twice.
-    query = 'SELECT * FROM observations WHERE ts>? AND ts<=? ORDER BY market,item,ts,CASE kind WHEN "scan" THEN 0 ELSE 1 END'
+    query = 'SELECT * FROM observations WHERE ts>=? AND ts<=? ORDER BY market,item,ts,CASE kind WHEN "scan" THEN 0 ELSE 1 END'
     seen = set()
-    for row in db.execute(query, (now - 365 * DAY, now)):
+    for row in db.execute(query, (window_start(now, 365, zone), now)):
         key = row[:3]
         if key in seen: continue
         seen.add(key); grouped[row[:2]].append(row)
     markets = defaultdict(dict)
     for (market, item), rows in grouped.items():
         days = defaultdict(list)
-        for row in rows: days[row[2] // DAY].append(row[4])
+        for row in rows: days[local_date(row[2], zone)].append(row[4])
         daily = {day: statistics.mean(values) for day, values in days.items()}
         windows = {}
         for n in WINDOWS:
-            window_days = defaultdict(list)
-            for r in rows:
-                if r[2] > now - n * DAY: window_days[r[2] // DAY].append(r[4])
-            vals = [statistics.mean(v) for v in window_days.values()]
+            first = local_date(now, zone) - timedelta(days=n - 1)
+            vals = [value for day, value in daily.items() if day >= first]
             windows[str(n)] = {'average': statistics.mean(vals) if vals else None, 'days': len(vals), 'coverage': min(1, len(vals) / n)}
         # The newest observation is the current price, even when it came from
         # a personal AH scan after the provider's most recent price table.
@@ -280,8 +289,10 @@ def summarize(db, now, zone):
         recent_provider = provider[-1] if provider and now - provider[-1][2] <= 7 * DAY else None
         demand = current[7] if current[7] is not None else (recent_provider[7] if recent_provider else None)
         age = now - current[2]; average = windows['365']['average']
-        recent = [v for d, v in daily.items() if d * DAY > now - 7 * DAY]
-        previous = [v for d, v in daily.items() if now - 14 * DAY < d * DAY <= now - 7 * DAY]
+        recent_start = local_date(now, zone) - timedelta(days=6)
+        previous_start = recent_start - timedelta(days=7)
+        recent = [v for d, v in daily.items() if d >= recent_start]
+        previous = [v for d, v in daily.items() if previous_start <= d < recent_start]
         trend = (statistics.mean(recent) / statistics.mean(previous) - 1) * 100 if recent and previous else None
         volatility = statistics.pstdev(daily.values()) / average if len(daily) > 1 else None
         confidence = 'low'

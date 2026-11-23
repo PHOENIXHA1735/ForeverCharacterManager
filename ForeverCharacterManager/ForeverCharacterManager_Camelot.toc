@@ -33,7 +33,9 @@ ExternalData.generated.lua
 AHPrices.generated.lua
 AHHistory.generated.lua
 PublicHistory.generated.lua
+PublicHistoryConfirmation.generated.lua
 HistoryProvider.lua
+Public30Startup.lua
 GoldAdvisor.lua
 DungeonCatalog.lua
 ItemCatalog.lua

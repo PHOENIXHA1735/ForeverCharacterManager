@@ -77,12 +77,15 @@ class Store:
             if db.execute('pragma integrity_check').fetchall()!=[('ok',)]:raise ValueError('Store integrity failed')
             if db.execute('select count(*) from records').fetchone()[0]>MAX_ROWS:raise ValueError('Stored row bound')
             return [json.loads(row[0]) for row in db.execute('select record from records order by market,item,stamp,source')]
-    def update(self,incoming,now,*,approve_cleanup=False,activate=True):
+    def update(self,incoming,now,*,approve_cleanup=False,activate=True,base_generation=None):
         with self.lock():
             state=self.state()
             # Build the full bounded input before mutating active state.
             merged={};rejected={};input_bytes=0
-            for index,r in enumerate(itertools.chain(self.records(state),incoming)):
+            if base_generation is not None and base_generation not in state["generations"]:
+                raise ValueError("Unregistered Public30 input generation")
+            base = dict(state, current=base_generation) if base_generation is not None else state
+            for index,r in enumerate(itertools.chain(self.records(base),incoming)):
                 encoded_size=len(json.dumps(r).encode());input_bytes+=encoded_size
                 if index>=2*MAX_ROWS or encoded_size>4096 or input_bytes>2*MAX_NORMALIZED_BYTES:raise ValueError('Intake resource limit')
                 if not isinstance(r,dict) or set(r)-FIELDS or not isinstance(r.get('source'),str) or not r['source']:

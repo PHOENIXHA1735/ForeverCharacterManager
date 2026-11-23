@@ -2,8 +2,60 @@ local _, FCM = ...
 local UI = {}
 FCM.UI = UI
 
+-- Shared window chrome for every tab and subpage. Semantic status,
+-- class, item-quality and coin colors remain owned by their renderers.
+local theme={
+    accent="f4ce83", summary="cbd2dd",
+    heading={.96,.81,.51,1}, text={.93,.94,.96,1},
+    window={.035,.043,.057,.99}, panel={.055,.064,.082,.97},
+    card={.083,.093,.113,.98}, row={.101,.113,.14,.96},
+    selected={.235,.183,.109,1}, border={.53,.415,.243,.82},
+    hover={.93,.72,.38,.18}, disabled={.095,.102,.119,1},
+    input={.044,.052,.068,1}, thumb={.85,.69,.42,1},
+    fonts={body="GameFontHighlight", small="GameFontHighlightSmall", title="GameFontNormalLarge"},
+    cardInset=10, cardGap=6,
+}
+
+local function fill(texture,rgba)
+    texture:SetColorTexture(unpack(rgba))
+end
+local function textColor(label,rgba)
+    if label and label.SetTextColor then label:SetTextColor(unpack(rgba)) end
+end
+local function controlTexture(frame,layer,rgba)
+    local texture=frame:CreateTexture(nil,layer)
+    texture:SetAllPoints(frame)
+    fill(texture,rgba)
+    return texture
+end
+local function topDivider(frame,inset)
+    local rule=frame:CreateTexture(nil,"BORDER")
+    rule:SetPoint("TOPLEFT",frame,"TOPLEFT",inset,0)
+    rule:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-inset,0)
+    rule:SetHeight(1)
+    fill(rule,theme.border)
+    return rule
+end
+local function styleInput(box)
+    controlTexture(box,"BACKGROUND",theme.input)
+    topDivider(box,0)
+    textColor(box,theme.text)
+    for _,key in ipairs({"Left","Middle","Right"}) do
+        local texture=box[key]
+        if texture and type(texture)~="function" and texture.SetVertexColor then
+            texture:SetVertexColor(.72,.64,.50)
+        end
+    end
+end
+local function styleScrollbar(scroll)
+    local bar=scroll.ScrollBar
+    if not bar or type(bar)=="function" then return end
+    local thumb=bar.GetThumbTexture and bar:GetThumbTexture() or bar.ThumbTexture
+    if thumb and thumb.SetVertexColor then thumb:SetVertexColor(unpack(theme.thumb)) end
+end
+
 local function text(parent, content, size, x, y, width, height)
-    local label = parent:CreateFontString(nil, "OVERLAY", size or "GameFontNormal")
+    local label = parent:CreateFontString(nil, "OVERLAY", size or theme.fonts.body)
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
     if width then label:SetWidth(width) end
     if height then label:SetHeight(height) end
@@ -16,16 +68,26 @@ local function button(parent, label, width, height, onClick)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetSize(width or 100, height or 26)
     b:SetText(label or "")
+    if b.SetNormalTexture and b.SetPushedTexture and b.SetDisabledTexture and b.SetHighlightTexture then
+        b:SetNormalTexture(controlTexture(b,"ARTWORK",theme.row))
+        b:SetPushedTexture(controlTexture(b,"ARTWORK",theme.selected))
+        b:SetDisabledTexture(controlTexture(b,"ARTWORK",theme.disabled))
+        b:SetHighlightTexture(controlTexture(b,"HIGHLIGHT",theme.hover))
+        topDivider(b,2)
+    end
     if onClick then b:SetScript("OnClick", onClick) end
     return b
 end
 local function background(parent, r, g, b, a)
     local bg = parent:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    bg:SetColorTexture(r or 0.06, g or 0.08, b or 0.11, a or 0.97)
+    bg:SetColorTexture(r or theme.window[1], g or theme.window[2], b or theme.window[3], a or theme.window[4])
     return bg
 end
 local function color(s, hex) return "|cff" .. (hex or "ffffff") .. tostring(s) .. "|r" end
+local function plainColors(s)
+    return (tostring(s or ""):gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r",""))
+end
 local function short(s, limit)
     s = tostring(s or "")
     if #s > (limit or 100) then return s:sub(1, limit or 100) .. "..." end
@@ -38,39 +100,15 @@ local function niceGold(copper)
 end
 local standingNames = {"Hated","Hostile","Unfriendly","Neutral","Friendly","Honored","Revered","Exalted"}
 
--- One consistent, high-contrast palette covers every tab, including the
--- dynamically added Profession:<name> tabs. Color is supplementary; labels
--- and statuses stay readable even when class/item colors are unavailable.
-local tabPalettes={
-    overview={accent="64d6e7",summary="bbd8df",row={0.07,0.20,0.24},selected={0.10,0.34,0.38}},
-    gear={accent="73e6b4",summary="b6dfcd",row={0.06,0.19,0.15},selected={0.12,0.33,0.24}},
-    craft={accent="ffcb76",summary="e4cda6",row={0.20,0.15,0.08},selected={0.34,0.24,0.11}},
-    gather={accent="9ee47c",summary="c5dcad",row={0.12,0.20,0.09},selected={0.22,0.32,0.13}},
-    reference={accent="84c0ff",summary="b8cde6",row={0.08,0.14,0.24},selected={0.13,0.24,0.39}},
-    progression={accent="d3a3ff",summary="d7c2eb",row={0.16,0.11,0.23},selected={0.26,0.17,0.37}},
-    system={accent="aebdd4",summary="c1cad7",row={0.13,0.16,0.20},selected={0.23,0.28,0.35}},
-}
-local tabPaletteGroups={
-    Overview="overview",Characters="overview",Leveling="progression",
-    Gear="gear",Upgrades="gear",["Upgrade Plan"]="gear",
-    Crafting="craft",Planner="craft",Requests="craft",Shopping="craft",Professions="craft",
-    Gathering="gather",Inventory="gather",Gold="craft",
-    Catalog="reference",["Item Explorer"]="reference",Dungeons="reference",Auction="reference",
-    Talents="progression",Legacy="progression",Reputation="progression",
-    Settings="system",Diagnostics="system",Help="system",["Global Search"]="reference",
-    ["QA Tests"]="progression",
-}
-function UI:TabPalette(tab)
-    local group=tostring(tab or ""):sub(1,11)=="Profession:" and "craft" or
-        (tabPaletteGroups[tab] or "system")
-    return tabPalettes[group]
+function UI:TabPalette()
+    return theme
 end
 function UI:DecorateDetail(content,tab)
     local palette=self:TabPalette(tab)
     local accent=palette.accent
     local lines={}
     for line in (tostring(content or "").."\n"):gmatch("(.-)\n") do
-        local raw=line:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+        local raw=plainColors(line)
         local lower=raw:lower()
         local header=#raw>2 and #raw<65 and
             (raw:match("^[%u%d][%u%d %-/().+]*$") or
@@ -125,16 +163,16 @@ function UI:RenderDetailCards(content,tab,previewHeight)
         if block:match("%S") then blocks[#blocks+1]=block end
     end
     if #blocks==0 then blocks={"No details available."} end
-    local palette=self:TabPalette(tab)
     local y=(previewHeight or 0)>0 and (previewHeight+6) or 3
     for i,block in ipairs(blocks) do
         local card=self.detailCards[i]
         if not card then
             card=CreateFrame("Frame",nil,self.detailChild)
-            card.bg=background(card,0.12,0.15,0.18,0.93)
+            card.bg=background(card,unpack(theme.card))
+            topDivider(card,8)
             -- Standard readable text rather than the very small tooltip font.
             -- Cards grow from their measured rendered height and remain scrollable.
-            card.label=text(card,"","GameFontHighlight",10,-9)
+            card.label=text(card,"",theme.fonts.body,theme.cardInset,-9)
             card.label:SetWordWrap(true)
             if card.label.SetSpacing then card.label:SetSpacing(2) end
             self.detailCards[i]=card
@@ -142,14 +180,12 @@ function UI:RenderDetailCards(content,tab,previewHeight)
         card:ClearAllPoints()
         card:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",3,-y)
         card:SetWidth(width)
-        card.label:SetWidth(width-20)
+        card.label:SetWidth(width-theme.cardInset*2)
         card.label:SetText(block)
         local height=math.max(34,math.ceil(tonumber(card.label:GetStringHeight()) or 0)+20)
         card:SetHeight(height)
-        local shade=i%2==1 and palette.row or palette.selected
-        card.bg:SetColorTexture(shade[1],shade[2],shade[3],0.84)
         card:Show()
-        y=y+height+9
+        y=y+height+theme.cardGap
     end
     self.detailText:Hide()
     self.detailChild:SetHeight(math.max(345,y+16))
@@ -488,8 +524,17 @@ function UI:RenderItemPreview(row)
     preview.title:SetText(color(short(meta.name,54),meta.color))
     local store=meta.store or {}
     local qualityNames={[0]="Poor",[1]="Common",[2]="Uncommon",[3]="Rare",[4]="Epic",[5]="Legendary",[6]="Artifact"}
+    -- The client's Miscellaneous/Junk subtype is not a vendor or reagent verdict.
+    local category=FCM:ItemCategory(store)
+    if category=="special" and meta.game and tonumber(meta.game.classID)~=15 then
+        category=FCM:ItemCategory(meta.game)
+    end
     local descriptors={}
     if meta.slot then descriptors[#descriptors+1]=tostring(meta.slot)
+    elseif category=="special" then
+        local classID=tonumber((meta.game and meta.game.classID) or store.classID)
+        local knownCategory=classID==15 or (type(store.category)=="string" and store.category:match("%S"))
+        descriptors[#descriptors+1]=knownCategory and "Special / miscellaneous" or "Type not recorded"
     elseif meta.typeName and not tostring(meta.typeName):find("^INVTYPE_") then
         descriptors[#descriptors+1]=tostring(meta.typeName)
     end
@@ -497,8 +542,11 @@ function UI:RenderItemPreview(row)
     if capacity then descriptors[#descriptors+1]=capacity.." slots" end
     if meta.quality then descriptors[#descriptors+1]=qualityNames[meta.quality] or "Item" end
     local ilvl=tonumber((meta.game and meta.game.ilvl) or store.itemLevel or store.ilvl)
-    if ilvl and ilvl>0 then descriptors[#descriptors+1]="iLvl "..ilvl end
-    preview.kind:SetText(short(table.concat(descriptors,"  |  "),43))
+    local kind=table.concat(descriptors,"  |  ")
+    if ilvl and ilvl>0 then
+        kind=(kind~="" and kind.."\n" or "").."Item level: "..ilvl
+    end
+    preview.kind:SetText(kind)
     local stats=itemStats(id,store,meta.game)
     if isContainer then
         preview.stats:SetText(capacity and ("Bag capacity: "..capacity.." slots") or
@@ -507,18 +555,30 @@ function UI:RenderItemPreview(row)
         local subtitle=stats[1]
         if #stats>1 and #subtitle+#stats[2]<51 then subtitle=subtitle.."  |  "..stats[2] end
         preview.stats:SetText(short(subtitle,58))
-    elseif not meta.slot and tonumber(store.classID)~=2 and tonumber(store.classID)~=4 and
-        tostring(store.category or ""):lower()~="armor" and
-        tostring(store.category or ""):lower()~="weapons" then
-        -- Ordinary reagents and recipe items should not show equipment advice.
+    elseif category=="material" then
         preview.stats:SetText("Crafting material - no combat stats")
-    else
+    elseif meta.slot or category=="armor" or category=="weapon" or category=="jewelry" then
         preview.stats:SetText("Equipment stats not yet recorded")
+    else
+        preview.stats:SetText("No combat stats recorded for this item")
     end
     preview:Show()
+    return self:LayoutItemPreview()
+end
+function UI:LayoutItemPreview()
+    local preview=self.itemPreview
+    local kindHeight=preview.kind.GetStringHeight and preview.kind:GetStringHeight() or 16
+    local statsHeight=preview.stats.GetStringHeight and preview.stats:GetStringHeight() or 16
+    local statsTop=48+math.max(16,math.ceil(tonumber(kindHeight) or 0))
+    local height=math.max(102,statsTop+math.max(16,math.ceil(tonumber(statsHeight) or 0))+20)
+    preview.stats:ClearAllPoints()
+    preview.stats:SetPoint("TOPLEFT",preview,"TOPLEFT",8,-statsTop)
+    preview.stats:SetPoint("TOPRIGHT",preview,"TOPRIGHT",-6,-statsTop)
+    preview:SetHeight(height)
+    local offset=height+10
     self.detailText:ClearAllPoints()
-    self.detailText:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",3,-112)
-    return 112
+    self.detailText:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",3,-offset)
+    return offset
 end
 function UI:ResetDungeonWidgets()
     self.dungeonDetailRecord,self.dungeonDetailCharacter=nil,nil
@@ -544,7 +604,7 @@ function UI:AcquireDungeonWidget(kind)
         widget=self.detailChild:CreateTexture(nil,"ARTWORK")
     else
         widget=CreateFrame("Button",nil,self.detailChild)
-        widget.bg=background(widget,0.10,0.15,0.20,0.92)
+        widget.bg=background(widget,unpack(theme.row))
         widget.icon=widget:CreateTexture(nil,"ARTWORK")
         widget.icon:SetSize(32,32)
         widget.icon:SetPoint("LEFT",widget,"LEFT",7,0)
@@ -554,7 +614,7 @@ function UI:AcquireDungeonWidget(kind)
         widget.sub=widget:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
         widget.sub:SetPoint("TOPLEFT",widget,"TOPLEFT",46,-26)
         widget.sub:SetJustifyH("LEFT")
-        widget:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+        widget:SetHighlightTexture(controlTexture(widget,"HIGHLIGHT",theme.hover))
     end
     pool[index]=widget
     return widget
@@ -597,10 +657,11 @@ function UI:RenderDungeonDetail(r,ch)
     local function gap(n)y=y+(n or 7) end
     local kind=(r.kind=="raid" and "Raid" or (r.kind=="unclassified" and "Unclassified instance" or "Dungeon"))
     local named,linked,associated=FCM:DungeonReferenceCounts(r)
-    line("Dungeon Overview",21,"d4b466")
+    line("Selected Instance",21,theme.accent)
     line(r.name,24,"ffd76d")
     line(kind.."  |  Guide levels "..tostring(r.levels or "unknown"),20,"c2cad7")
     if r.imported then
+        line("Boss links and dungeon-only associations are separate evidence.",24,"aeb9ca")
         line(("%d named bosses  |  %d boss-linked items  |  %d dungeon-associated items"):format(named,linked,associated),24,"c2cad7")
         line((r.sourceProvider or "External reference").." reference; check each item's evidence.",22,"aeb9ca")
     else
@@ -610,9 +671,11 @@ function UI:RenderDungeonDetail(r,ch)
     gap(9)
     local scope=FCM.db.settings.dungeonLootScope or "class"
     if scope=="spec" then
-        line("Spec-fit uses stat patterns, not BIS or proven specialization value.",39,"aeb9ca")
+        line("Spec loot: stat-pattern fit for the selected character. It does not establish best-in-slot.",39,"aeb9ca")
     elseif scope=="upgrades" then
-        line("Upgrades are weighted estimates from cached client item stats.",39,"aeb9ca")
+        line("Upgrades: weighted estimates require compatible gear, client stats, and a matching scoring model.",39,"aeb9ca")
+    elseif scope=="class" then
+        line("Class loot: checks equipment restrictions for the selected character. Review items with uncertain evidence.",39,"aeb9ca")
     end
     local filtered=0
     local seen={}
@@ -812,7 +875,7 @@ function UI:RenderDungeonDetail(r,ch)
         local row=self:AcquireDungeonWidget("row")
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT",self.detailChild,"TOPLEFT",8,-y)
-        row.bg:SetColorTexture(selected and 0.15 or 0.09,selected and 0.28 or 0.16,selected and 0.38 or 0.23,0.94)
+        fill(row.bg,selected and theme.selected or theme.row)
         row.icon:SetTexture(meta.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         local label=meta.slot or meta.typeName or "Item type unknown"
         local verdict="Stats unknown"
@@ -1034,15 +1097,15 @@ local navigationIcons={
 local function navigationButton(parent,label,width,icon,onClick)
     local b=CreateFrame("Button",nil,parent)
     b:SetSize(width,24)
-    b.bg=background(b,.065,.105,.095,.93)
+    b.bg=background(b,unpack(theme.row))
     local hover=b:CreateTexture(nil,"HIGHLIGHT")
     hover:SetAllPoints()
-    hover:SetColorTexture(.72,.50,.22,.20)
+    fill(hover,theme.hover)
     b.accent=b:CreateTexture(nil,"ARTWORK")
     b.accent:SetPoint("TOPLEFT",b,"TOPLEFT",0,-2)
     b.accent:SetPoint("BOTTOMLEFT",b,"BOTTOMLEFT",0,2)
     b.accent:SetWidth(2)
-    b.accent:SetColorTexture(.94,.71,.34,1)
+    fill(b.accent,theme.heading)
     b.accent:Hide()
     if icon then
         local texture=b:CreateTexture(nil,"ARTWORK")
@@ -1062,12 +1125,12 @@ end
 
 local function paintNavigation(b,selected)
     if selected then
-        b.bg:SetColorTexture(.29,.21,.105,1)
-        b.label:SetTextColor(1,.86,.55)
+        fill(b.bg,theme.selected)
+        textColor(b.label,theme.heading)
         b.accent:Show()
     else
-        b.bg:SetColorTexture(.065,.105,.095,.93)
-        b.label:SetTextColor(.90,.92,.84)
+        fill(b.bg,theme.row)
+        textColor(b.label,theme.text)
         b.accent:Hide()
     end
     b:SetEnabled(not selected)
@@ -1180,7 +1243,7 @@ function UI:BuildNavigation(window)
     sidebar:SetPoint("TOPLEFT",window,"TOPLEFT",16,-70)
     sidebar:SetWidth(145)
     sidebar:SetPoint("BOTTOMLEFT",window,"BOTTOMLEFT",16,24)
-    background(sidebar,.045,.075,.070,.99)
+    background(sidebar,unpack(theme.panel))
     for _,side in ipairs({"TOP","BOTTOM","LEFT","RIGHT"}) do
         local edge=sidebar:CreateTexture(nil,"BORDER")
         if side=="TOP" or side=="BOTTOM" then
@@ -1192,7 +1255,7 @@ function UI:BuildNavigation(window)
             edge:SetPoint("BOTTOM"..side,sidebar,"BOTTOM"..side)
             edge:SetWidth(1)
         end
-        edge:SetColorTexture(.56,.39,.19,.95)
+        fill(edge,theme.border)
     end
     local scroll=CreateFrame("ScrollFrame",nil,sidebar)
     scroll:SetPoint("TOPLEFT",sidebar,"TOPLEFT",0,-4)
@@ -1210,7 +1273,7 @@ function UI:BuildNavigation(window)
     self.sidebarHeadings,self.tabButtons,self.professionButtons={},{},{}
     for index,section in ipairs(navigationSections) do
         local heading=text(content,section[1],"GameFontNormalSmall",8,0,128)
-        heading:SetTextColor(.92,.69,.37)
+        textColor(heading,theme.heading)
         self.sidebarHeadings[index]=heading
         for _,tab in ipairs(section[2]) do
             local destination=tab
@@ -1308,7 +1371,7 @@ function UI:Create()
     f:SetScript("OnSizeChanged",function() if UI.panel then UI:Reflow() end end)
     background(f)
     if f.SetBackdrop then f:SetBackdrop({edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize=24, insets={left=5,right=5,top=5,bottom=5}}) end
-    text(f,"Forever Character Manager", "GameFontNormalLarge", 20, -16, 700)
+    textColor(text(f,"Forever Character Manager",theme.fonts.title,20,-16,700),theme.heading)
     text(f,"WoW Forever  |  v"..FCM.version.."  |  Character data is recorded when each toon logs in", "GameFontHighlightSmall", 22, -42, 920)
     local sources=f:CreateFontString(nil,"ARTWORK","GameFontHighlightSmall")
     sources:SetPoint("BOTTOMLEFT",f,"BOTTOMLEFT",22,8)
@@ -1332,7 +1395,8 @@ function UI:Create()
     local panel = CreateFrame("Frame",nil,f)
     panel:SetPoint("TOPLEFT", f,"TOPLEFT",171,-70)
     panel:SetPoint("BOTTOMRIGHT",f,"BOTTOMRIGHT",-22,24)
-    background(panel,0.025,0.045,0.065,0.68)
+    background(panel,unpack(theme.panel))
+    topDivider(panel,0)
     self.panel = panel
     self.heading = text(panel,"Overview","GameFontNormalLarge",14,-12,500)
     self.subtitle = text(panel,"Select a character and module", "GameFontHighlightSmall",14,-39,640)
@@ -1355,6 +1419,7 @@ function UI:Create()
     self.factionButton:SetPoint("LEFT",self.scanButton,"RIGHT",8,0)
 
     self.search=CreateFrame("EditBox",nil,panel,"InputBoxTemplate")
+    styleInput(self.search)
     self.search:SetSize(142,24)
     self.search:SetAutoFocus(false)
     self.search:SetPoint("TOPRIGHT",panel,"TOPRIGHT",-102,-66)
@@ -1402,7 +1467,8 @@ function UI:Create()
     self.craftSearchLabel:SetPoint("LEFT",self.craftProfessionButton,"RIGHT",9,0)
     self.craftSearchLabel:Hide()
     self.craftSearch=CreateFrame("EditBox",nil,panel,"InputBoxTemplate")
-    self.craftSearch:SetSize(180,24)
+    styleInput(self.craftSearch)
+    self.craftSearch:SetSize(168,24)
     self.craftSearch:SetAutoFocus(false)
     self.craftSearch:SetPoint("LEFT",self.craftSearchLabel,"RIGHT",7,0)
     self.suppressCraftSearch=true
@@ -1432,13 +1498,14 @@ function UI:Create()
     self.craftModeButton:Hide()
     self.craftQuantityLabel=text(panel,"Qty:","GameFontHighlightSmall",0,0,34)
     self.craftQuantityLabel:ClearAllPoints()
-    self.craftQuantityLabel:SetPoint("LEFT",self.craftModeButton,"RIGHT",9,0)
+    self.craftQuantityLabel:SetPoint("LEFT",self.craftModeButton,"RIGHT",12,0)
     self.craftQuantityLabel:Hide()
     self.craftQuantityEdit=CreateFrame("EditBox",nil,panel,"InputBoxTemplate")
-    self.craftQuantityEdit:SetSize(55,24)
+    styleInput(self.craftQuantityEdit)
+    self.craftQuantityEdit:SetSize(68,24)
     self.craftQuantityEdit:SetAutoFocus(false)
     self.craftQuantityEdit:SetMaxLetters(3)
-    self.craftQuantityEdit:SetPoint("LEFT",self.craftQuantityLabel,"RIGHT",3,0)
+    self.craftQuantityEdit:SetPoint("LEFT",self.craftQuantityLabel,"RIGHT",7,0)
     self.craftQuantityEdit:SetScript("OnTextChanged",function() self:QueueCraftQuantityPreview() end)
     self.craftQuantityEdit:SetScript("OnEnterPressed",function(edit) edit:ClearFocus();self:Refresh() end)
     self.craftQuantityEdit:SetScript("OnEscapePressed",function(edit) edit:ClearFocus() end)
@@ -1478,7 +1545,7 @@ function UI:Create()
         end
         self:Refresh()
     end)
-    self.gatherWorldButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-138)
+    self.gatherWorldButton:SetPoint("LEFT",self.gatherSizeButton,"RIGHT",8,0)
     self.gatherWorldButton:Hide()
     self.gatherCategoryButton=button(panel,"Gathering Filters",200,25,function()
         local entries={}
@@ -1509,7 +1576,11 @@ function UI:Create()
         end
         self:MakeMenu(self.gatherCategoryButton,entries,270,false)
     end)
-    self.gatherCategoryButton:SetPoint("LEFT",self.gatherWorldButton,"RIGHT",8,0)
+    self.gatherCategoryButton:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-138)
+    self.gatherControlsHint=text(panel,"Map controls above | Reference and personal history are separate",theme.fonts.small,0,0,450)
+    self.gatherControlsHint:ClearAllPoints()
+    self.gatherControlsHint:SetPoint("LEFT",self.gatherCategoryButton,"RIGHT",12,0)
+    self.gatherControlsHint:Hide()
     self.gatherCategoryButton:Hide()
 
     self.goldFeesButton=button(panel,"Gold: AH fee assumptions",210,25,function() self:PromptGoldSettings(false) end)
@@ -1521,9 +1592,11 @@ function UI:Create()
     local listPanel = CreateFrame("Frame",nil,panel)
     listPanel:SetPoint("TOPLEFT",panel,"TOPLEFT",14,-107)
     listPanel:SetPoint("BOTTOMLEFT",panel,"BOTTOMLEFT",14,64)
-    background(listPanel,0.045,0.065,0.08,0.6)
+    background(listPanel,unpack(theme.panel))
+    topDivider(listPanel,0)
     self.listPanel=listPanel
     self.scroll = CreateFrame("ScrollFrame",nil,listPanel,"UIPanelScrollFrameTemplate")
+    styleScrollbar(self.scroll)
     self.scroll:SetPoint("TOPLEFT",listPanel,"TOPLEFT",7,-7)
     self.scroll:SetPoint("BOTTOMRIGHT",listPanel,"BOTTOMRIGHT",-26,7)
     local scrollChild=CreateFrame("Frame",nil,self.scroll)
@@ -1537,9 +1610,11 @@ function UI:Create()
     detailPanel:SetPoint("BOTTOMRIGHT",panel,"BOTTOMRIGHT",-15,68)
     detailPanel:SetWidth(340)
     listPanel:SetPoint("RIGHT",detailPanel,"LEFT",-12,0)
-    self.detailPanelBg=background(detailPanel,0.055,0.075,0.095,0.82)
+    background(detailPanel,unpack(theme.panel))
+    topDivider(detailPanel,0)
     self.detailPanel=detailPanel
     self.detailScroll=CreateFrame("ScrollFrame",nil,detailPanel,"UIPanelScrollFrameTemplate")
+    styleScrollbar(self.detailScroll)
     self.detailScroll:SetPoint("TOPLEFT",detailPanel,"TOPLEFT",9,-9)
     self.detailScroll:SetPoint("BOTTOMRIGHT",detailPanel,"BOTTOMRIGHT",-27,8)
     local dc=CreateFrame("Frame",nil,self.detailScroll)
@@ -1554,7 +1629,7 @@ function UI:Create()
     itemPreview:SetPoint("TOPLEFT",dc,"TOPLEFT",3,-3)
     itemPreview:SetPoint("TOPRIGHT",dc,"TOPRIGHT",-4,-3)
     itemPreview:SetHeight(102)
-    itemPreview.bg=background(itemPreview,0.10,0.16,0.22,0.93)
+    itemPreview.bg=background(itemPreview,unpack(theme.card))
     local previewIcon=CreateFrame("Button",nil,itemPreview)
     previewIcon:SetSize(40,40)
     previewIcon:SetPoint("TOPLEFT",itemPreview,"TOPLEFT",7,-9)
@@ -1576,12 +1651,14 @@ function UI:Create()
     itemPreview.title:SetWordWrap(true)
     itemPreview.kind=itemPreview:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
     itemPreview.kind:SetPoint("TOPLEFT",itemPreview,"TOPLEFT",55,-43)
-    itemPreview.kind:SetPoint("RIGHT",itemPreview,"RIGHT",-6,0)
+    itemPreview.kind:SetPoint("TOPRIGHT",itemPreview,"TOPRIGHT",-6,-43)
     itemPreview.kind:SetJustifyH("LEFT")
+    itemPreview.kind:SetWordWrap(true)
     itemPreview.stats=itemPreview:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
     itemPreview.stats:SetPoint("TOPLEFT",itemPreview,"TOPLEFT",8,-65)
     itemPreview.stats:SetPoint("RIGHT",itemPreview,"RIGHT",-6,0)
     itemPreview.stats:SetJustifyH("LEFT")
+    itemPreview.stats:SetWordWrap(true)
     local previewHint=itemPreview:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
     previewHint:SetPoint("BOTTOMLEFT",itemPreview,"BOTTOMLEFT",8,5)
     previewHint:SetText("Right-click icon for full tooltip")
@@ -1790,11 +1867,23 @@ function UI:ResetWindow()
     self:SaveWindow()
     self:Reflow()
 end
+function UI:DetailWidth(tab)
+    if tab=="Gold" then
+        return math.max(365,math.min(450,math.floor(self.frame:GetWidth()*0.37)))
+    end
+    return tab=="Dungeons" and 366 or (tab=="Gathering" and 405 or 340)
+end
 function UI:Reflow()
     if not self.panel or not self.listPanel then return end
+    self.detailPanel:SetWidth(self:DetailWidth(self.tab))
     if self.sidebarScroll then self:ScrollNavigation(0) end
     local listWidth=math.max(250,self.listPanel:GetWidth()-40)
     self.scrollChild:SetWidth(listWidth)
+    for _,row in ipairs(self.rows or {}) do
+        row:SetWidth(listWidth-4)
+        row.label:SetWidth(listWidth-20)
+        row.desc:SetWidth(listWidth-20)
+    end
     local oldDetailWidth=self.detailChild:GetWidth()
     self.detailChild:SetWidth(math.max(190,self.detailPanel:GetWidth()-42))
     self.detailText:SetWidth(math.max(180,self.detailChild:GetWidth()-8))
@@ -1806,7 +1895,11 @@ function UI:Reflow()
     elseif self.gatherMaterialActive and self.gatherMaterialRow and self.RenderGatherMaterialPanel then
         self:RenderGatherMaterialPanel(self.gatherMaterialRow,self.gatherMaterialCharacter,self.gatherMaterialExpanded)
     elseif self.detailCardSource then
-        self:RenderDetailCards(self.detailCardSource,self.detailCardTab,self.detailCardOffset)
+        local offset=self.detailCardOffset
+        if self.itemPreview and self.itemPreview.itemID then
+            offset=self:LayoutItemPreview()
+        end
+        self:RenderDetailCards(self.detailCardSource,self.detailCardTab,offset)
     end
     local plannerY=0
     for i,w in ipairs(self.rows or {}) do
@@ -2236,7 +2329,8 @@ function UI:MakeMenu(anchor, options, width, above, page)
         else menu:SetPoint("TOPLEFT",anchor,"BOTTOMLEFT",0,-3) end
     end
     menu:SetFrameStrata("TOOLTIP")
-    background(menu,0.12,0.16,0.21,1)
+    background(menu,unpack(theme.panel))
+    topDivider(menu,0)
     if menu.SetBackdrop then menu:SetBackdrop({edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",edgeSize=16}) end
     for i,opt in ipairs(visible) do
         local option=opt
@@ -2593,6 +2687,11 @@ function UI:PlannerDetail(plan,context,expanded)
     return table.concat(lines,"\n")
 end
 
+local function goldItemID(query)
+    local digits=tostring(query or ""):match("^%s*#?(%d+)%s*$")
+    local id=tonumber(digits)
+    if id and id>=1 and id<=9007199254740991 then return id end
+end
 local function buildRows(ui)
     local rows, tab, ch = {}, ui.tab or "Overview", ui:GetCharacter()
     local function add(id,title,summary,detail,recipe,request,crafters,recipientKey,ready)
@@ -2600,21 +2699,24 @@ local function buildRows(ui)
             recipe=recipe,request=request,crafters=crafters,recipientKey=recipientKey,ready=ready}
     end
     if ch and (tab=='Gear' or tab=='Upgrades' or tab=='Upgrade Plan') then
-        add('scoring-source','Active gear scoring source',FCM.Gear:WeightSource(ch),
-            FCM.Gear:WeightSource(ch)..'\n\n'..FCM.PriorityGuides:Description(ch)..'\n\nLegacy numerical profiles are preserved but inactive. Without an applicable numerical model, scores and upgrade percentages are unavailable. Explicit new user scales remain provisional.')
+        local source=FCM.Gear:WeightSource(ch)
+        local unavailable=source:lower():find("numerical weights unavailable",1,true)
+        add('scoring-source','Active gear scoring source',
+            unavailable and 'Numerical scoring unavailable - use stat priorities' or source,
+            'SCORING EVIDENCE\n'..source..'\n\nSTAT PRIORITIES\n'..FCM.PriorityGuides:Description(ch)..
+            '\n\nLIMITATIONS\nScores require a matching model. Imported or manual weights are provisional; scores do not measure DPS.')
     end
     local function charDetails(c)
-        local p={"|cffffd983"..FCM:DisplayCharacter(c).."|r","",
+        local p={"|cffffd983"..FCM:DisplayCharacter(c).."|r","","CHARACTER PROFILE",
             (c.class or "Class unknown").."  /  "..(c.race or "Race unknown").."  /  "..(c.faction or "Faction unknown"),
             "Ruleset: "..(FCM:NormalizeRuleset(c.ruleset) or "Not yet verified - log into this character"),
             "Region: "..(c.region or "Not yet verified"),
             "Level: "..tostring(c.level or "?"),
+            "", "RECORDED PROGRESS",
             "Gold: "..(type(c.gold)=="number" and niceGold(c.gold) or "Not yet scanned"),
             "XP: "..(tonumber(c.xpMax) and c.xpMax>0 and
                 (tostring(c.xp or 0).." / "..tostring(c.xpMax)) or "Not yet scanned"),
-            "Gold scan: "..FCM:Age(c.goldStamp),"XP scan: "..FCM:Age(c.xpStamp),
-            "Last login: "..FCM:Age(c.lastSeen),"",
-            "Professions:"}
+            "", "PROFESSIONS"}
         local has=false
         for key,prof in pairs(c.professions or {}) do
             if type(prof)=="table" then
@@ -2629,7 +2731,10 @@ local function buildRows(ui)
         if not has then p[#p+1]="  Open your profession pane to scan" end
         p[#p+1]=""
         p[#p+1]=""
-        p[#p+1]="Scan freshness (saved across logouts):"
+        p[#p+1]="SCAN FRESHNESS"
+        p[#p+1]="Last login: "..FCM:Age(c.lastSeen)
+        p[#p+1]="Gold scan: "..FCM:Age(c.goldStamp)
+        p[#p+1]="XP scan: "..FCM:Age(c.xpStamp)
         for _,entry in ipairs(FCM:DataQuality(c)) do
             p[#p+1]="  "..entry.name..": "..entry.label
         end
@@ -3018,7 +3123,8 @@ local function buildRows(ui)
             local rowId="dungeon:"..r.id
             add(rowId,r.name,
                 typeLabel.." | Levels "..tostring(r.levels or "unknown").." | "..bossStatus,
-                "Select a dungeon to view source-linked bosses, class/spec filters and estimated upgrades.")
+                "DUNGEON CONTEXT\nSelect a dungeon to see bosses and source evidence. Class/spec filters use the selected character."..
+                "\n\nLOOT EVIDENCE\nBoss-linked and dungeon-only records are shown separately. Check the source before treating a drop as confirmed.")
             rows[#rows].dungeonRecord=r
         end
         if #records==0 then
@@ -3028,7 +3134,7 @@ local function buildRows(ui)
                 "The Raids view depends on ForeverDB imports. The selected level range may have no records.")
         end
     elseif tab=="Gold" then
-        for _,r in ipairs(FCM.GoldAdvisor:Rows(ch)) do add(r.id,r.title,r.summary,r.detail) end
+        for _,r in ipairs(FCM.GoldAdvisor:Rows(ch,goldItemID(ui.appliedSearch))) do add(r.id,r.title,r.summary,r.detail) end
     elseif tab=="Auction" then
         local prices=FCM:MarketPricesFor(ch)
         add("auction-credit","Auction data source","AHledger (ahledger.com) | historic snapshots only",
@@ -3041,8 +3147,8 @@ local function buildRows(ui)
             local info=FCM.externalData.items and FCM.externalData.items[entry.id] or {}
             local label=info.name or (FCM.ItemName and FCM.ItemName(entry.id)) or ("Item #"..entry.id)
             local p=entry.p
-            local gold=(tonumber(p.median) or 0)/10000
-            add("auction:"..entry.id,label,string.format("%.2fg median | %s",gold,tostring(p.market or "unknown market")),
+            local median=FCM:MoneyLabel(p.median,true)
+            add("auction:"..entry.id,label,median.." median | "..tostring(p.market or "unknown market"),
                 function()
                     return FCM:ExplorerDetails(entry.id)
                 end)
@@ -3098,7 +3204,7 @@ local function buildRows(ui)
     elseif tab=="Diagnostics" then
         add("report","FCM System Health","Build: "..tostring(FCM.build or "unlabeled")..
             " | live state, data ages, and recorded API errors",function()
-            return FCM:DiagnosticsReport().."\n\n"..FCM:AdvisorDiagnostics()
+            return FCM:DiagnosticsReport().."\n\nADVISOR COVERAGE\n"..FCM:AdvisorDiagnostics()
         end)
         for _,person in ipairs(FCM:VisibleCharacters()) do
             local c=person
@@ -3445,7 +3551,7 @@ local function buildRows(ui)
             rows[#rows].itemID=tonumber(recipe.outputID)
         end
         if recipeCount==0 then add("planner-empty","No learned recipes recorded",
-            "Log in on profession characters and scan their recipes when the servers return.",
+            "Log into a compatible crafter and open the profession window.",
             "FCM does not assume an imported recipe is learned or craftable by your characters.") end
     elseif tab=="Requests" then
         local requestView=FCM.db.settings.requestView or "all"
@@ -3565,10 +3671,14 @@ local function buildRows(ui)
             end
         end
         if #rows==0 then
-            add("no-requests", "No matching crafting requests", "Choose All Requests or queue an item from Gear/Crafting.",
+            add("no-requests", "No matching crafting requests", "Choose All Requests to check filters, or preview a recipe in Crafting to start a request.",
                 "Requests have no assigned crafter. Use Can Craft on a character that learned the recipe. Opposing faction, ruleset and region requests are never treated as transferable.")
         end
     elseif tab=="Professions" then
+        if not ch or not next(ch.professions or {}) then
+            add("professions-empty","No saved profession scans","Open a profession window on the selected character.",
+                "RECORD PROFESSIONS\nLog into the character and open each profession window. Imported recipes do not establish that this character learned them.")
+        end
         if ch then
             for key,profession in pairs(ch.professions or {}) do
                 local p=profession
@@ -3637,19 +3747,20 @@ local function buildRows(ui)
             local availability={reference="Reference only",partial="Partial verified sequence",
                 variant="IV variant identified",complete="Complete verified"}
             local proof=availability[report.coverage] or "Not verified"
-            local summary={"|cffffd983"..(report.guide and report.guide.name or "Talent Advisor").."|r", "",
+            local summary={"|cffffd983"..(report.guide and report.guide.name or "Talent Advisor").."|r", "", "SELECTED BUILD",
                 "Spec: "..tostring(report.spec),
                 "Selected profile: "..tostring(report.profileTitle),
                 "Reference quality: "..proof,
                 "Source: "..(report.source=="custom" and "Your custom profile" or "Icy Veins (offline reference)"),
                 "Reference checked: "..tostring(report.checked),
+                "", "VERIFIED STEPS AND SAVED RANKS",
                 "Talents last scanned: "..tostring(report.scanAge or "Not scanned"),
                 "Recorded ranks spent: "..tostring(report.spent),
                 "Unspent points (live character only): "..tostring(ch.key==FCM.currentKey and ch.unspentTalentPoints or "unknown"),
                 "Verified exact steps: "..tostring(report.reviewedCount).." / 51", "",
-                "Next: "..advice.next,"Status: "..tostring(report.status),"",
+                "NEXT ACTION",advice.next,"Status: "..tostring(report.status),"",
                 report.summary or "", "", "Source: "..(report.url or "No source"), "",
-                "FCM never spends talent points and will not recommend a respec automatically. Unknown steps stay unknown; do not extrapolate them."}
+                "LIMITATIONS","FCM never spends talent points or recommends an automatic respec. Leave unverified steps open until confirmed."}
             add("advice","Talent recommendation",report.status,table.concat(summary,"\n"))
             if FCM.TalentAudit then
                 local audit=FCM:TalentAudit(ch)
@@ -3834,11 +3945,11 @@ local function buildRows(ui)
         local priority=ch and FCM:LegacyPriority(ch) or "leveling"
         add("legacy-progress","Legacy progress — scanned class milestones: "..milestones,
             "Unspent (manual snapshot): "..available.." | Ranks manually recorded: "..spent.."/16",
-            "Scanned class milestones: "..(#evidence>0 and table.concat(evidence,", ") or "none yet")..
-                "\nThis is an estimate from saved levels, NOT the game's available-point total."..
-                "\nThe unspent point count is a manual snapshot that may become stale."..
-                "\nPoints are unlocked account-wide; spending decisions and rank notes belong to each character."..
-                "\nUpdate with /fcm legacyavailable <number> after using the actual Legacy panel.")
+            "ACCOUNT-WIDE MILESTONES\n"..(#evidence>0 and table.concat(evidence,", ") or "None yet")..
+                "\nEstimate from saved class levels. Confirm the account total in the Legacy panel."..
+                "\n\nSELECTED CHARACTER\nUnspent points (manual): "..available..
+                "\nManually recorded ranks: "..spent.."/16\nRank notes belong to this character."..
+                "\n\nUPDATE THE SNAPSHOT\n|cffffe1a8/fcm legacyavailable <number>|r\nCheck the Legacy panel first.")
         add("legacy-advisor","Next Legacy Point Advisor",
             "Tree: "..FCM.legacyTreeLabels[tree].." | Goal: "..FCM:LegacyPriorityLabel(tree,priority),
             "GOAL AND TREE\n"..
@@ -3942,9 +4053,9 @@ local function buildRows(ui)
         add("minimap", "Round movable minimap icon", "Left-drag to reposition; right-click to reset.",
             "The round FCM emblem appears as soon as you log in. Drag it around the minimap to a preferred spot. Its location is saved for the whole account across sessions.\n\nRight-click the icon, click Reset Minimap Icon below, or type /fcm minimap reset to return it to its default location.")
         add("settings","Gear activity and priority","Choose both dropdowns above (saved per character)",
-            "Activity: Leveling, PvP, or Endgame PvE.\nSecondary style: DPS, Balanced, Survivability, Healing, or Tank.\n\n"..
+            "CHOOSE ACTIVITY AND STYLE\n1. Select a character.\n2. Choose Leveling, PvP, or Endgame PvE.\n3. Choose a style for that activity.\n\n"..
             "Each character remembers its activity and its style for EACH activity. Changing spec invalidates incompatible numerical scales.\n"..
-            "Slash commands: /fcm gearprofile leveling|pvp|pve and /fcm gearstyle dps|balanced|survival|healing|tank.\n"..
+            "\nGEAR COMMANDS\n|cffffe1a8/fcm gearprofile leveling / pvp / pve|r\n|cffffe1a8/fcm gearstyle dps / balanced / survival / healing / tank|r\n"..
             "Numerical profile: /fcm pawnimport (paste a Pawn v1 scale in the dialog), /fcm weightprofile to inspect, /fcm weightprofile reset to remove it.\n"..
             "A new PROVISIONAL user-imported scale is tied to this toon, game build, specialization, activity, style and level bracket (1-39, 40-59, or 60). FCM does not rescale it with speculative factors.\n"..
             "Optional cap-aware comparisons: /fcm hitrating <current HIT RATING> <cap HIT RATING>. Both numbers must be rating points, never percentages; /fcm hitrating reset clears the manual snapshot. Refresh after gear/talent changes.\n"..
@@ -3967,12 +4078,12 @@ local function buildRows(ui)
             "Open Legacy; choose Adventure, Professions, Resourcefulness or All Trees. "..
             "Goals change to match the tree and are remembered per character.\n\n"..
             "REVIEW THE ADVICE\n"..
-            "FCM shows up to three suggestions with reasons. Class, level and saved professions can influence them. "..
+            "Review the next-perk suggestions below. FCM shows up to three choices with reasons based on the selected character. "..
             "The in-game Legacy panel is authoritative for prerequisites.\n\n"..
             "RECORD VERIFIED CHANGES\n"..
-            "/fcm legacyaccess <name> available\n"..
-            "/fcm legacyaccess <name> locked\n"..
-            "/fcm legacyrank <name> <rank>\n\n"..
+            "|cffffe1a8/fcm legacyaccess <name> available|r\n"..
+            "|cffffe1a8/fcm legacyaccess <name> locked|r\n"..
+            "|cffffe1a8/fcm legacyrank <name> <rank>|r\n\n"..
             "IMPORTANT: FCM never automatically spends Legacy points.")
         add("advanced","Reference and import improvements","Reference provenance, safer import merges, offline data-health audit",
             "The Windows companion now records reference provider, fetch date and evidence caveats, retains multiple dungeon sources, and reports incomplete data using its Audit Reference Data button. Partial API replies no longer discard known recipe output/reagents or cached boss loot.\n\nThese are public reference records, not verified game drops or vendor stock. No live Icy Veins sync, automatic Legacy totals, DPS simulation, mailing or crafting automation is claimed.")
@@ -3985,20 +4096,25 @@ local function buildRows(ui)
         add("factions","Horde and Alliance support","Use Faction: All / Alliance / Horde above the list.",
             "FCM scans both factions and keeps every character's talents, gear, inventory, professions and reputation in separate records. Selecting Faction only changes the roster view.\n\nCrafts and material transfers are restricted to the same confirmed faction, region and ruleset; FCM never assumes cross-faction transfers. Auction snapshots use the companion's selected market and must match the character's faction. Log into Horde characters to capture their actual data.")
         add("start","Getting started","First login for each toon; open professions and bank once.",
-            "1. Install and enable the addon.\n2. Type /fcm.\n3. Log into every character you want tracked.\n4. Open each profession to capture known recipes.\n5. Open your bank to scan stored items.\n6. Choose a character and gear priority.\n\n/fcm help displays commands.")
+            "OPEN FCM\n|cffffe1a8/fcm|r opens the window. |cffffe1a8/fcm help|r lists commands."..
+            "\n\nRECORD A CHARACTER\n1. Log into the character.\n2. Open the bank to record stored items.\n3. Open each profession to record learned recipes."..
+            "\n\nREVIEW SAVED DATA\nSelect the character in FCM and check Characters for scan freshness.")
         add("limits","Important accuracy notes","What the addon cannot reliably verify yet.",
             "No direct website access in-game; the separate PC updater can import public reference data. Every spec has a three-profile IV guide reference; unverified rank orders remain explicitly missing.\nNo full reputation-vendor recipe catalog yet.\nDungeon drops depend on ForeverDB detail coverage; imported links are not live drop confirmations.\nUnscanned offline gear and bank counts may be stale.\nNo automated mailing, crafting, or talent spending.\nComplex and optional recipe reagents are flagged rather than guessed.")
     end
     return rows
 end
 
+local function findVisibleRow(entries,id)
+    for _,row in ipairs(entries) do if row.id==id then return row end end
+end
 function UI:Refresh()
     if not self.frame or not self.frame:IsShown() or not FCM.db then return end
     local tab=self.tab or "Overview"
     self:HideDetailCards()
     if self.gatherMoreButton then self.gatherMoreButton:Hide() end
     self.detailCardSource=nil
-    if self.detailPanel then self.detailPanel:SetWidth(tab=="Dungeons" and 366 or (tab=="Gathering" and 405 or 340)) end
+    if self.detailPanel then self.detailPanel:SetWidth(self:DetailWidth(tab)) end
     self.heading:SetText(tab)
     self.factionButton:SetText(FCM:FactionView()=="all" and "All" or FCM:FactionView())
     local ch=self:GetCharacter()
@@ -4011,11 +4127,6 @@ function UI:Refresh()
         self.activityButton:SetText(FCM.gearActivityLabels[FCM:GearActivity(nil)])
         self.modeButton:SetText(FCM.modeLabels[FCM:Mode(nil)])
     end
-    self.subtitle:SetText(self:PublishedDataStatus(tab) or (ch and
-        ((ch.key==FCM.currentKey and "[LOGGED IN] " or "[OFFLINE SNAPSHOT] ")..
-        FCM:DisplayCharacter(ch).." | "..(FCM:NormalizeFaction(ch.faction) or "Unknown faction")..
-        " | last seen "..FCM:Age(ch.lastSeen)) or
-        "No character in selected faction; log into one to scan"))
     self:RefreshProfessionTabs(ch)
     tab=self.tab or "Overview"
     if tab=="Crafting" and ch and FCM.db.settings.craftProfession and
@@ -4030,14 +4141,6 @@ function UI:Refresh()
         if not found then FCM.db.settings.craftProfession="all" end
     end
     local palette=self:TabPalette(tab)
-    -- Tint the details surface to match the selected category; previously
-    -- every right pane was identical near-black despite color-coded lists.
-    if self.detailPanelBg then
-        self.detailPanelBg:SetColorTexture(
-            palette.row[1]*0.68+0.012,
-            palette.row[2]*0.68+0.012,
-            palette.row[3]*0.68+0.012,0.95)
-    end
     self.heading:SetText(tab:sub(1,11)=="Profession:" and
         (tab:sub(12):gsub("^%l",string.upper).." — "..(ch and ch.name or "Character")) or tab)
     if self.heading.SetTextColor then
@@ -4048,11 +4151,18 @@ function UI:Refresh()
     local myRequests=FCM:CountAssignedRequests(FCM.currentKey)
     self.tabButtons.Requests.label:SetText(myRequests>0 and ("Requests ("..myRequests..")") or "Requests")
     local all=buildRows(self)
+    -- Gold row construction selects history. Read its timestamp from this render.
+    self.subtitle:SetText(self:PublishedDataStatus(tab) or (ch and
+        ((ch.key==FCM.currentKey and "[LOGGED IN] " or "[OFFLINE SNAPSHOT] ")..
+        FCM:DisplayCharacter(ch).." | "..(FCM:NormalizeFaction(ch.faction) or "Unknown faction")..
+        " | last seen "..FCM:Age(ch.lastSeen)) or
+        "No character in selected faction; log into one to scan"))
     local q=string.lower(self.appliedSearch or "")
+    local exactGold=tab=="Gold" and goldItemID(q)
     local entries={}
     for _,r in ipairs(all) do
-        if tab=="Global Search" or tab=="Gathering" or q=="" or FCM:SearchMatches(r.title,q) or
-                FCM:SearchMatches(r.summary,q) or
+        if exactGold or tab=="Global Search" or tab=="Gathering" or q=="" or FCM:SearchMatches(r.title,q) or
+                FCM:SearchMatches((tab=="Gold" or tab=="Auction") and plainColors(r.summary) or r.summary,q) or
                 (tab=="Item Explorer" and FCM:SearchMatches(r.id,q)) then
             local filter=FCM.db.settings.advisorFilter or "all"
             if not (tab=="Upgrades" or tab=="Gear" or tab=="Crafting" or tab=="Professions" or tab:sub(1,11)=="Profession:") or
@@ -4087,9 +4197,8 @@ function UI:Refresh()
     end
     local matchedCount=#entries
     if tab~="Gathering" then while #entries>200 do table.remove(entries) end end
-    local hasSelected=false
-    for _,r in ipairs(entries) do if r.id==self.selectedRow then hasSelected=true end end
-    if not hasSelected then
+    local selected=findVisibleRow(entries,self.selectedRow)
+    if not selected then
         local selectedID = self.selectedCharacter
         local foundCharacter = false
         if tab == "Characters" then
@@ -4097,7 +4206,8 @@ function UI:Refresh()
                 if r.id == selectedID and FCM.db.characters[selectedID] then foundCharacter = true; break end
             end
         end
-        self.selectedRow = foundCharacter and selectedID or entries[1].id
+        selected=foundCharacter and findVisibleRow(entries,selectedID) or entries[1]
+        self.selectedRow=selected.id
     end
     if tab=="Gathering" and self.gatherDetailSelection~=self.selectedRow then
         self.gatherDetailSelection=self.selectedRow
@@ -4114,32 +4224,41 @@ function UI:Refresh()
     self.activeCrafters=nil
     self.activeRequest=nil
     self.activeRecipientKey=nil
-    local selected=nil
     for i,row in ipairs(entries) do
         local widget=self.rows[i]
         if not widget then
             widget=CreateFrame("Button",nil,self.scrollChild)
             widget:SetSize(438,45)
-            widget.bg=background(widget,0.13,0.16,0.19,0.7)
+            widget.bg=background(widget,unpack(theme.row))
             widget.label=text(widget,"", "GameFontNormal",8,-6,418)
             widget.desc=text(widget,"", "GameFontHighlightSmall",8,-24,416)
-            widget:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+            widget:SetHighlightTexture(controlTexture(widget,"HIGHLIGHT",theme.hover))
+            widget.selectionStripe=widget:CreateTexture(nil,"OVERLAY")
+            widget.selectionStripe:SetPoint("TOPLEFT",widget,"TOPLEFT",0,-2)
+            widget.selectionStripe:SetPoint("BOTTOMLEFT",widget,"BOTTOMLEFT",0,2)
+            widget.selectionStripe:SetWidth(2)
+            fill(widget.selectionStripe,theme.heading)
             self.rows[i]=widget
         end
         widget:ClearAllPoints()
         widget:SetPoint("TOPLEFT",self.scrollChild,"TOPLEFT",2,-((i-1)*47))
         local icon=row.gatherIcon and ("|T"..tostring(row.gatherIcon)..":16:16|t ") or ""
         widget.label:SetText(icon..(tab=="Planner" and row.title or short(row.title,63)))
-        widget.desc:SetText(tab=="Planner" and row.summary or short(row.summary,80))
-        local shade=row.id==self.selectedRow and palette.selected or palette.row
-        widget.bg:SetColorTexture(shade[1],shade[2],shade[3],0.9)
+        -- Keep color escapes intact in monetary summaries.
+        local coloredSummary=tab=="Gold" or tab=="Auction"
+        if widget.desc.SetMaxLines then widget.desc:SetMaxLines(coloredSummary and 1 or 0) end
+        widget.desc:SetText((tab=="Planner" or coloredSummary) and row.summary or short(row.summary,80))
+        local isSelected=row==selected
+        fill(widget.bg,isSelected and palette.selected or palette.row)
+        widget.selectionStripe:SetShown(isSelected)
         if widget.label.SetTextColor then
             widget.label:SetTextColor(tonumber(palette.accent:sub(1,2),16)/255,
                 tonumber(palette.accent:sub(3,4),16)/255,
                 tonumber(palette.accent:sub(5,6),16)/255)
         end
         if widget.desc.SetTextColor then
-            local statusColor=(tab=="QA Tests" and row.summary:match("^%[PASS%]")) and "7be6a4" or
+            local statusColor=(row.id=="scoring-source" and row.summary:find("Numerical scoring unavailable",1,true)) and "ffcb76" or
+                (tab=="QA Tests" and row.summary:match("^%[PASS%]")) and "7be6a4" or
                 ((tab=="QA Tests" and row.summary:match("^%[FAIL%]")) and "ff8080" or
                 ((tab=="QA Tests" and row.summary:match("^%[OPEN%]")) and "ffcb76" or palette.summary))
             widget.desc:SetTextColor(tonumber(statusColor:sub(1,2),16)/255,
@@ -4173,7 +4292,6 @@ function UI:Refresh()
             widget:SetScript("OnLeave",nil)
         end
         widget:Show()
-        if row.id==self.selectedRow then selected=row end
     end
     for i=#entries+1,#self.rows do self.rows[i]:Hide() end
     self.plannerRowCount=tab=="Planner" and #entries or nil
@@ -4239,6 +4357,7 @@ function UI:Refresh()
         self.gatherSizeButton:SetShown(gathering)
         self.gatherWorldButton:SetShown(gathering)
         self.gatherCategoryButton:SetShown(gathering)
+        self.gatherControlsHint:SetShown(gathering)
         if gathering then
             local distance=tonumber(FCM.db.settings.gatherPinHideYards) or 15
             self.gatherDistanceButton:SetText(distance==0 and "Hide within: Off" or

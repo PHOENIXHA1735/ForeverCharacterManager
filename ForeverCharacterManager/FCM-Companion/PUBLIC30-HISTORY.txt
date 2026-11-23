@@ -5,23 +5,56 @@ Choose a new, empty public history directory and a binding file outside that
 directory. Run the following from FCM-Companion with your explicit paths:
 
   python -B public_history_stage.py --root PUBLIC_ROOT --binding BINDING --initialize-empty
-  python -B public_history_stage.py --root PUBLIC_ROOT --binding BINDING --archive APPROVED_RAW_SCAN
-  .\Publish-FCMPublicHistory.ps1 -Python ABSOLUTE_PYTHON_EXE -Root PUBLIC_ROOT -Binding BINDING
+  .\Publish-FCMPublicHistory.ps1 -Python ABSOLUTE_PYTHON_EXE -Root PUBLIC_ROOT -Binding BINDING -Archive APPROVED_RAW_SCAN
 
-Specify --archive again for another approved RawScans Lua file. Each needs its
+Pass multiple approved RawScans Lua files with -Archive. Each needs its
 adjacent, original metadata sidecar. The process does not discover sources,
 start a task, read live SavedVariables, or adopt an existing legacy database.
 Provider tables are excluded. Keep originals and private roots outside this
 public store.
 
-Publication writes PublicHistory.generated.lua only, with an 8 MiB limit and a
-verified backup of the previous file. If a reader blocks replacement, the
-previous export stays active and the same publication command can be retried.
+Publication updates the TOC-registered PublicHistory.generated.lua and
+PublicHistoryConfirmation.generated.lua. It keeps generation-scoped journals
+and backups beside the public store. The prior confirmation is invalidated
+before the data replacement. Confirmation is activated only after readback,
+journal commitment, and expiration checks. If replacement is interrupted,
+retry publication for the same bound generation. History stays unavailable
+while confirmation is missing or disagrees with the data.
+
 After publication, use Update & Reload to load the new data. A generation
-expires at Pacific midnight. Reprocessing approved scans preserves their source
-timestamps. Storage and generation limits remain bounded. This workflow does
-not activate cleanup.
+expires at Pacific midnight. A publication run after midnight can rebuild
+the export from retained observations without new input. Original UTC
+timestamps and the bounded storage limits are preserved. This workflow
+does not activate cleanup.
 
 The legacy collector and a separate private provider remain independent. A
 legacy schema-1 export cannot supply schema-2 history. If the host is bound to
 private history, an unavailable private export does not fall back to public data.
+
+Optional local Private365 intake
+
+Pass -LocalHistoryConfig with an absolute path to a locally maintained JSON
+configuration outside the addon and Public30 store. Omit the option for
+Public30-only operation. A missing configuration reports not-configured, and
+an explicit "enabled": false reports disabled. Neither prevents Public30.
+
+The enabled schema-1 configuration requires these keys:
+
+  enabled, schema, store, binding, importer, source, reference, sourceId,
+  importerHashes, archives
+
+store and binding identify the existing independently bound private store.
+Its existing legacy-classified.sqlite3 holds the records and archive
+checkpoints. Keep the existing private publication and recovery workflow.
+importer identifies the local directory of the reviewed existing importer.
+importerHashes pins SHA-256 for fcm_private_history and legacy_import by module
+name. source is the approved personal RawScans directory. reference is the
+legacy reconciliation SQLite file, and sourceId is the existing approved
+personal source identity. archives maps explicitly approved filenames to
+objects with sha256 fields. Use an empty map for a no-input run.
+
+The companion imports only after verifying source attribution, local
+approval, and the existing importer transaction checks. It does not discover
+or approve sources. Public publication releases its writer lease before
+private intake. Private intake reports independently and does not write
+public Lua. Do not distribute a filled configuration or any private data.

@@ -50,7 +50,7 @@ function H:AuthorizationCurrent(grant)
  local g=state.grants[grant.digest]
  return g and not g.revoked and now<g.expiresUtc and g.expiresUtc>=grant.expiresUtc and g.retentionDays>=grant.retentionDays
 end
-function H:Validate(d,id,classification,windows,baseline)
+function H:Validate(d,id,classification,windows,baseline,afterRecord)
  local now=FCM:Now()
  if type(d)~='table' or d.packed~=nil or d.schema~=2 or d.interfaceVersion~=2 or d.engineRevision~=self.revision or d.providerID~=id or
  d.classification~=classification or d.timezone~='America/Los_Angeles' or d.baselineHorizon~=baseline or
@@ -110,6 +110,7 @@ function H:Validate(d,id,classification,windows,baseline)
     (r.trendPct~=nil and not num(r.trendPct)) or
     (r.low~=nil and (not num(r.low) or r.low<=0)) or
     (r.supply~=nil and (not num(r.supply) or r.supply<0)) then return nil,'Invalid price/evidence measures'end
+   if afterRecord then afterRecord() end
   end
  end
  -- Only authorization usability failures, after full structural validation,
@@ -152,7 +153,11 @@ function H:Selected()
   end
   local ok,a,b=pcall(self.private.get);if ok then data,problem=a,b else problem='Private provider failed validation' end
   if data and (data.rootInstanceID~=expected.rootInstanceID or data.generation~=expected.generation)then data=nil;problem='Private history binding/generation mismatch'end
- else data,problem=self:SelectValidated(FCM_PublicHistory,'FCMPublicHistory','public30',{7,30},30) end
+ else
+  -- Startup exposes a snapshot only after authenticating and validating it in batches.
+  local confirmed=FCM.ConfirmedPublicHistory
+  if confirmed then data,problem=confirmed.selected() end
+ end
  self.status=data and (problem or ('Validated '..data.classification..' history')) or (problem or 'History unavailable')
  return data,self.status
 end
